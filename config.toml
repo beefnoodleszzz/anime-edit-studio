@@ -29,3 +29,12 @@ embedding = "none"       # none | clip | vlm-api
 [look]
 # 签名调色 LUT(master 阶段以真 3D lut3d 应用);留空则不套 LUT
 lut = "kit/luts/signature_teal_orange.cube"
+
+[scoring.weights]
+technical_quality = 0.15
+composition_quality = 0.15
+brief_match = 0.20
+structure_match = 0.15
+preference_score = 0.20
+diversity_score = 0.10
+risk_penalty = 0.05

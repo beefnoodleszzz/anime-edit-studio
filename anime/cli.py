@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json as _json
+from pathlib import Path
 
 import typer
 from rich import print as rprint
@@ -325,6 +326,114 @@ def candidates_cmd(output: str = typer.Option(None, "--output"), min_height: int
     from . import candidates, config
     out = output or str(config.ROOT / "review-web" / "public" / "data" / "material-candidates.json")
     _out(candidates.export_json(out, min_height=min_height, limit=limit), json)
+
+
+brief_app = typer.Typer(add_completion=False, help="creative brief")
+review_app = typer.Typer(add_completion=False, help="review workstation")
+preference_app = typer.Typer(add_completion=False, help="preference learning")
+variant_app = typer.Typer(add_completion=False, help="cut variants")
+reference_app = typer.Typer(add_completion=False, help="reference dna")
+app.add_typer(brief_app, name="brief")
+app.add_typer(review_app, name="review")
+app.add_typer(preference_app, name="preference")
+app.add_typer(variant_app, name="variant")
+app.add_typer(reference_app, name="reference")
+
+
+@brief_app.command("create")
+def brief_create_cmd(
+    project_id: str,
+    character: str = typer.Option(None, "--character"),
+    theme: str = typer.Option(None, "--theme"),
+    emotion: str = typer.Option("", "--emotion"),
+    duration: float = typer.Option(None, "--duration"),
+    aspect: str = typer.Option(None, "--aspect"),
+    platform: str = typer.Option(None, "--platform"),
+    reference: str = typer.Option(None, "--reference"),
+    from_json: str = typer.Option(None, "--from-json"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """创建或更新创作 brief。"""
+    from . import decision_loop
+
+    payload = {}
+    if from_json:
+        payload = _json.loads(Path(from_json).read_text())
+    payload.update(
+        {
+            "character_query": payload.get("character_query") or character,
+            "theme": payload.get("theme") or theme,
+            "target_emotions": payload.get("target_emotions") or [item.strip() for item in emotion.split(",") if item.strip()],
+            "duration_sec": payload.get("duration_sec") or duration,
+            "aspect_ratio": payload.get("aspect_ratio") or aspect,
+            "target_platform": payload.get("target_platform") or platform,
+            "reference_video_path": payload.get("reference_video_path") or reference,
+        }
+    )
+    _out(decision_loop.upsert_brief(project_id, payload), json)
+
+
+@app.command("gap")
+def gap_cmd(project_id: str, json: bool = typer.Option(False, "--json")):
+    """输出素材缺口分析。"""
+    from . import decision_loop
+
+    _out(decision_loop.gap_analysis(project_id), json)
+
+
+@app.command("blueprint")
+def blueprint_cmd(project_id: str, json: bool = typer.Option(False, "--json")):
+    """生成三版低成本剪辑蓝图。"""
+    from . import decision_loop
+
+    _out(decision_loop.generate_blueprints(project_id), json)
+
+
+@variant_app.command("select")
+def variant_select_cmd(project_id: str, variant_id: int, json: bool = typer.Option(False, "--json")):
+    """选择最终变体并回灌决策。"""
+    from . import decision_loop
+
+    _out(decision_loop.select_variant(project_id, variant_id), json)
+
+
+@review_app.command("serve")
+def review_serve_cmd(
+    project_id: str,
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8765, "--port"),
+):
+    """启动本地 Review API。"""
+    import uvicorn
+    from .review_api import create_app
+
+    app_instance = create_app()
+    app_instance.state.default_project_id = project_id
+    uvicorn.run(app_instance, host=host, port=port, log_level="info")
+
+
+@preference_app.command("train")
+def preference_train_cmd(json: bool = typer.Option(False, "--json")):
+    """训练偏好模型。"""
+    from . import decision_loop
+
+    _out(decision_loop.train_preference(), json)
+
+
+@preference_app.command("explain")
+def preference_explain_cmd(shot_id: str, json: bool = typer.Option(False, "--json")):
+    """解释指定镜头的偏好分。"""
+    from . import decision_loop
+
+    _out(decision_loop.explain_preference(shot_id), json)
+
+
+@reference_app.command("analyze")
+def reference_analyze_cmd(project_id: str, video: str, json: bool = typer.Option(False, "--json")):
+    """提取参考剪辑节奏 DNA。"""
+    from . import reference
+
+    _out(reference.analyze_reference(project_id, video), json)
 
 
 @app.command("doctor")

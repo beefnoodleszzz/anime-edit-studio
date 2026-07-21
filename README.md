@@ -1,12 +1,18 @@
 # anime-edit-studio
 
-私有 AI 动漫剪辑导演工作站。**全 CLI、无前端、AI 可端到端操作。**
-方案见 `~/Desktop/anime-editing-build-plan.md`,方向见 `~/Desktop/anime-editing-creator-charter.md`。
+本地智能选片、素材缺口分析、个人审美学习和剪辑蓝图工作站。
 
-- **护城河(自研 Python)**：把动漫原片变成可检索的镜头库,按角色/动作/情绪/节拍出候选并自动装配多版本。
-- **合成器**：Remotion,默认直立 4:5 真4K（3072×3840）/60fps 无头渲染；新作品不再使用横屏旋转。
-- **补帧/超分**：RIFE / Real-ESRGAN(动漫模型),逐个已批准镜头评估与执行，异常镜头必须记录跳过理由。
-- **不买 N 卡、免费轮子优先、适配 M2 Pro 16GB。**
+当前主闭环：
+
+`Brief → Shot Scoring → Gap Analysis → Review Decisions → Preference Learning → Blueprints → Variant Select → Render`
+
+原则：
+
+- 本地优先，适配 Apple Silicon
+- 免费和开源组件优先
+- 不依赖付费云 API
+- Review Web 通过本地 FastAPI 提供真实后端
+- 所有 CLI 保持 `--json` 输出能力
 
 ---
 
@@ -51,7 +57,7 @@ anime-edit-studio/
 └── refs/                # ⑥ 竞品参考(拆解用)
 ```
 
-数据流:`ingest → shots → analyze`(入库)→ `search`(出候选)→ 组 `editspec.json` → `render`(Remotion)→ `enhance`(选择性)→ `qa` → 成片。
+数据流:`ingest → shots → analyze`(入库)→ `brief`/`gap`/`blueprint`/`review`(决策闭环)→ `render`(Remotion)→ `qa`。
 
 ---
 
@@ -65,18 +71,24 @@ uv pip install -e .
 cd renderer && npm install && cd ..
 ```
 
-## M1 冒烟(端到端最小闭环)
+## 当前最小闭环
 
 ```bash
-anime ingest  <视频文件>          # 入库 + 生成 1080p 代理
-anime shots   <asset_id>          # 分镜 + 关键帧 + contact sheet
-anime analyze <asset_id>          # 亮度/清晰度/运动方向
-anime search  "gojo 觉醒 高速"     # 出带时间码候选(M1: 全文)
-anime render  projects/<id>/editspec.json   # Remotion 渲染
-anime qa      projects/<id>/outputs/final.mp4
+anime ingest  <视频文件>
+anime shots   <asset_id>
+anime analyze <asset_id>
+anime brief create <project_id> --character gojo --theme awakening --emotion intense --duration 25 --aspect 4:5 --platform douyin
+anime gap <project_id>
+anime blueprint <project_id>
+anime review serve <project_id>
 ```
 
-每个命令支持 `--json`,便于 AI 解析。
+审片后选择终版：
+
+```bash
+anime variant select <project_id> <variant_id>
+anime render projects/<project_id>/editspec.blueprint.emotion.json --preview
+```
 
 ## 状态(M1–M4 全部完成,已在真实五条悟素材上端到端验证)
 

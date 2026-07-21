@@ -5,7 +5,8 @@
   "scripts": {
     "studio": "remotion studio",
     "render": "remotion render Edit out/final.mp4",
-    "upgrade": "remotion upgrade"
+    "upgrade": "remotion upgrade",
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",

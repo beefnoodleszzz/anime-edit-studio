@@ -1,46 +1,59 @@
-"""素材版权与来源记录(charter 商业边界):每个素材登记来源/授权/商用状态。
-
-存 library/rights.json。二次剪辑不自动等于授权;公开发布/商业合作需分别评估。
-"""
+"""Local source rights registry backed by SQLite and library/sources.toml."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from . import config
+from . import config, decision_loop
 
-_PATH = config.LIBRARY / "rights.json"
-
-
-def _load() -> dict:
-    return json.loads(_PATH.read_text()) if _PATH.exists() else {}
-
-
-def _save(d: dict) -> None:
-    config.LIBRARY.mkdir(parents=True, exist_ok=True)
-    _PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2))
+_PATH = config.LIBRARY / "sources.toml"
 
 
 def set_rights(asset_id: str, *, source: str | None = None, license: str | None = None,
                notes: str | None = None, commercial: bool | None = None) -> dict:
-    d = _load()
-    r = d.get(asset_id, {})
-    if source is not None:
-        r["source"] = source
-    if license is not None:
-        r["license"] = license
-    if notes is not None:
-        r["notes"] = notes
-    if commercial is not None:
-        r["commercial_cleared"] = commercial
-    d[asset_id] = r
-    _save(d)
-    return r
+    record = decision_loop.upsert_source_record(
+        asset_id,
+        {
+            "source_url": source,
+            "license": license,
+            "notes": notes,
+            "commercial_allowed": commercial,
+            "status": "approved" if commercial else "review",
+        },
+    )
+    _export_sources_toml()
+    return record
 
 
 def get_rights(asset_id: str) -> dict:
-    return _load().get(asset_id, {})
+    for row in decision_loop.list_sources():
+        if row["asset_id"] == asset_id:
+            return row
+    return {}
 
 
 def all_rights() -> dict:
-    return _load()
+    return {row["asset_id"]: row for row in decision_loop.list_sources()}
+
+
+def _export_sources_toml() -> Path:
+    _PATH.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for asset_id, row in all_rights().items():
+        lines.append(f'[{asset_id}]')
+        for key in ("source_type", "source_url", "creator", "title", "license", "license_url",
+                    "commercial_allowed", "modification_allowed", "attribution_required",
+                    "attribution_text", "permission_proof_path", "acquired_at", "license_checked_at",
+                    "expires_at", "status", "notes"):
+            value = row.get(key)
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                lines.append(f"{key} = {'true' if value else 'false'}")
+            elif isinstance(value, (int, float)):
+                lines.append(f"{key} = {value}")
+            else:
+                escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+                lines.append(f'{key} = "{escaped}"')
+        lines.append("")
+    _PATH.write_text("\n".join(lines).strip() + "\n" if lines else "")
+    return _PATH

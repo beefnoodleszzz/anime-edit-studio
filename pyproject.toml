@@ -21,6 +21,10 @@ ml = [
     "rembg>=2.0",              # 主体遮罩(isnet-anime)
     "wdtagger>=0.16",          # 动漫打标(Danbooru v3:角色名+属性,ONNX,~400MB)
 ]
+review = [
+    "fastapi>=0.116",
+    "uvicorn>=0.35",
+]
 
 [project.scripts]
 anime = "anime.cli:app"

@@ -1,0 +1,31 @@
+# anime-edit-studio 全局配置 —— 工具路径与交付规格
+# 路径已按本机实测填好(~ 会被展开)。
+
+[tools]
+ffmpeg  = "ffmpeg"
+ffprobe = "ffprobe"
+whisper = "whisper-cli"                                              # whisper.cpp
+realesrgan        = "~/.local/bin/realesrgan-ncnn-vulkan"
+realesrgan_models = "~/.local/opt/realesrgan-ncnn-vulkan/models"
+realesrgan_model  = "realesr-animevideov3-x2"                        # 动漫 2x
+rife       = "~/.local/opt/rife-ncnn-vulkan/rife-ncnn-vulkan"
+rife_model = "~/.local/opt/rife-ncnn-vulkan/rife-v4.6"
+chrome     = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+[delivery]
+canvas = "auto"                     # 按候选素材主导画幅，不写死横屏/竖屏
+fps    = 60
+master_codec   = "prores_videotoolbox"   # 母版
+platform_codec = "h264_videotoolbox"      # 平台版
+
+[proxy]
+edit_height     = 1080   # 剪辑/预览代理
+analysis_height = 540    # 分析代理(更快)
+
+[models]
+# M1 默认纯文本检索(FTS);向量/VLM 打标为后续升级项
+embedding = "none"       # none | clip | vlm-api
+
+[look]
+# 签名调色 LUT(master 阶段以真 3D lut3d 应用);留空则不套 LUT
+lut = "kit/luts/signature_teal_orange.cube"

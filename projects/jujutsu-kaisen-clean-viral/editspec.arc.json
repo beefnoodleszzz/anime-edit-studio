@@ -1,0 +1,1203 @@
+{
+  "id": "jujutsu-kaisen-clean-viral",
+  "fps": 60,
+  "width": 3072,
+  "height": 3840,
+  "duration_in_frames": 1533,
+  "shots": [
+    {
+      "id": "7a29238b29dc-8@0",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 11.22,
+      "start_frame": 0,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.454,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "da8829f27bbd-45@1",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_gojo_pv_1080p48.mp4",
+      "source_in_sec": 75.042,
+      "start_frame": 10,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.07,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-69@2",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 77.953,
+      "start_frame": 20,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.031,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-80@3",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 147.467,
+      "start_frame": 30,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.311,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-44@4",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 54.096,
+      "start_frame": 40,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.208,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-29@5",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 65.767,
+      "start_frame": 50,
+      "duration_in_frames": 10,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": -0.049,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "da8829f27bbd-28@6",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_gojo_pv_1080p48.mp4",
+      "source_in_sec": 47.667,
+      "start_frame": 60,
+      "duration_in_frames": 63,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.026,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-10@7",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 31.114,
+      "start_frame": 123,
+      "duration_in_frames": 104,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.07,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-16@8",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 42.592,
+      "start_frame": 227,
+      "duration_in_frames": 103,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.265,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-31@9",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 39.289,
+      "start_frame": 330,
+      "duration_in_frames": 106,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.081,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-52@10",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 109.508,
+      "start_frame": 436,
+      "duration_in_frames": 93,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.284,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-11@11",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 33.242,
+      "start_frame": 529,
+      "duration_in_frames": 107,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.081,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-45@12",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 86.65,
+      "start_frame": 636,
+      "duration_in_frames": 70,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.196,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "5b70628b6532-24@13",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_nced_1080p.mp4",
+      "source_in_sec": 54.596,
+      "start_frame": 706,
+      "duration_in_frames": 74,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-33@14",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 41.959,
+      "start_frame": 780,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.223,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-91@15",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 159.517,
+      "start_frame": 816,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.156,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "723f727da7da-2@16",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s1_nced1_4k.mp4",
+      "source_in_sec": 2.65,
+      "start_frame": 852,
+      "duration_in_frames": 35,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.046,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-17@17",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 45.742,
+      "start_frame": 887,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.268,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "da8829f27bbd-18@18",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_gojo_pv_1080p48.mp4",
+      "source_in_sec": 36.833,
+      "start_frame": 923,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.035,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-46@19",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 69.653,
+      "start_frame": 959,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.148,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "da8829f27bbd-8@20",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_gojo_pv_1080p48.mp4",
+      "source_in_sec": 21.542,
+      "start_frame": 995,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.074,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-49@21",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 94.958,
+      "start_frame": 1031,
+      "duration_in_frames": 35,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.266,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-59@22",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 70.07,
+      "start_frame": 1066,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.012,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "723f727da7da-4@23",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s1_nced1_4k.mp4",
+      "source_in_sec": 4.4,
+      "start_frame": 1102,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.276,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-49@24",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 75.325,
+      "start_frame": 1138,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.051,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-68@25",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 130.992,
+      "start_frame": 1174,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.068,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-33@26",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 53.595,
+      "start_frame": 1210,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.133,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-86@27",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 153.225,
+      "start_frame": 1246,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.365,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "5b70628b6532-9@28",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_nced_1080p.mp4",
+      "source_in_sec": 16.308,
+      "start_frame": 1282,
+      "duration_in_frames": 35,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-82@29",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 148.883,
+      "start_frame": 1317,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.16,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "da8829f27bbd-2@30",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_gojo_pv_1080p48.mp4",
+      "source_in_sec": 7.396,
+      "start_frame": 1353,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.037,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-4@31",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 6.006,
+      "start_frame": 1389,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.174,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7a29238b29dc-0@32",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s3_ncop_aizo_1080p.mp4",
+      "source_in_sec": 0.0,
+      "start_frame": 1425,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.249,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "7958a63378a7-32@33",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/4k/jujutsu_s2_hidden_inventory_ncop_4k_120fps.mp4",
+      "source_in_sec": 68.142,
+      "start_frame": 1461,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.128,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "8eb445d8b962-32@34",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/sources/jujutsu-kaisen/1080p/jujutsu_s1_ncop_1080p.mp4",
+      "source_in_sec": 52.636,
+      "start_frame": 1497,
+      "duration_in_frames": 36,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.29,
+      "fill_mode": "crop"
+    }
+  ],
+  "audio": [
+    {
+      "id": "bgm",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/music/zhanshen/zhanshen_mask_squad_entrance_M4A_124.m4a",
+      "start_frame": 0,
+      "trim_start_frames": 145,
+      "gain_db": 0.0
+    }
+  ]
+}

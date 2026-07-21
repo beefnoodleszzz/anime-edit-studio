@@ -1,0 +1,18 @@
+{
+  "_comment": "检索别名:中文/常用词 → 追加的检索词(WD 罗马音标签 + 英文描述,兼顾 FTS 与 CLIP)。可自行扩展。",
+  "五条悟": "gojou satoru white hair blindfold",
+  "五条": "gojou satoru",
+  "咒术回战": "jujutsu kaisen",
+  "宿傩": "ryomen sukuna",
+  "虎杖": "itadori yuuji",
+  "伏黑": "fushiguro megumi",
+  "钉崎": "kugisaki nobara",
+  "觉醒": "glowing eyes energy aura powerful intense",
+  "黑化": "dark menacing evil aura",
+  "战斗": "fighting action battle dynamic",
+  "眼睛": "eyes eye focus close-up",
+  "特写": "close-up portrait face",
+  "全身": "full body wide shot",
+  "逆光": "backlight silhouette",
+  "孤独": "lonely alone somber melancholy"
+}

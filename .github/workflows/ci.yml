@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv venv --python 3.11
+      - name: Install package with review + dev extras
+        run: uv pip install -e ".[review,dev]"
+      - name: Run tests
+        run: uv run pytest -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build review-web
+        working-directory: review-web
+        run: |
+          npm ci
+          npm run build
+      - name: Typecheck renderer
+        working-directory: renderer
+        run: |
+          npm ci
+          npm run build

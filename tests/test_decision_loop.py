@@ -191,6 +191,100 @@ def test_cli_json_reference_and_preference_modes(workspace: Path, monkeypatch: p
     assert reset.exit_code == 0
 
 
+def test_segment_frame_plan_normalizes_reference_dna(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, _, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    roles = ["hook", "build", "climax", "release", "ending"]
+    total_frames = 25 * loop.BLUEPRINT_FPS
+    # 参考片镜头中位数极短(0.5s)且 Hook/Ending 用参考秒数:归一化后总时长仍须贴合 Brief。
+    dna = {"shot_duration_distribution": [0.5, 0.5, 0.4, 0.6], "hook_length": 1.2, "ending_shot_length": 0.9}
+    plan = loop._segment_frame_plan({"duration_sec": 25}, dna, roles)
+    assert sum(plan.values()) == total_frames
+    assert all(frames >= loop.BLUEPRINT_FPS // 2 for frames in plan.values())
+    no_ref = loop._segment_frame_plan({"duration_sec": 25}, None, roles)
+    assert sum(no_ref.values()) == total_frames
+
+
+def test_pick_duration_never_exceeds_boundary(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, _, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    # 镜头只剩 ~5 帧(0.167s):不得被强行拉到 15 帧越过 Out 点。
+    short = {"start_sec": 0.0, "end_sec": 5 / loop.BLUEPRINT_FPS}
+    assert loop._pick_duration_frames(short, requested=45) <= loop._shot_available_frames(short)
+    assert loop._pick_duration_frames(short, requested=45) < loop.MIN_SHOT_FRAMES
+
+
+def test_render_rights_gate_blocks_unapproved(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    # asset001 approved+commercial;asset002 blocked。
+    loop.assert_shots_exportable([{"id": "asset001-0"}])
+    with pytest.raises(ValueError):
+        loop.assert_shots_exportable([{"id": "asset002-0"}])
+    with pytest.raises(ValueError):
+        loop.assert_shots_exportable([{"src": "/nonexistent/unknown.mp4"}])
+
+
+def test_render_preview_bypasses_gate(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    video1, _ = _seed_data(workspace, db_mod, loop)
+    import anime.render as render_mod
+    importlib.reload(render_mod)
+    spec_path = workspace / "projects" / "unapproved.json"
+    spec_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_path.write_text(json.dumps({"id": "demo", "fps": 30, "width": 100, "height": 100,
+                                     "duration_in_frames": 10,
+                                     "shots": [{"id": "asset002-0", "src": str(video1), "start_frame": 0, "duration_in_frames": 10}]}))
+    # 正式导出被门禁拦下(在任何 node 子进程之前抛错)。
+    with pytest.raises(ValueError):
+        render_mod.render(str(spec_path), preview=False)
+
+
+def test_select_missing_variant_keeps_selection(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    blueprints = loop.generate_blueprints("demo")
+    good_id = blueprints["variants"][0]["id"]
+    loop.select_variant("demo", good_id)
+    with pytest.raises(ValueError):
+        loop.select_variant("demo", 999999)
+    variants = {item["id"]: item for item in loop.list_variants("demo")}
+    assert variants[good_id]["selected"] == 1  # 传入错误 ID 未清除现有选中状态
+
+
+def test_final_timeline_has_no_gaps(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    blueprints = loop.generate_blueprints("demo")
+    loop.put_review("demo", "asset001-1", {"decision": "reject", "reasons": ["boring"]})
+    selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
+    final_spec = json.loads(Path(selected["final_editspec_path"]).read_text())
+    cursor = 0
+    for shot in final_spec["shots"]:
+        assert shot["start_frame"] == cursor  # 无黑场空洞
+        cursor += shot["duration_in_frames"]
+    assert final_spec["duration_in_frames"] == cursor
+
+
+def test_api_value_error_returns_400(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("fastapi")
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    from fastapi.testclient import TestClient
+    from anime.review_api import create_app
+
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    # trim 越界 → 业务错误应为 400 而非 500。
+    resp = client.patch("/api/projects/demo/shots/asset001-0/trim", json={"trim_start_sec": 5.0, "trim_end_sec": 6.0})
+    assert resp.status_code == 400
+    assert "detail" in resp.json()
+    # 选择不存在的 variant → 400。
+    assert client.post("/api/projects/demo/variants/999999/select", json={"selected": True}).status_code == 400
+    # 非法 decision 枚举 → pydantic 422。
+    assert client.put("/api/projects/demo/shots/asset001-0/review", json={"decision": "bogus"}).status_code == 422
+
+
 def test_api_config_rights_gate_and_candidates(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     pytest.importorskip("fastapi")
     _, db_mod, loop, _, _, candidates = _reload_modules(monkeypatch, workspace)

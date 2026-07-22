@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from . import config, db, decision_loop
 
 
 class ReviewPayload(BaseModel):
-    decision: str
+    decision: Literal["use", "alternate", "reject"]
     reasons: list[str] = Field(default_factory=list)
     rating: int | None = None
     trim_start_sec: float | None = None
@@ -78,6 +79,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(ValueError)
+    async def value_error_handler(_: Request, exc: ValueError):
+        # 业务校验错误(trim 越界/variant 不存在/权利未批准/无可用镜头)返回 400 而非 500。
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.get("/api/config")
     def get_config():

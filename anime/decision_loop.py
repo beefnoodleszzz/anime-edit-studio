@@ -14,6 +14,9 @@ import numpy as np
 from . import config, db, editspec, risk
 
 SCORE_VERSION = "decision-loop-v2"
+BLUEPRINT_FPS = 30
+# 低于该帧数的镜头素材边界不足以安全切一刀,应放弃换候选,而不是强行拉长越界。
+MIN_SHOT_FRAMES = 8
 DEFAULT_WEIGHTS = {
     "technical_quality": 0.15,
     "composition_quality": 0.15,
@@ -722,6 +725,49 @@ def rights_report(project_id: str) -> dict:
     }
 
 
+def _asset_for_shot(conn, shot: dict) -> str | None:
+    shot_id = shot.get("id")
+    if shot_id:
+        row = conn.execute("SELECT asset_id FROM shots WHERE id=?", (shot_id,)).fetchone()
+        if row:
+            return row["asset_id"]
+    src = shot.get("src")
+    if src and not str(src).startswith("http"):
+        resolved = str(Path(src).expanduser().resolve())
+        row = conn.execute("SELECT id FROM assets WHERE path=? OR proxy_path=?", (resolved, resolved)).fetchone()
+        if row:
+            return row["id"]
+    return None
+
+
+def assert_shots_exportable(shots: list[dict]) -> None:
+    """正式导出门禁:EditSpec 实际使用的每个素材都必须 approved 且允许商用,否则拒绝。
+
+    未登记来源或无法解析到素材的镜头一律按未批准处理(unknown≈review),
+    这样直接 `anime render` 任意未批准 EditSpec 也会被拦下,而非只拦正常流程。
+    """
+    conn = db.connect()
+    unapproved: list[str] = []
+    for shot in shots:
+        asset_id = _asset_for_shot(conn, shot)
+        if not asset_id:
+            unapproved.append(str(shot.get("id") or shot.get("src") or "unknown"))
+            continue
+        record = conn.execute(
+            "SELECT status, commercial_allowed FROM source_records WHERE asset_id=?",
+            (asset_id,),
+        ).fetchone()
+        status = record["status"] if record else "review"
+        commercial = record["commercial_allowed"] if record else None
+        if status == "approved" and commercial == 1:
+            continue
+        unapproved.append(asset_id)
+    conn.close()
+    if unapproved:
+        joined = ", ".join(sorted(set(unapproved)))
+        raise ValueError(f"存在未批准素材,禁止正式导出: {joined}。先批准来源,或用 --preview 生成预览。")
+
+
 def gap_analysis(project_id: str) -> dict:
     brief = get_brief(project_id) or {"structure_json": DEFAULT_STRUCTURE}
     shots = _shot_rows(project_id)
@@ -772,26 +818,49 @@ def _eligible_shots(project_id: str, *, export: bool) -> list[dict]:
     return out
 
 
-def _segment_target_frames(role: str, brief: dict, reference_dna: dict | None) -> int:
-    fps = 30
-    total = int((brief.get("duration_sec") or 25) * fps)
+def _segment_frame_plan(brief: dict, reference_dna: dict | None, roles: list[str]) -> dict[str, int]:
+    """先算各段相对权重,再统一缩放到 Brief 总时长,最后校正取整误差使总和精确等于 total_frames。
+
+    有 Reference DNA 时 Hook/Ending 用参考片对应秒数、其余段用镜头中位数作为**相对权重**,
+    而不是直接当作绝对秒数,避免参考片镜头很短时成片被压到只有几秒。
+    """
+    fps = BLUEPRINT_FPS
+    floor = fps // 2
+    total_frames = max(int(round((brief.get("duration_sec") or 25) * fps)), floor * len(roles))
     distribution = {"hook": 0.18, "build": 0.27, "climax": 0.27, "release": 0.14, "ending": 0.14}
-    base = max(int(total * distribution.get(role, 0.2)), fps // 2)
-    if not reference_dna:
-        return base
-    if role == "hook" and reference_dna.get("hook_length"):
-        return max(int(float(reference_dna["hook_length"]) * fps), fps // 2)
-    if role == "ending" and reference_dna.get("ending_shot_length"):
-        return max(int(float(reference_dna["ending_shot_length"]) * fps), fps // 2)
-    median = float(np.median(reference_dna.get("shot_duration_distribution") or [base / fps]))
-    return max(int(median * fps * (1.25 if role == "build" else 1.0)), fps // 2)
+    raw: dict[str, float] = {}
+    median = None
+    if reference_dna:
+        median = float(np.median(reference_dna.get("shot_duration_distribution") or [1.0]))
+    for role in roles:
+        if reference_dna and role == "hook" and reference_dna.get("hook_length"):
+            raw[role] = max(float(reference_dna["hook_length"]), 0.05)
+        elif reference_dna and role == "ending" and reference_dna.get("ending_shot_length"):
+            raw[role] = max(float(reference_dna["ending_shot_length"]), 0.05)
+        elif reference_dna and median is not None:
+            raw[role] = max(median * (1.25 if role == "build" else 1.0), 0.05)
+        else:
+            raw[role] = distribution.get(role, 0.2)
+    weight_sum = sum(raw.values()) or 1.0
+    plan = {role: max(int(round(raw[role] / weight_sum * total_frames)), floor) for role in roles}
+    # 校正取整/floor 引入的误差,把差额加到最长的一段,保证 sum(plan) == total_frames。
+    diff = total_frames - sum(plan.values())
+    if plan and diff:
+        target = max(plan, key=plan.get)
+        plan[target] = max(plan[target] + diff, floor)
+    return plan
+
+
+def _shot_available_frames(shot: dict) -> int:
+    source_in = shot.get("trim_start_sec") if shot.get("trim_start_sec") is not None else shot["start_sec"]
+    source_out = shot.get("trim_end_sec") if shot.get("trim_end_sec") is not None else shot["end_sec"]
+    return max(round((source_out - source_in) * BLUEPRINT_FPS), 0)
 
 
 def _pick_duration_frames(shot: dict, requested: int) -> int:
-    source_in = shot.get("trim_start_sec") if shot.get("trim_start_sec") is not None else shot["start_sec"]
-    source_out = shot.get("trim_end_sec") if shot.get("trim_end_sec") is not None else shot["end_sec"]
-    available = max(round((source_out - source_in) * 30), 1)
-    return max(15, min(requested, available))
+    # 只能在素材实际可用长度内取,绝不通过强行拉长突破人工设置的 Out 点或滑入下一镜头。
+    available = _shot_available_frames(shot)
+    return max(1, min(requested, available))
 
 
 def _shot_to_candidate(row: dict, start_frame: int, duration_frames: int, *, master: bool = False) -> editspec.Shot:
@@ -823,8 +892,9 @@ def _render_preview(spec: editspec.EditSpec, output: Path) -> str:
                     "-ss", f"{shot.source_in_sec:.3f}",
                     "-t", f"{duration:.3f}",
                     "-i", shot.src,
-                    "-vf", f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=decrease,pad={spec.width}:{spec.height}:(ow-iw)/2:(oh-ih)/2:black,scale=-2:720",
-                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-vf", f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=decrease,pad={spec.width}:{spec.height}:(ow-iw)/2:(oh-ih)/2:black,scale=-2:720,fps={spec.fps}",
+                    "-an", "-r", str(spec.fps), "-g", str(spec.fps),
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
                     str(seg),
                 ],
                 check=True,
@@ -837,7 +907,8 @@ def _render_preview(spec: editspec.EditSpec, output: Path) -> str:
                 ffmpeg, "-y", "-v", "error",
                 "-f", "concat", "-safe", "0",
                 "-i", str(concat),
-                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-r", str(spec.fps), "-g", str(spec.fps),
+                "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 str(output),
             ],
             check=True,
@@ -859,6 +930,8 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
     shots = _eligible_shots(project_id, export=False)
     if not shots:
         raise ValueError("当前没有可用镜头")
+    if not any(_shot_available_frames(shot) >= MIN_SHOT_FRAMES for shot in shots):
+        raise ValueError("所有可用镜头长度都低于最短帧数,无法生成蓝图")
     proj_dir = config.PROJECTS / project_id
     proj_dir.mkdir(parents=True, exist_ok=True)
     aspect = (brief.get("aspect_ratio") or "4:5").replace(":", "x")
@@ -872,21 +945,28 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
         selected_rows: list[dict] = []
         used: set[str] = set()
         explanation = {"variant_type": variant, "reference_dna_used": bool(reference_dna), "selections": [], "gap_analysis": gap_analysis(project_id)["segments"]}
+        frame_plan = _segment_frame_plan(brief, reference_dna, list(profile.keys()))
+        usable = [shot for shot in shots if _shot_available_frames(shot) >= MIN_SHOT_FRAMES]
         start_frame = 0
         for role, prototype in profile.items():
-            target_frames = _segment_target_frames(role, brief, reference_dna)
+            target_frames = frame_plan[role]
             accumulated = 0
-            while accumulated < target_frames:
-                pool = [shot for shot in shots if shot["prototype"] == prototype and shot["id"] not in used]
+            guard = 0
+            while accumulated < target_frames and guard < len(usable) * 2 + 4:
+                guard += 1
+                pool = [shot for shot in usable if shot["prototype"] == prototype and shot["id"] not in used]
                 if not pool:
-                    pool = [shot for shot in shots if shot["id"] not in used]
+                    pool = [shot for shot in usable if shot["id"] not in used]
                 if not pool:
-                    pool = [shot for shot in shots if shot["prototype"] == prototype]
+                    used.clear()
+                    pool = [shot for shot in usable if shot["prototype"] == prototype] or usable
                 if not pool:
-                    pool = shots
+                    break  # 没有任何满足最短帧数的镜头,放弃该段而不是越界
                 pick = max(pool, key=lambda shot: shot.get("final_score") or 0)
                 used.add(pick["id"])
                 duration_frames = _pick_duration_frames(pick, target_frames - accumulated or target_frames)
+                if duration_frames < MIN_SHOT_FRAMES:
+                    continue  # 素材边界不足,换候选
                 selected_specs.append(_shot_to_candidate(pick, start_frame, duration_frames, master=False))
                 selected_rows.append(pick)
                 start_frame += duration_frames
@@ -900,8 +980,6 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
                         "alternates": [item["id"] for item in sorted(pool, key=lambda shot: shot.get("final_score") or 0, reverse=True)[1:4]],
                     }
                 )
-                if len(used) >= len(shots) and accumulated < target_frames:
-                    used.clear()
         spec = editspec.EditSpec(id=project_id, fps=30, width=width, height=height, duration_in_frames=start_frame, shots=selected_specs)
         editspec_path = editspec.save(spec, name=f"blueprint.{variant}")
         preview_path = proj_dir / "outputs" / f"blueprint.{variant}.preview.mp4"
@@ -951,17 +1029,19 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         raise ValueError("存在未批准素材，不能生成终版")
     rows_map = {item["id"]: item for item in _shot_rows(project_id)}
     conn = db.connect()
-    conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
+    # 先查询并验证 Variant,再写入 selected;避免传入错误 ID 时先把现有选中状态清零。
     row = conn.execute("SELECT * FROM cut_variants WHERE id=? AND project_id=?", (variant_id, project_id)).fetchone()
     if not row:
-        conn.commit()
         conn.close()
         raise ValueError("variant not found")
+    conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
     preview_spec = _loads_json(Path(row["editspec_path"]).read_text(), {})
     final_spec = {
         **preview_spec,
         "shots": [],
     }
+    # 跳过被拒绝/缺失的镜头后,按顺序重排时间线,避免出现黑场空洞。
+    cursor = 0
     for shot in preview_spec.get("shots", []):
         shot_id = shot["id"]
         selected_row = rows_map.get(shot_id)
@@ -986,7 +1066,10 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         )
         if not existing or existing["decision"] != "use":
             conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
-        final_spec["shots"].append({**shot, "src": selected_row["asset_path"]})
+        duration_frames = int(shot.get("duration_in_frames") or 0)
+        final_spec["shots"].append({**shot, "src": selected_row["asset_path"], "start_frame": cursor})
+        cursor += duration_frames
+    final_spec["duration_in_frames"] = cursor
     final_path = config.PROJECTS / project_id / f"editspec.final.variant-{variant_id}.json"
     final_path.write_text(json.dumps(final_spec, ensure_ascii=False, indent=2))
     conn.execute("UPDATE cut_variants SET final_editspec_path=? WHERE id=?", (str(final_path), variant_id))

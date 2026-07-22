@@ -75,10 +75,14 @@ anime-edit-studio/
 ```bash
 cd ~/Desktop/anime-edit-studio
 uv venv --python 3.11 && source .venv/bin/activate
-uv pip install -e .
-# 合成器(需要时)
+uv pip install -e ".[review,dev]"   # Review API(FastAPI/Uvicorn)+ 测试(pytest)
+# 前端 + 合成器(需要时)
+cd review-web && npm install && cd ..
 cd renderer && npm install && cd ..
 ```
+
+> `uv pip install -e .` 只装核心依赖,**不含** FastAPI/Uvicorn(在 `review` 组)和 pytest(在 `dev` 组)。
+> 要跑 `anime review serve` 或 `uv run pytest`,必须装 `.[review,dev]`,否则会 `ModuleNotFoundError: No module named 'uvicorn'`。
 
 ## 当前最小闭环
 
@@ -90,14 +94,23 @@ anime brief create <project_id> --character gojo --theme awakening --emotion int
 anime project attach <project_id> <asset_id_1,asset_id_2>
 anime gap <project_id>
 anime blueprint <project_id>
-anime review serve <project_id>
 ```
 
-审片后选择终版：
+启动 Review Web(**需要两个进程**:后端 API + 前端 Vite):
+
+```bash
+# 终端 1:本地 Review API(默认 127.0.0.1:8765)
+anime review serve <project_id>
+# 终端 2:审片前端(Vite,默认 5173,已配 /api 代理到 8765)
+npm run dev --prefix review-web
+```
+
+审片后选择终版并正式导出:
 
 ```bash
 anime variant select <project_id> <variant_id>
 anime rights-report <project_id>
+# 正式导出会校验素材权利,未批准素材会被拒绝;预览用 --preview
 anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 ```
 
@@ -150,8 +163,8 @@ anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 
 ```bash
 uv venv --python 3.11 && source .venv/bin/activate
-uv pip install -e .            # 核心
-uv pip install -e ".[ml]"      # 语义检索 + 主体遮罩(torch/rembg,较大)
+uv pip install -e ".[review,dev]"   # 核心 + Review API + 测试
+uv pip install -e ".[ml]"           # 可选:语义检索 + 主体遮罩(torch/rembg,较大)
 cd renderer && npm install
 ```
 

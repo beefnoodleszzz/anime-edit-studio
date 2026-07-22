@@ -270,7 +270,7 @@ def test_final_timeline_has_no_gaps(workspace: Path, monkeypatch: pytest.MonkeyP
     _seed_data(workspace, db_mod, loop)
     loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
     blueprints = loop.generate_blueprints("demo")
-    loop.put_review("demo", "asset001-1", {"decision": "reject", "reasons": ["boring"]})
+    blueprint_spec = json.loads(Path(blueprints["variants"][0]["editspec_path"]).read_text())
     selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
     final_spec = json.loads(Path(selected["final_editspec_path"]).read_text())
     cursor = 0
@@ -278,6 +278,44 @@ def test_final_timeline_has_no_gaps(workspace: Path, monkeypatch: pytest.MonkeyP
         assert shot["start_frame"] == cursor  # 无黑场空洞
         cursor += shot["duration_in_frames"]
     assert final_spec["duration_in_frames"] == cursor
+    # 未做审片改动时,Final 时长应等于 Blueprint 计划,而不是被撑到整段源(不越 Trim/不扩展)。
+    assert final_spec["duration_in_frames"] == blueprint_spec["duration_in_frames"]
+
+
+def test_final_shortfall_after_rejects_fails(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    blueprints = loop.generate_blueprints("demo")
+    # 拒绝一个被大量复用的镜头 → Final 明显短于计划 → 必须报错而非静默交付短片。
+    loop.put_review("demo", "asset001-1", {"decision": "reject", "reasons": ["boring"]})
+    with pytest.raises(ValueError):
+        loop.select_variant("demo", blueprints["variants"][0]["id"])
+
+
+def test_patch_trim_in_then_out_keeps_both(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    # 模拟审片:先按 I 只设入点,再按 O 只设出点;两次都不能清掉对方。
+    loop.patch_trim("demo", "asset001-0", trim_start_sec=0.2, trim_end_sec=None)
+    loop.patch_trim("demo", "asset001-0", trim_start_sec=None, trim_end_sec=0.5)
+    review = next(item for item in loop.list_reviews("demo") if item["shot_id"] == "asset001-0")
+    assert review["trim_start_sec"] == 0.2
+    assert review["trim_end_sec"] == 0.5
+
+
+def test_slowmo_smooth_spec_uses_memory_object(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.slowmo as slowmo
+    importlib.reload(slowmo)
+    # 内存中的 spec(含一个刚重解析出的母版路径)应被原样处理:无慢镜时不落盘、不改 src。
+    spec = {"id": "demo", "fps": 30, "width": 100, "height": 100, "duration_in_frames": 10,
+            "shots": [{"id": "asset001-0", "src": "/trusted/master.mp4", "source_in_sec": 0.0,
+                       "start_frame": 0, "duration_in_frames": 10, "speed": 1.0}]}
+    out = slowmo.smooth_spec(spec)
+    assert out["shots"][0]["src"] == "/trusted/master.mp4"  # 不从磁盘重读,保留内存路径
+    assert out is not spec  # 返回副本
 
 
 def test_select_variant_gates_only_used_assets(workspace: Path, monkeypatch: pytest.MonkeyPatch):
@@ -291,19 +329,21 @@ def test_select_variant_gates_only_used_assets(workspace: Path, monkeypatch: pyt
     assert selected["shots"] >= 1  # 门禁基于实际使用素材,未被使用的 blocked 素材不应阻断
 
 
-def test_final_editspec_uses_latest_trim(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+def test_final_trim_is_boundary_not_expansion(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
     _seed_data(workspace, db_mod, loop)
     loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
     blueprints = loop.generate_blueprints("demo")
-    # 蓝图生成后再改 asset001-0 的入出点:0.2–0.5s → 0.3s → 9 帧 @30fps。
-    loop.patch_trim("demo", "asset001-0", 0.2, 0.5)
+    # 蓝图生成后轻微收窄 asset001-0 入出点:0.0–0.667s → 可用 20 帧(<10% 缺口,不触发重生成)。
+    loop.patch_trim("demo", "asset001-0", 0.0, 0.667)
     selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
     final_spec = json.loads(Path(selected["final_editspec_path"]).read_text())
     trimmed = [shot for shot in final_spec["shots"] if shot["id"] == "asset001-0"]
-    assert trimmed, "asset001-0 应出现在 final(emotion 版 hook)"
-    assert trimmed[0]["duration_in_frames"] == 9  # 用最新 trim 而非旧 blueprint 时长
-    assert abs(trimmed[0]["source_in_sec"] - 0.2) < 1e-6
+    assert trimmed, "asset001-0 应出现在 final"
+    # Trim 是素材边界:每次出现的时长都被 20 帧封顶,且用最新入点。
+    assert all(shot["duration_in_frames"] <= 20 for shot in trimmed)
+    assert max(shot["duration_in_frames"] for shot in trimmed) == 20
+    assert all(abs(shot["source_in_sec"] - 0.0) < 1e-6 for shot in trimmed)
 
 
 def test_blueprint_fails_when_duration_unfillable(workspace: Path, monkeypatch: pytest.MonkeyPatch):

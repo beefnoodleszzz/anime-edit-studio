@@ -592,7 +592,9 @@ def put_review(project_id: str, shot_id: str, payload: dict) -> dict:
 
 def patch_trim(project_id: str, shot_id: str, trim_start_sec: float | None, trim_end_sec: float | None) -> dict:
     conn = db.connect()
-    _validate_trim(conn, shot_id, trim_start_sec, trim_end_sec, project_id)
+    # 只按 I 只发 trim_start、只按 O 只发 trim_end;写入前先与已存值合并,
+    # 避免未提交的那一端被覆盖成 NULL(I/O 互相清空)。
+    start_value, end_value = _validate_trim(conn, shot_id, trim_start_sec, trim_end_sec, project_id)
     conn.execute(
         """
         INSERT INTO review_decisions (project_id, shot_id, decision, reasons, trim_start_sec, trim_end_sec, updated_at)
@@ -602,7 +604,7 @@ def patch_trim(project_id: str, shot_id: str, trim_start_sec: float | None, trim
             trim_end_sec=excluded.trim_end_sec,
             updated_at=datetime('now')
         """,
-        (project_id, shot_id, trim_start_sec, trim_end_sec),
+        (project_id, shot_id, start_value, end_value),
     )
     conn.commit()
     conn.close()
@@ -1099,37 +1101,21 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         used_pairs.append((shot, selected_row))
     # 权利门禁只针对实际使用的素材,而非整个项目素材池(池中可能混有仅供预览的 review 素材)。
     assert_shots_exportable([shot for shot, _ in used_pairs])
-    # 通过门禁后再写库。
-    conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
-    final_spec = {**preview_spec, "shots": []}
+
+    # 第一阶段:只计算 Final 镜头,不写数据库。
+    # Trim 决定素材边界,Blueprint 决定实际使用时长——用户放宽 Trim 不应把镜头撑到整段源。
+    final_shots: list[dict] = []
     cursor = 0
     for shot, selected_row in used_pairs:
-        shot_id = shot["id"]
-        existing = conn.execute(
-            "SELECT decision FROM review_decisions WHERE project_id=? AND shot_id=?",
-            (project_id, shot_id),
-        ).fetchone()
-        conn.execute(
-            """
-            INSERT INTO review_decisions (project_id, shot_id, decision, reasons, preferred_role, updated_at)
-            VALUES (?, ?, 'use', '["variant_selected"]', ?, datetime('now'))
-            ON CONFLICT(project_id, shot_id) DO UPDATE SET
-                decision='use',
-                reasons='["variant_selected"]',
-                updated_at=datetime('now')
-            """,
-            (project_id, shot_id, None),
-        )
-        if not existing or existing["decision"] != "use":
-            conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
-        # 用审片时最新的入出点重算,而不是沿用 Blueprint 生成时的旧 trim。
+        planned_frames = int(shot.get("duration_in_frames") or 0)
         source_in = selected_row.get("trim_start_sec") if selected_row.get("trim_start_sec") is not None else selected_row["start_sec"]
         source_out = selected_row.get("trim_end_sec") if selected_row.get("trim_end_sec") is not None else selected_row["end_sec"]
-        duration_frames = max(round((source_out - source_in) * fps), 0)
+        available_frames = max(round((source_out - source_in) * fps), 0)
+        duration_frames = min(planned_frames, available_frames)
         if duration_frames < 1:
-            continue  # trim 后无有效时长,跳过
+            continue  # Trim 后无有效时长,跳过
         # 跳过被拒/无效镜头后按顺序重排时间线,避免黑场空洞。
-        final_spec["shots"].append({
+        final_shots.append({
             **shot,
             "src": selected_row["asset_path"],
             "source_in_sec": source_in,
@@ -1137,14 +1123,67 @@ def select_variant(project_id: str, variant_id: int) -> dict:
             "duration_in_frames": duration_frames,
         })
         cursor += duration_frames
-    final_spec["duration_in_frames"] = cursor
+
+    # Blueprint 阶段已校验素材足够,但审片后 reject/缩短 Trim 可能让 Final 明显变短,需重检。
+    planned_total = int(preview_spec.get("duration_in_frames", 0))
+    final_total = cursor
+    missing_frames = max(planned_total - final_total, 0)
+    missing_ratio = missing_frames / planned_total if planned_total else 0.0
+    if missing_ratio > 0.10:
+        conn.close()
+        raise ValueError(
+            f"审片修改后 Final 时长不足:计划 {planned_total} 帧,实际 {final_total} 帧,"
+            f"缺口 {missing_ratio:.0%}。请重新生成 Blueprint。"
+        )
+    warnings = []
+    if missing_frames > 3:
+        warnings.append(f"Final 比 Blueprint 少 {missing_frames} 帧")
+
+    final_spec = {**preview_spec, "shots": final_shots, "duration_in_frames": final_total}
     final_path = config.PROJECTS / project_id / f"editspec.final.variant-{variant_id}.json"
-    final_path.write_text(json.dumps(final_spec, ensure_ascii=False, indent=2))
-    conn.execute("UPDATE cut_variants SET final_editspec_path=? WHERE id=?", (str(final_path), variant_id))
-    conn.commit()
+
+    # 第二阶段:校验通过后,在一个事务里统一写库并落盘 Final。
+    try:
+        conn.execute("BEGIN")
+        conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
+        for shot in final_shots:
+            shot_id = shot["id"]
+            existing = conn.execute(
+                "SELECT decision FROM review_decisions WHERE project_id=? AND shot_id=?",
+                (project_id, shot_id),
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO review_decisions (project_id, shot_id, decision, reasons, preferred_role, updated_at)
+                VALUES (?, ?, 'use', '["variant_selected"]', ?, datetime('now'))
+                ON CONFLICT(project_id, shot_id) DO UPDATE SET
+                    decision='use',
+                    reasons='["variant_selected"]',
+                    updated_at=datetime('now')
+                """,
+                (project_id, shot_id, None),
+            )
+            if not existing or existing["decision"] != "use":
+                conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
+        final_path.write_text(json.dumps(final_spec, ensure_ascii=False, indent=2))
+        conn.execute("UPDATE cut_variants SET final_editspec_path=? WHERE id=?", (str(final_path), variant_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise
     conn.close()
     train_preference()
-    return {"project_id": project_id, "variant_id": variant_id, "selected": True, "shots": len(final_spec["shots"]), "final_editspec_path": str(final_path)}
+    return {
+        "project_id": project_id,
+        "variant_id": variant_id,
+        "selected": True,
+        "shots": len(final_shots),
+        "duration_in_frames": final_total,
+        "planned_duration_in_frames": planned_total,
+        "warnings": warnings,
+        "final_editspec_path": str(final_path),
+    }
 
 
 def train_preference() -> dict:

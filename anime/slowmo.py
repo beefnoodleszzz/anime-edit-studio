@@ -57,14 +57,18 @@ def _rife_slowmo(src: str, in_sec: float, shown_src_sec: float,
     return str(out)
 
 
-def smooth(editspec_path: str, *, min_speed: float = 0.95) -> dict:
-    spec = json.loads(Path(editspec_path).read_text())
-    fps = spec["fps"]
-    processed = 0
-    for shot in spec["shots"]:
-        if shot["speed"] >= min_speed:
+def smooth_spec(spec: dict, *, min_speed: float = 0.95) -> dict:
+    """对内存中的 EditSpec 直接做 RIFE 平滑,返回新副本。
+
+    渲染流水线应传入内存中已处理好的 spec,而不是让 slowmo 再从磁盘读旧文件——
+    否则内存里刚重解析的母版路径/最新数据会丢失,慢镜版与普通版素材不一致。
+    """
+    output = json.loads(json.dumps(spec))
+    fps = output["fps"]
+    for shot in output["shots"]:
+        if (shot.get("speed") or 1.0) >= min_speed:
             continue
-        if any(e["type"] == "flash" for e in shot.get("effects", [])):
+        if any(e.get("type") == "flash" for e in shot.get("effects", [])):
             continue  # 闪切镜头不插帧
         shown = (shot["duration_in_frames"] / fps) * shot["speed"]
         clip = _rife_slowmo(shot["src"], shot["source_in_sec"], shown,
@@ -72,9 +76,14 @@ def smooth(editspec_path: str, *, min_speed: float = 0.95) -> dict:
         shot["src"] = clip
         shot["source_in_sec"] = 0.0
         shot["speed"] = 1.0
-        processed += 1
+    return output
 
+
+def smooth(editspec_path: str, *, min_speed: float = 0.95) -> dict:
+    spec = json.loads(Path(editspec_path).read_text())
+    output = smooth_spec(spec, min_speed=min_speed)
+    processed = sum(1 for a, b in zip(spec["shots"], output["shots"]) if a.get("src") != b.get("src"))
     p = Path(editspec_path)
     out_path = p.with_name(p.name[: -len(".json")] + ".smooth.json")
-    out_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2))
+    out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2))
     return {"editspec": str(out_path), "smoothed_shots": processed}

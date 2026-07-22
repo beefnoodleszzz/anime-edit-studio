@@ -64,12 +64,12 @@ def render(editspec_path: str, *, out: str | None = None, preview: bool = False,
                 else project / "outputs" / f"{stem}{suffix}.mp4")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 有真慢镜(speed<1)则先 RIFE 光流平滑(缓存,只跑一次),渲平滑内容、输出仍用原名
+    # 有真慢镜(speed<1)则先 RIFE 光流平滑(缓存,只跑一次),渲平滑内容、输出仍用原名。
+    # 直接处理内存中的 spec(已重解析母版路径),不再从磁盘重读旧 EditSpec。
     render_spec = spec
     if smooth and any((s.get("speed") or 1) < 0.99 for s in spec["shots"]):
         from . import slowmo
-        sm = slowmo.smooth(str(spec_path))["editspec"]
-        render_spec = json.loads(Path(sm).read_text())
+        render_spec = slowmo.smooth_spec(spec)
 
     staged = _stage_sources(render_spec)
     staged_path = project / f"{stem}.staged.json"

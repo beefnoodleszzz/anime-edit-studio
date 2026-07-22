@@ -11,7 +11,7 @@
 常用命令(纯记录/查看,不阻断):
 
 ```bash
-anime source-register <asset_id> --source-url <url> --license <license> --commercial true --status approved
-anime source-audit --project <project_id>
-anime rights-report <project_id>
+anime source-register <asset_id> --source-url <url> --title <作品> --notes <集数/Raw/BD/切片站>
+anime source-list --project <project_id>
+anime source-report <project_id>
 ```

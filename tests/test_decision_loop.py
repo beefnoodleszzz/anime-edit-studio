@@ -290,6 +290,27 @@ def test_slowmo_smooth_spec_uses_memory_object(workspace: Path, monkeypatch: pyt
     assert out is not spec  # 返回副本
 
 
+def test_slowmo_smooth_spec_feeds_memory_master_to_rife(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.slowmo as slowmo
+    importlib.reload(slowmo)
+    captured = {}
+
+    def fake_rife(src, in_sec, shown, out_frames, out_fps):
+        captured["src"] = src
+        return "/cache/slow_clip.mov"
+
+    monkeypatch.setattr(slowmo, "_rife_slowmo", fake_rife)
+    # speed<1 进入 RIFE 慢动作分支,应对内存 spec 里的母版路径插帧,而非从磁盘重读旧文件。
+    spec = {"id": "demo", "fps": 30, "width": 100, "height": 100, "duration_in_frames": 30,
+            "shots": [{"id": "asset001-0", "src": "/trusted/master.mp4", "source_in_sec": 0.5,
+                       "start_frame": 0, "duration_in_frames": 30, "speed": 0.5}]}
+    out = slowmo.smooth_spec(spec)
+    assert captured["src"] == "/trusted/master.mp4"
+    assert out["shots"][0]["src"] == "/cache/slow_clip.mov"
+    assert out["shots"][0]["speed"] == 1.0
+
+
 def test_select_variant_not_blocked_by_pool_rights(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
     _seed_data(workspace, db_mod, loop)
@@ -346,7 +367,7 @@ def test_api_value_error_returns_400(workspace: Path, monkeypatch: pytest.Monkey
     assert client.put("/api/projects/demo/shots/asset001-0/review", json={"decision": "bogus"}).status_code == 422
 
 
-def test_api_config_rights_gate_and_candidates(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+def test_api_config_and_candidates_ignore_rights(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     pytest.importorskip("fastapi")
     _, db_mod, loop, _, _, candidates = _reload_modules(monkeypatch, workspace)
     _seed_data(workspace, db_mod, loop)
@@ -358,9 +379,11 @@ def test_api_config_rights_gate_and_candidates(workspace: Path, monkeypatch: pyt
     app.state.default_project_id = "demo"
     client = TestClient(app)
     assert client.get("/api/config").json()["default_project_id"] == "demo"
-    blocked = loop.rights_report("demo")
-    assert blocked["export_allowed"] is True
     listed = candidates.list_candidates(min_height=0, limit=10)
     candidate_map = {item["id"]: item for item in listed}
+    # 来源状态仍作展示字段返回,但不再影响 status / score。
     assert candidate_map["asset001"]["source_status"] == "approved"
-    assert candidate_map["asset002"]["status"] == "reject"
+    assert candidate_map["asset002"]["source_status"] == "blocked"
+    assert candidate_map["asset002"]["status"] != "reject"  # blocked 不再硬拒
+    # 两条技术属性相同的素材(short_edge 360、30fps、无字幕)得分相同——版权不参与打分。
+    assert candidate_map["asset001"]["score"] == candidate_map["asset002"]["score"]

@@ -109,7 +109,6 @@ npm run dev --prefix review-web
 ```bash
 anime blueprint <project_id>
 anime variant select <project_id> <variant_id>   # 选终版时回灌最新入出点与决策
-anime rights-report <project_id>
 # 正式导出按 shot.id 从库里回源本地最高画质母版(而非代理);调试用 --preview
 anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 ```

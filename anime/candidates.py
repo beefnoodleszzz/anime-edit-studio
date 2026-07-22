@@ -53,24 +53,21 @@ def list_candidates(*, min_height: int = 1080, limit: int = 100) -> list[dict]:
             reasons.append(f"低于 {min_height}p")
         if subtitle_tracks:
             reasons.append(f"存在 {subtitle_tracks} 条软字幕轨")
-        if len(exact.get(row["sha256"], [])) > 1:
+        exact_duplicate = len(exact.get(row["sha256"], [])) > 1
+        family_duplicate = len(families.get(_family(row["path"]), [])) > 1
+        if exact_duplicate:
             reasons.append("文件重复")
-        if len(families.get(_family(row["path"]), [])) > 1:
+        if family_duplicate:
             reasons.append("同源/版本重复风险")
         source_status = row["source_status"] or "review"
         has_rights = bool(row["source_url"])
-        if not has_rights:
-            reasons.append("缺少来源记录")
-        if source_status == "blocked":
-            reasons.append("权利状态 blocked")
-        hard_reject = short_edge < min_height or len(exact.get(row["sha256"], [])) > 1 or source_status == "blocked"
-        status = "reject" if hard_reject else ("review" if subtitle_tracks or len(families.get(_family(row["path"]), [])) > 1 or source_status != "approved" else "ready")
+        # 来源状态只作展示字段,不参与 status / score。质量筛选只看画质/字幕/水印/重复等技术项。
+        hard_reject = short_edge < min_height or exact_duplicate
+        status = "reject" if hard_reject else ("review" if subtitle_tracks or family_duplicate else "ready")
         score = (
             (40 if short_edge >= 2160 else 30 if short_edge >= 1080 else 0)
             + (20 if row["fps"] and row["fps"] >= 50 else 10)
             + (20 if not subtitle_tracks else 0)
-            + (15 if has_rights else 0)
-            + (5 if source_status == "approved" else 0)
         )
         out.append(
             {

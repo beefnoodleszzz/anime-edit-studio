@@ -718,13 +718,10 @@ def audit_sources(project_id: str | None = None) -> dict:
     }
 
 
-def rights_report(project_id: str) -> dict:
+def source_report(project_id: str) -> dict:
+    # 纯来源报告:列出项目素材的来源/状态备注。不再计算 export_allowed(导出不受权利影响)。
     audit = audit_sources(project_id)
-    return {
-        "project_id": project_id,
-        "export_allowed": all(item["effective_status"] == "approved" for item in audit["items"]),
-        "items": audit["items"],
-    }
+    return {"project_id": project_id, "items": audit["items"]}
 
 
 def resolve_master_sources(spec: dict) -> dict:
@@ -784,18 +781,9 @@ def gap_analysis(project_id: str) -> dict:
     return {"project_id": project_id, "brief": brief, "segments": summary}
 
 
-def _eligible_shots(project_id: str, *, export: bool) -> list[dict]:
-    shots = [shot for shot in _shot_rows(project_id) if shot.get("decision") != "reject"]
-    out = []
-    for shot in shots:
-        status = shot.get("source_status") or "review"
-        commercial = shot.get("commercial_allowed")
-        if status == "blocked":
-            continue
-        if export and not (status == "approved" and commercial == 1):
-            continue
-        out.append(shot)
-    return out
+def _eligible_shots(project_id: str) -> list[dict]:
+    # 只排除人工 reject 的镜头;来源状态只是备注,不影响创作选片。
+    return [shot for shot in _shot_rows(project_id) if shot.get("decision") != "reject"]
 
 
 def _segment_frame_plan(brief: dict, reference_dna: dict | None, roles: list[str]) -> dict[str, int]:
@@ -908,7 +896,7 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
     brief = get_brief(project_id)
     if not brief:
         raise ValueError("请先创建 creative brief")
-    shots = _eligible_shots(project_id, export=False)
+    shots = _eligible_shots(project_id)
     if not shots:
         raise ValueError("当前没有可用镜头")
     if not any(_shot_available_frames(shot) >= MIN_SHOT_FRAMES for shot in shots):

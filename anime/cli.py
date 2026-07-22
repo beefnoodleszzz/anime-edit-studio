@@ -477,7 +477,7 @@ def source_register_cmd(asset_id: str,
                         status: str = typer.Option("review", "--status"),
                         notes: str = typer.Option(None, "--notes"),
                         json: bool = typer.Option(False, "--json")):
-    """登记素材来源和权利状态。"""
+    """登记素材来源:出处/作品/集数/Raw·BD·切片站等,仅作记录。status 只是备注,不影响导出。"""
     from . import decision_loop
 
     _out(decision_loop.upsert_source_record(asset_id, {
@@ -491,20 +491,20 @@ def source_register_cmd(asset_id: str,
     }), json)
 
 
-@app.command("source-audit")
-def source_audit_cmd(project_id: str = typer.Option(None, "--project"), json: bool = typer.Option(False, "--json")):
-    """审计素材来源状态。"""
+@app.command("source-list")
+def source_list_cmd(project_id: str = typer.Option(None, "--project"), json: bool = typer.Option(False, "--json")):
+    """列出素材来源记录(纯展示,不阻断)。"""
     from . import decision_loop
 
     _out(decision_loop.audit_sources(project_id), json)
 
 
-@app.command("rights-report")
-def rights_report_cmd(project_id: str, json: bool = typer.Option(False, "--json")):
-    """输出项目权利报告。"""
+@app.command("source-report")
+def source_report_cmd(project_id: str, json: bool = typer.Option(False, "--json")):
+    """输出项目素材来源报告(来源/作品/备注,不含导出门禁)。"""
     from . import decision_loop
 
-    _out(decision_loop.rights_report(project_id), json)
+    _out(decision_loop.source_report(project_id), json)
 
 
 @app.command("doctor")

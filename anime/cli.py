@@ -239,8 +239,7 @@ def render_cmd(editspec_path: str, out: str = typer.Option(None),
                json: bool = typer.Option(False, "--json")):
     """Remotion 无头渲染 EditSpec(镜头级缓存;--preview 走 0.5 缩放快速迭代)。
 
-    正式导出强制校验素材权利:每个镜头按 shot.id 从 DB 重解析可信母版路径,
-    须全部 approved+可商用,否则拒绝;调试用 --preview(不受门禁,只出预览)。
+    正式导出按 shot.id 从库里回源本地最高画质母版(而非代理);--preview 只出快速预览。
     """
     from . import render
     _out({"output": render.render(editspec_path, out=out, preview=preview)}, json)

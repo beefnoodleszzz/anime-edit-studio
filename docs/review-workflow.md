@@ -33,7 +33,7 @@ npm run dev --prefix review-web
 6. 生成 Blueprint。
 7. 检查 Rights Report。
 8. 选择 Variant，生成 `editspec.final.variant-*.json`。
-9. 正式导出:`anime render projects/<id>/editspec.final.variant-*.json`(未批准素材会被拒绝;预览加 `--preview`)。
+9. 正式导出:`anime render projects/<id>/editspec.final.variant-*.json`(按 shot.id 回源本地最高画质母版;预览加 `--preview`)。
 
 快捷键：
 

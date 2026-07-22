@@ -49,12 +49,11 @@ def render(editspec_path: str, *, out: str | None = None, preview: bool = False,
     if not spec_path.exists():
         raise FileNotFoundError(spec_path)
     spec = json.loads(spec_path.read_text())
-    # 正式导出(非 --preview)强制走权利门禁:每个镜头按 shot.id 从 DB 重解析可信母版路径,
-    # 忽略 EditSpec 里的本地 src,任一镜头非 approved+可商用即拒绝。没有绕过开关——
-    # 自有/已授权素材应先用 source-register 登记为 approved,而不是绕过系统。
+    # 正式导出(非 --preview)按 shot.id 从 DB 回源到本地母版路径,让成片用最高画质原片
+    # 而不是代理文件。不做权利拦截。
     if not preview:
         from . import decision_loop
-        spec = decision_loop.enforce_export_spec(spec)
+        spec = decision_loop.resolve_master_sources(spec)
     project = spec_path.parent
     stem = spec_path.stem
     suffix = ".preview" if preview else ""

@@ -727,82 +727,25 @@ def rights_report(project_id: str) -> dict:
     }
 
 
-def _resolve_shot_asset(conn, shot: dict) -> tuple[str | None, str | None]:
-    """把镜头解析到 (asset_id, 母版路径),以 shot.id 为可信来源。
+def resolve_master_sources(spec: dict) -> dict:
+    """返回一个副本:每个镜头的 src 按 shot.id 从 DB 回源到本地母版路径(assets.path)。
 
-    若 shot.src 同时存在,它必须解析到与 shot.id 相同的素材;否则视为无法解析并拒绝,
-    这样伪造的 src(指向未登记/被禁素材)无法借一个已批准的 id 蒙混过关。
+    目的是让正式成片用本地最高质量原片,而不是代理文件——不做任何权利拦截。
+    解析不到的镜头保持其原 src 不变。source_records 仅用于记录来源,不再阻断导出。
     """
-    shot_id = shot.get("id")
-    id_row = None
-    if shot_id:
-        id_row = conn.execute(
-            "SELECT s.asset_id, a.path FROM shots s JOIN assets a ON a.id=s.asset_id WHERE s.id=?",
-            (shot_id,),
-        ).fetchone()
-    src = shot.get("src")
-    src_asset = None
-    if src and not str(src).startswith("http"):
-        resolved = str(Path(src).expanduser().resolve())
-        row = conn.execute("SELECT id FROM assets WHERE path=? OR proxy_path=?", (resolved, resolved)).fetchone()
-        if row:
-            src_asset = row["id"]
-    if id_row:
-        if src_asset is not None and src_asset != id_row["asset_id"]:
-            return None, None  # id 与 src 指向不同素材,拒绝
-        return id_row["asset_id"], id_row["path"]
-    if src_asset is not None:  # 无可信 shot.id 时才退回 src(仅手写 spec),仍须在 DB 中登记
-        path_row = conn.execute("SELECT path FROM assets WHERE id=?", (src_asset,)).fetchone()
-        return src_asset, (path_row["path"] if path_row else None)
-    return None, None
-
-
-def _asset_export_ok(conn, asset_id: str) -> bool:
-    record = conn.execute(
-        "SELECT status, commercial_allowed FROM source_records WHERE asset_id=?",
-        (asset_id,),
-    ).fetchone()
-    status = record["status"] if record else "review"
-    commercial = record["commercial_allowed"] if record else None
-    return status == "approved" and commercial == 1
-
-
-def assert_shots_exportable(shots: list[dict]) -> None:
-    """正式导出门禁:每个镜头解析到的素材都必须 approved+可商用,否则拒绝。
-
-    无法解析(未登记来源、id/src 不一致)的镜头一律按未批准处理(unknown≈review)。
-    """
+    output = json.loads(json.dumps(spec))
     conn = db.connect()
-    unapproved: list[str] = []
-    for shot in shots:
-        asset_id, _ = _resolve_shot_asset(conn, shot)
-        if not asset_id or not _asset_export_ok(conn, asset_id):
-            unapproved.append(str(asset_id or shot.get("id") or shot.get("src") or "unknown"))
-    conn.close()
-    if unapproved:
-        joined = ", ".join(sorted(set(unapproved)))
-        raise ValueError(f"存在未批准素材,禁止正式导出: {joined}。先批准来源,或用 --preview 生成预览。")
-
-
-def enforce_export_spec(spec: dict) -> dict:
-    """返回一个副本:每个镜头的 src 按 shot.id 从 DB 重解析为可信母版路径,忽略 spec 中提供的 src。
-
-    任一镜头无法解析或非 approved+可商用即拒绝。正式渲染只信任 DB 母版,不信任 EditSpec 里的本地 src。
-    """
-    trusted = json.loads(json.dumps(spec))
-    conn = db.connect()
-    unapproved: list[str] = []
-    for shot in trusted.get("shots", []):
-        asset_id, master_path = _resolve_shot_asset(conn, shot)
-        if not asset_id or not master_path or not _asset_export_ok(conn, asset_id):
-            unapproved.append(str(asset_id or shot.get("id") or shot.get("src") or "unknown"))
-            continue
-        shot["src"] = master_path  # 强制使用可信母版路径
-    conn.close()
-    if unapproved:
-        joined = ", ".join(sorted(set(unapproved)))
-        raise ValueError(f"存在未批准素材,禁止正式导出: {joined}。先批准来源,或用 --preview 生成预览。")
-    return trusted
+    try:
+        for shot in output.get("shots", []):
+            row = conn.execute(
+                "SELECT a.path FROM shots s JOIN assets a ON a.id=s.asset_id WHERE s.id=?",
+                (shot.get("id"),),
+            ).fetchone()
+            if row and row["path"]:
+                shot["src"] = row["path"]
+    finally:
+        conn.close()
+    return output
 
 
 def gap_analysis(project_id: str) -> dict:
@@ -1099,8 +1042,6 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         if not selected_row or selected_row.get("decision") == "reject":
             continue
         used_pairs.append((shot, selected_row))
-    # 权利门禁只针对实际使用的素材,而非整个项目素材池(池中可能混有仅供预览的 review 素材)。
-    assert_shots_exportable([shot for shot, _ in used_pairs])
 
     # 第一阶段:只计算 Final 镜头,不写数据库。
     # Trim 决定素材边界,Blueprint 决定实际使用时长——用户放宽 Trim 不应把镜头撑到整段源。

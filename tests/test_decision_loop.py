@@ -212,44 +212,16 @@ def test_pick_duration_never_exceeds_boundary(workspace: Path, monkeypatch: pyte
     assert loop._pick_duration_frames(short, requested=45) < loop.MIN_SHOT_FRAMES
 
 
-def test_render_rights_gate_blocks_unapproved(workspace: Path, monkeypatch: pytest.MonkeyPatch):
-    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
-    _, video2 = _seed_data(workspace, db_mod, loop)
-    # asset001 approved+commercial;asset002 blocked。
-    loop.assert_shots_exportable([{"id": "asset001-0"}])
-    with pytest.raises(ValueError):
-        loop.assert_shots_exportable([{"id": "asset002-0"}])
-    with pytest.raises(ValueError):
-        loop.assert_shots_exportable([{"src": "/nonexistent/unknown.mp4"}])
-    # 伪造:已批准镜头 ID 配上被禁素材的 src → id/src 不一致,必须拒绝。
-    with pytest.raises(ValueError):
-        loop.assert_shots_exportable([{"id": "asset001-0", "src": str(video2)}])
-
-
-def test_enforce_export_spec_ignores_forged_src(workspace: Path, monkeypatch: pytest.MonkeyPatch):
-    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
-    video1, video2 = _seed_data(workspace, db_mod, loop)
-    # id 已批准 + 未登记的伪造 src → 忽略 src,强制用可信母版路径导出。
-    trusted = loop.enforce_export_spec({"shots": [{"id": "asset001-0", "src": "/tmp/forged.mp4"}]})
-    assert trusted["shots"][0]["src"] == str(video1)
-    # id 已批准 + 指向被禁素材的 src → 不一致,拒绝。
-    with pytest.raises(ValueError):
-        loop.enforce_export_spec({"shots": [{"id": "asset001-0", "src": str(video2)}]})
-
-
-def test_render_preview_bypasses_gate(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+def test_resolve_master_sources_maps_by_id(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
     video1, _ = _seed_data(workspace, db_mod, loop)
-    import anime.render as render_mod
-    importlib.reload(render_mod)
-    spec_path = workspace / "projects" / "unapproved.json"
-    spec_path.parent.mkdir(parents=True, exist_ok=True)
-    spec_path.write_text(json.dumps({"id": "demo", "fps": 30, "width": 100, "height": 100,
-                                     "duration_in_frames": 10,
-                                     "shots": [{"id": "asset002-0", "src": str(video1), "start_frame": 0, "duration_in_frames": 10}]}))
-    # 正式导出被门禁拦下(在任何 node 子进程之前抛错)。
-    with pytest.raises(ValueError):
-        render_mod.render(str(spec_path), preview=False)
+    # 正式导出按 shot.id 回源本地母版(assets.path),覆盖 spec 里的代理/占位 src,不做权利拦截。
+    out = loop.resolve_master_sources({"shots": [
+        {"id": "asset001-0", "src": "/tmp/proxy.mp4"},
+        {"id": "unknown-shot", "src": "/tmp/keep.mp4"},
+    ]})
+    assert out["shots"][0]["src"] == str(video1)   # 已知镜头回源到母版
+    assert out["shots"][1]["src"] == "/tmp/keep.mp4"  # 未知镜头保持原 src
 
 
 def test_select_missing_variant_keeps_selection(workspace: Path, monkeypatch: pytest.MonkeyPatch):
@@ -318,15 +290,15 @@ def test_slowmo_smooth_spec_uses_memory_object(workspace: Path, monkeypatch: pyt
     assert out is not spec  # 返回副本
 
 
-def test_select_variant_gates_only_used_assets(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+def test_select_variant_not_blocked_by_pool_rights(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
     _seed_data(workspace, db_mod, loop)
     loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
-    blueprints = loop.generate_blueprints("demo")  # 只用到 asset001(approved)
-    # 事后把一个 blocked 且未被使用的素材也塞进项目池:整池审计会失败,但实际未使用。
+    blueprints = loop.generate_blueprints("demo")
+    # 池里混入一个 blocked 素材:门禁已移除,选终版不应因此被阻断。
     loop.attach_assets("demo", ["asset002"])
     selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
-    assert selected["shots"] >= 1  # 门禁基于实际使用素材,未被使用的 blocked 素材不应阻断
+    assert selected["shots"] >= 1
 
 
 def test_final_trim_is_boundary_not_expansion(workspace: Path, monkeypatch: pytest.MonkeyPatch):

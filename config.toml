@@ -18,6 +18,11 @@ fps    = 60
 master_codec   = "prores_videotoolbox"   # 母版
 platform_codec = "h264_videotoolbox"      # 平台版
 
+[library]
+# 本地素材库根目录(被 ingest 的源文件永久住这里,入库后勿移动/改名)。
+# `anime library add` 归位到 sources_root/<series>/<season>/;可用 ANIME_MATERIAL_ROOT 覆盖。
+sources_root = "~/Desktop/anime-material-library/sources"
+
 [proxy]
 edit_height     = 1080   # 剪辑/预览代理
 analysis_height = 540    # 分析代理(更快)

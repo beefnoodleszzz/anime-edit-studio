@@ -337,12 +337,51 @@ preference_app = typer.Typer(add_completion=False, help="preference learning")
 variant_app = typer.Typer(add_completion=False, help="cut variants")
 reference_app = typer.Typer(add_completion=False, help="reference dna")
 project_app = typer.Typer(add_completion=False, help="project asset scope")
+library_app = typer.Typer(add_completion=False, help="本地素材库入库与磁盘回收")
 app.add_typer(brief_app, name="brief")
 app.add_typer(review_app, name="review")
 app.add_typer(preference_app, name="preference")
 app.add_typer(variant_app, name="variant")
 app.add_typer(reference_app, name="reference")
 app.add_typer(project_app, name="project")
+app.add_typer(library_app, name="library")
+
+
+@library_app.command("add")
+def library_add_cmd(
+    video: str,
+    series: str = typer.Option(..., "--series", help="系列 slug(小写 ASCII,如 frieren)"),
+    season: str = typer.Option(..., "--season", help="季/来源 slug(如 s2、movie1)"),
+    kind: str = typer.Option(..., "--kind", help="类型: ep/ncop/nced/op/ed/pv/cm/clip(可带序号 ep05)"),
+    tier: str = typer.Option(..., "--tier", help="质量层: bd/raw/web/clip"),
+    source_url: str = typer.Option(None, "--source-url"),
+    title: str = typer.Option(None, "--title"),
+    creator: str = typer.Option(None, "--creator"),
+    notes: str = typer.Option(None, "--notes"),
+    copy: bool = typer.Option(False, "--copy", help="复制而非移动(默认移动)"),
+    do_ingest: bool = typer.Option(False, "--ingest", help="归位后立即 ingest 并登记来源"),
+    force: bool = typer.Option(False, "--force", help="覆盖已存在的同名目标"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="只预览规范化命名与落点,不落盘"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """把一个视频探测→规范化 ASCII 命名→归位到素材库 sources/<series>/<season>/。"""
+    from . import library
+
+    _out(library.add(video, series=series, season=season, kind=kind, tier=tier,
+                     source_url=source_url, title=title, creator=creator, notes=notes,
+                     copy=copy, do_ingest=do_ingest, force=force, dry_run=dry_run), json)
+
+
+@library_app.command("clean")
+def library_clean_cmd(
+    project_id: str = typer.Argument(None, help="可选:一并清理该项目的中间件/预览"),
+    apply: bool = typer.Option(False, "--apply", help="真正删除(默认只报告可回收空间)"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """交付后回收可再生的渲染缓存/中间件;保留源、母版、engine.sqlite、关键帧。"""
+    from . import library
+
+    _out(library.clean(project_id, apply=apply), json)
 
 
 @brief_app.command("create")

@@ -115,6 +115,30 @@ anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 
 > 入出点在 Review Web 里改后,`variant select` 会按最新 trim 重算 Final EditSpec 的入点与时长,无需重跑蓝图。
 
+## 本地素材库(入库与磁盘回收)
+
+源文件永久住在素材库根目录(`config.toml` 的 `[library] sources_root`,默认 `~/Desktop/anime-material-library/sources`;可用 `ANIME_MATERIAL_ROOT` 覆盖)。`ingest` 只记录路径不复制,**入库后不要移动/改名**,否则回源渲染/relink/candidates 断链。
+
+拿到一个视频 → 规范化 ASCII 命名 → 归位 → 入库(一步到位):
+
+```bash
+# 探测分辨率/帧率/编码/字幕轨,规范成 <series>_<season>_<kind>_<tier>_<res>_<fps>_<codec>
+anime library add "/下载/某个乱名 RAW.mp4" --series jujutsu --season s2 --kind ncop --tier bd --dry-run --json
+# 确认无误后移动并入库 + 登记来源(--copy 保留原件)
+anime library add "/下载/某个乱名 RAW.mp4" --series jujutsu --season s2 --kind ncop --tier bd \
+  --ingest --title "咒术回战 S2 NCOP" --source-url "<链接>" --notes "bd 无字幕" --json
+```
+
+- `--kind`:`ep05` / `ncop` / `nced` / `op` / `ed` / `pv` / `cm` / `clip`;`--tier`:`bd` > `raw` > `web` > `clip`。
+- 字段必须小写 ASCII(禁止中文);分辨率/帧率/编码自动探测。非 4K 或有软字幕会给出 warning。
+
+一部作品交付后回收可再生磁盘占用(渲染分段、RIFE/超分/ProRes 缓存、Remotion 临时包、项目预览):
+
+```bash
+anime library clean demo --json          # 默认只报告可回收空间(dry-run)
+anime library clean demo --apply --json  # 真正删除;保留源、母版、engine.sqlite、关键帧
+```
+
 ## 状态(M1–M4 全部完成,已在真实五条悟素材上端到端验证)
 
 - ✅ **M1** `ingest / shots / analyze / search / assemble / render / qa` —— 端到端自适应画幅/60fps

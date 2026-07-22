@@ -191,6 +191,57 @@ def test_cli_json_reference_and_preference_modes(workspace: Path, monkeypatch: p
     assert reset.exit_code == 0
 
 
+def test_library_add_normalizes_and_ingests(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, _, _, _, _ = _reload_modules(monkeypatch, workspace)
+    monkeypatch.setenv("ANIME_MATERIAL_ROOT", str(workspace / "material"))
+    import anime.library as library
+    importlib.reload(library)
+    raw = workspace / "inbox" / "some Messy RAW name.mp4"
+    raw.parent.mkdir(parents=True)
+    _make_video(raw, size="640x360")
+    plan = library.add(str(raw), series="frieren", season="s1", kind="ep01", tier="web", dry_run=True)
+    assert plan["filename"] == "frieren_s1_ep01_web_360p_30fps_avc.mp4"
+    assert plan["dest"].endswith("material/frieren/s1/frieren_s1_ep01_web_360p_30fps_avc.mp4")
+    res = library.add(str(raw), series="frieren", season="s1", kind="ep01", tier="web", do_ingest=True)
+    assert Path(res["placed"]).exists()
+    assert not raw.exists()  # 默认移动
+    conn = db_mod.connect()
+    row = db_mod.asset_by_id(conn, res["asset_id"])
+    conn.close()
+    assert row["path"] == res["placed"]  # ingest 记录的是素材库里的母版路径
+
+
+def test_library_add_rejects_non_ascii(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    monkeypatch.setenv("ANIME_MATERIAL_ROOT", str(workspace / "material"))
+    import anime.library as library
+    importlib.reload(library)
+    raw = workspace / "a.mp4"
+    _make_video(raw, size="320x240")
+    with pytest.raises(ValueError):
+        library.add(str(raw), series="葬送的芙莉莲", season="s1", kind="ep01", tier="web", dry_run=True)
+
+
+def test_library_clean_reclaims_cache_preserves_master(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    cfg, _, _, _, _, _ = _reload_modules(monkeypatch, workspace)
+    import anime.library as library
+    importlib.reload(library)
+    seg = cfg.CACHE / "rendersegs"
+    seg.mkdir(parents=True)
+    (seg / "x.mp4").write_bytes(b"0" * 2048)
+    out = cfg.PROJECTS / "demo" / "outputs"
+    out.mkdir(parents=True)
+    (out / "master.mp4").write_bytes(b"1" * 4096)
+    (out / "editspec.arc.preview.mp4").write_bytes(b"2" * 1024)
+    report = library.clean("demo", apply=False)
+    assert report["reclaimable_bytes"] >= 2048 + 1024
+    assert (seg / "x.mp4").exists()  # dry-run 不删
+    library.clean("demo", apply=True)
+    assert not seg.exists()  # 缓存被回收
+    assert (out / "master.mp4").exists()  # 母版保留
+    assert not (out / "editspec.arc.preview.mp4").exists()  # 预览被清
+
+
 def test_segment_frame_plan_normalizes_reference_dna(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, _, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
     roles = ["hook", "build", "climax", "release", "ending"]

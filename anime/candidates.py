@@ -22,10 +22,17 @@ def _subtitle_streams(path: Path) -> int:
         return 0
 
 
+# 从文件名剥掉"版本/画质"类 token,只留"是哪一刀"的身份部分,
+# 让同一片段的不同层级/分辨率/帧率/编码(bd 4K vs web 1080p)归为同一 family。
+_FAMILY_DROP = re.compile(
+    r"^(?:4k|\d{3,4}p|\d+(?:\.\d+)?fps|bd|bdrip|web|webrip|raw|clip|"
+    r"hevc|h265|x265|avc|h264|x264|av1|vp9|10bit|8bit|high|clean|no|credit|nocredit)$"
+)
+
+
 def _family(path: str) -> str:
-    stem = Path(path).stem.lower()
-    stem = re.sub(r"(?:4k|1080p|2160p|60fps|120fps|23\.976|48fps|high|clean|no[-_ ]?credit)", "", stem)
-    return re.sub(r"[_-]+", "_", stem).strip("_ ")
+    tokens = re.split(r"[_\-\s.]+", Path(path).stem.lower())
+    return "_".join(t for t in tokens if t and not _FAMILY_DROP.match(t))
 
 
 def list_candidates(*, min_height: int = 1080, limit: int = 100) -> list[dict]:

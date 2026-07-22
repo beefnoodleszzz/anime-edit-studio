@@ -32,6 +32,7 @@ def _ffprobe(path: str) -> dict:
 def _make_proxy(src: str, asset_id: str) -> str:
     ffmpeg = config.tool("ffmpeg")
     height = config.get("proxy", "edit_height", 1080)
+    config.PROXIES.mkdir(parents=True, exist_ok=True)
     dst = config.PROXIES / f"{asset_id}.mp4"
     if dst.exists():
         return str(dst)

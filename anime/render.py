@@ -44,15 +44,17 @@ def _stage_sources(spec: dict) -> dict:
 
 
 def render(editspec_path: str, *, out: str | None = None, preview: bool = False,
-           smooth: bool = True, allow_unapproved: bool = False) -> str:
+           smooth: bool = True) -> str:
     spec_path = Path(editspec_path).resolve()
     if not spec_path.exists():
         raise FileNotFoundError(spec_path)
     spec = json.loads(spec_path.read_text())
-    # 正式导出(非 --preview)必须通过素材权利门禁:实际使用的镜头须全部 approved+可商用。
-    if not preview and not allow_unapproved:
+    # 正式导出(非 --preview)强制走权利门禁:每个镜头按 shot.id 从 DB 重解析可信母版路径,
+    # 忽略 EditSpec 里的本地 src,任一镜头非 approved+可商用即拒绝。没有绕过开关——
+    # 自有/已授权素材应先用 source-register 登记为 approved,而不是绕过系统。
+    if not preview:
         from . import decision_loop
-        decision_loop.assert_shots_exportable(spec.get("shots", []))
+        spec = decision_loop.enforce_export_spec(spec)
     project = spec_path.parent
     stem = spec_path.stem
     suffix = ".preview" if preview else ""

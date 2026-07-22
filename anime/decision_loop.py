@@ -725,47 +725,82 @@ def rights_report(project_id: str) -> dict:
     }
 
 
-def _asset_for_shot(conn, shot: dict) -> str | None:
+def _resolve_shot_asset(conn, shot: dict) -> tuple[str | None, str | None]:
+    """把镜头解析到 (asset_id, 母版路径),以 shot.id 为可信来源。
+
+    若 shot.src 同时存在,它必须解析到与 shot.id 相同的素材;否则视为无法解析并拒绝,
+    这样伪造的 src(指向未登记/被禁素材)无法借一个已批准的 id 蒙混过关。
+    """
     shot_id = shot.get("id")
+    id_row = None
     if shot_id:
-        row = conn.execute("SELECT asset_id FROM shots WHERE id=?", (shot_id,)).fetchone()
-        if row:
-            return row["asset_id"]
+        id_row = conn.execute(
+            "SELECT s.asset_id, a.path FROM shots s JOIN assets a ON a.id=s.asset_id WHERE s.id=?",
+            (shot_id,),
+        ).fetchone()
     src = shot.get("src")
+    src_asset = None
     if src and not str(src).startswith("http"):
         resolved = str(Path(src).expanduser().resolve())
         row = conn.execute("SELECT id FROM assets WHERE path=? OR proxy_path=?", (resolved, resolved)).fetchone()
         if row:
-            return row["id"]
-    return None
+            src_asset = row["id"]
+    if id_row:
+        if src_asset is not None and src_asset != id_row["asset_id"]:
+            return None, None  # id 与 src 指向不同素材,拒绝
+        return id_row["asset_id"], id_row["path"]
+    if src_asset is not None:  # 无可信 shot.id 时才退回 src(仅手写 spec),仍须在 DB 中登记
+        path_row = conn.execute("SELECT path FROM assets WHERE id=?", (src_asset,)).fetchone()
+        return src_asset, (path_row["path"] if path_row else None)
+    return None, None
+
+
+def _asset_export_ok(conn, asset_id: str) -> bool:
+    record = conn.execute(
+        "SELECT status, commercial_allowed FROM source_records WHERE asset_id=?",
+        (asset_id,),
+    ).fetchone()
+    status = record["status"] if record else "review"
+    commercial = record["commercial_allowed"] if record else None
+    return status == "approved" and commercial == 1
 
 
 def assert_shots_exportable(shots: list[dict]) -> None:
-    """正式导出门禁:EditSpec 实际使用的每个素材都必须 approved 且允许商用,否则拒绝。
+    """正式导出门禁:每个镜头解析到的素材都必须 approved+可商用,否则拒绝。
 
-    未登记来源或无法解析到素材的镜头一律按未批准处理(unknown≈review),
-    这样直接 `anime render` 任意未批准 EditSpec 也会被拦下,而非只拦正常流程。
+    无法解析(未登记来源、id/src 不一致)的镜头一律按未批准处理(unknown≈review)。
     """
     conn = db.connect()
     unapproved: list[str] = []
     for shot in shots:
-        asset_id = _asset_for_shot(conn, shot)
-        if not asset_id:
-            unapproved.append(str(shot.get("id") or shot.get("src") or "unknown"))
-            continue
-        record = conn.execute(
-            "SELECT status, commercial_allowed FROM source_records WHERE asset_id=?",
-            (asset_id,),
-        ).fetchone()
-        status = record["status"] if record else "review"
-        commercial = record["commercial_allowed"] if record else None
-        if status == "approved" and commercial == 1:
-            continue
-        unapproved.append(asset_id)
+        asset_id, _ = _resolve_shot_asset(conn, shot)
+        if not asset_id or not _asset_export_ok(conn, asset_id):
+            unapproved.append(str(asset_id or shot.get("id") or shot.get("src") or "unknown"))
     conn.close()
     if unapproved:
         joined = ", ".join(sorted(set(unapproved)))
         raise ValueError(f"存在未批准素材,禁止正式导出: {joined}。先批准来源,或用 --preview 生成预览。")
+
+
+def enforce_export_spec(spec: dict) -> dict:
+    """返回一个副本:每个镜头的 src 按 shot.id 从 DB 重解析为可信母版路径,忽略 spec 中提供的 src。
+
+    任一镜头无法解析或非 approved+可商用即拒绝。正式渲染只信任 DB 母版,不信任 EditSpec 里的本地 src。
+    """
+    trusted = json.loads(json.dumps(spec))
+    conn = db.connect()
+    unapproved: list[str] = []
+    for shot in trusted.get("shots", []):
+        asset_id, master_path = _resolve_shot_asset(conn, shot)
+        if not asset_id or not master_path or not _asset_export_ok(conn, asset_id):
+            unapproved.append(str(asset_id or shot.get("id") or shot.get("src") or "unknown"))
+            continue
+        shot["src"] = master_path  # 强制使用可信母版路径
+    conn.close()
+    if unapproved:
+        joined = ", ".join(sorted(set(unapproved)))
+        raise ValueError(f"存在未批准素材,禁止正式导出: {joined}。先批准来源,或用 --preview 生成预览。")
+    return trusted
 
 
 def gap_analysis(project_id: str) -> dict:
@@ -859,8 +894,9 @@ def _shot_available_frames(shot: dict) -> int:
 
 def _pick_duration_frames(shot: dict, requested: int) -> int:
     # 只能在素材实际可用长度内取,绝不通过强行拉长突破人工设置的 Out 点或滑入下一镜头。
+    # 零可用长度返回 0,由调用方跳过,不再返回 1 帧违反"永不越界"契约。
     available = _shot_available_frames(shot)
-    return max(1, min(requested, available))
+    return max(0, min(requested, available))
 
 
 def _shot_to_candidate(row: dict, start_frame: int, duration_frames: int, *, master: bool = False) -> editspec.Shot:
@@ -980,6 +1016,27 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
                         "alternates": [item["id"] for item in sorted(pool, key=lambda shot: shot.get("final_score") or 0, reverse=True)[1:4]],
                     }
                 )
+        # 校验实际输出时长:计划总帧数与实际累计的差距,不能静默输出不满足时长要求的蓝图。
+        target_total = sum(frame_plan.values())
+        missing = target_total - start_frame
+        if 0 < missing <= 3 and selected_specs:
+            room = _shot_available_frames(selected_rows[-1]) - selected_specs[-1].duration_in_frames
+            add = min(missing, max(room, 0))
+            if add:
+                selected_specs[-1].duration_in_frames += add
+                start_frame += add
+                missing -= add
+        ratio = missing / target_total if target_total else 0.0
+        if ratio > 0.10:
+            raise ValueError(
+                f"{variant} 蓝图实际时长 {start_frame} 帧,计划 {target_total} 帧,缺口 {ratio:.0%} 超过 10%,素材不足以支撑目标时长"
+            )
+        explanation["duration"] = {
+            "target_frames": target_total,
+            "actual_frames": start_frame,
+            "missing_frames": missing,
+            "warning": missing > 0,
+        }
         spec = editspec.EditSpec(id=project_id, fps=30, width=width, height=height, duration_in_frames=start_frame, shots=selected_specs)
         editspec_path = editspec.save(spec, name=f"blueprint.{variant}")
         preview_path = proj_dir / "outputs" / f"blueprint.{variant}.preview.mp4"
@@ -1024,9 +1081,6 @@ def list_variants(project_id: str) -> list[dict]:
 
 
 def select_variant(project_id: str, variant_id: int) -> dict:
-    report = rights_report(project_id)
-    if not report["export_allowed"]:
-        raise ValueError("存在未批准素材，不能生成终版")
     rows_map = {item["id"]: item for item in _shot_rows(project_id)}
     conn = db.connect()
     # 先查询并验证 Variant,再写入 selected;避免传入错误 ID 时先把现有选中状态清零。
@@ -1034,25 +1088,27 @@ def select_variant(project_id: str, variant_id: int) -> dict:
     if not row:
         conn.close()
         raise ValueError("variant not found")
-    conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
     preview_spec = _loads_json(Path(row["editspec_path"]).read_text(), {})
-    final_spec = {
-        **preview_spec,
-        "shots": [],
-    }
-    # 跳过被拒绝/缺失的镜头后,按顺序重排时间线,避免出现黑场空洞。
-    cursor = 0
+    fps = int(preview_spec.get("fps") or BLUEPRINT_FPS)
+    # 确定 Variant 实际使用(未被拒绝、可解析)的镜头。
+    used_pairs: list[tuple[dict, dict]] = []
     for shot in preview_spec.get("shots", []):
-        shot_id = shot["id"]
-        selected_row = rows_map.get(shot_id)
-        if not selected_row:
+        selected_row = rows_map.get(shot["id"])
+        if not selected_row or selected_row.get("decision") == "reject":
             continue
+        used_pairs.append((shot, selected_row))
+    # 权利门禁只针对实际使用的素材,而非整个项目素材池(池中可能混有仅供预览的 review 素材)。
+    assert_shots_exportable([shot for shot, _ in used_pairs])
+    # 通过门禁后再写库。
+    conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
+    final_spec = {**preview_spec, "shots": []}
+    cursor = 0
+    for shot, selected_row in used_pairs:
+        shot_id = shot["id"]
         existing = conn.execute(
             "SELECT decision FROM review_decisions WHERE project_id=? AND shot_id=?",
             (project_id, shot_id),
         ).fetchone()
-        if existing and existing["decision"] == "reject":
-            continue
         conn.execute(
             """
             INSERT INTO review_decisions (project_id, shot_id, decision, reasons, preferred_role, updated_at)
@@ -1066,8 +1122,20 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         )
         if not existing or existing["decision"] != "use":
             conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
-        duration_frames = int(shot.get("duration_in_frames") or 0)
-        final_spec["shots"].append({**shot, "src": selected_row["asset_path"], "start_frame": cursor})
+        # 用审片时最新的入出点重算,而不是沿用 Blueprint 生成时的旧 trim。
+        source_in = selected_row.get("trim_start_sec") if selected_row.get("trim_start_sec") is not None else selected_row["start_sec"]
+        source_out = selected_row.get("trim_end_sec") if selected_row.get("trim_end_sec") is not None else selected_row["end_sec"]
+        duration_frames = max(round((source_out - source_in) * fps), 0)
+        if duration_frames < 1:
+            continue  # trim 后无有效时长,跳过
+        # 跳过被拒/无效镜头后按顺序重排时间线,避免黑场空洞。
+        final_spec["shots"].append({
+            **shot,
+            "src": selected_row["asset_path"],
+            "source_in_sec": source_in,
+            "start_frame": cursor,
+            "duration_in_frames": duration_frames,
+        })
         cursor += duration_frames
     final_spec["duration_in_frames"] = cursor
     final_path = config.PROJECTS / project_id / f"editspec.final.variant-{variant_id}.json"

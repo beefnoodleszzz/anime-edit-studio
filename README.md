@@ -93,10 +93,9 @@ anime analyze <asset_id>
 anime brief create <project_id> --character gojo --theme awakening --emotion intense --duration 25 --aspect 4:5 --platform douyin
 anime project attach <project_id> <asset_id_1,asset_id_2>
 anime gap <project_id>
-anime blueprint <project_id>
 ```
 
-启动 Review Web(**需要两个进程**:后端 API + 前端 Vite):
+先审片(设 use/alternate/reject 与入出点),再生成蓝图。启动 Review Web **需要两个进程**:
 
 ```bash
 # 终端 1:本地 Review API(默认 127.0.0.1:8765)
@@ -105,14 +104,17 @@ anime review serve <project_id>
 npm run dev --prefix review-web
 ```
 
-审片后选择终版并正式导出:
+审片完成后生成蓝图、选终版并正式导出:
 
 ```bash
-anime variant select <project_id> <variant_id>
+anime blueprint <project_id>
+anime variant select <project_id> <variant_id>   # 选终版时回灌最新入出点与决策
 anime rights-report <project_id>
-# 正式导出会校验素材权利,未批准素材会被拒绝;预览用 --preview
+# 正式导出强制校验素材权利:按 shot.id 从库里重解析可信母版,未批准素材会被拒绝;调试用 --preview
 anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 ```
+
+> 入出点在 Review Web 里改后,`variant select` 会按最新 trim 重算 Final EditSpec 的入点与时长,无需重跑蓝图。
 
 ## 状态(M1–M4 全部完成,已在真实五条悟素材上端到端验证)
 

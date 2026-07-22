@@ -214,13 +214,27 @@ def test_pick_duration_never_exceeds_boundary(workspace: Path, monkeypatch: pyte
 
 def test_render_rights_gate_blocks_unapproved(workspace: Path, monkeypatch: pytest.MonkeyPatch):
     _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
-    _seed_data(workspace, db_mod, loop)
+    _, video2 = _seed_data(workspace, db_mod, loop)
     # asset001 approved+commercial;asset002 blocked。
     loop.assert_shots_exportable([{"id": "asset001-0"}])
     with pytest.raises(ValueError):
         loop.assert_shots_exportable([{"id": "asset002-0"}])
     with pytest.raises(ValueError):
         loop.assert_shots_exportable([{"src": "/nonexistent/unknown.mp4"}])
+    # 伪造:已批准镜头 ID 配上被禁素材的 src → id/src 不一致,必须拒绝。
+    with pytest.raises(ValueError):
+        loop.assert_shots_exportable([{"id": "asset001-0", "src": str(video2)}])
+
+
+def test_enforce_export_spec_ignores_forged_src(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    video1, video2 = _seed_data(workspace, db_mod, loop)
+    # id 已批准 + 未登记的伪造 src → 忽略 src,强制用可信母版路径导出。
+    trusted = loop.enforce_export_spec({"shots": [{"id": "asset001-0", "src": "/tmp/forged.mp4"}]})
+    assert trusted["shots"][0]["src"] == str(video1)
+    # id 已批准 + 指向被禁素材的 src → 不一致,拒绝。
+    with pytest.raises(ValueError):
+        loop.enforce_export_spec({"shots": [{"id": "asset001-0", "src": str(video2)}]})
 
 
 def test_render_preview_bypasses_gate(workspace: Path, monkeypatch: pytest.MonkeyPatch):
@@ -264,6 +278,41 @@ def test_final_timeline_has_no_gaps(workspace: Path, monkeypatch: pytest.MonkeyP
         assert shot["start_frame"] == cursor  # 无黑场空洞
         cursor += shot["duration_in_frames"]
     assert final_spec["duration_in_frames"] == cursor
+
+
+def test_select_variant_gates_only_used_assets(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    blueprints = loop.generate_blueprints("demo")  # 只用到 asset001(approved)
+    # 事后把一个 blocked 且未被使用的素材也塞进项目池:整池审计会失败,但实际未使用。
+    loop.attach_assets("demo", ["asset002"])
+    selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
+    assert selected["shots"] >= 1  # 门禁基于实际使用素材,未被使用的 blocked 素材不应阻断
+
+
+def test_final_editspec_uses_latest_trim(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 24, "aspect_ratio": "4:5"})
+    blueprints = loop.generate_blueprints("demo")
+    # 蓝图生成后再改 asset001-0 的入出点:0.2–0.5s → 0.3s → 9 帧 @30fps。
+    loop.patch_trim("demo", "asset001-0", 0.2, 0.5)
+    selected = loop.select_variant("demo", blueprints["variants"][0]["id"])
+    final_spec = json.loads(Path(selected["final_editspec_path"]).read_text())
+    trimmed = [shot for shot in final_spec["shots"] if shot["id"] == "asset001-0"]
+    assert trimmed, "asset001-0 应出现在 final(emotion 版 hook)"
+    assert trimmed[0]["duration_in_frames"] == 9  # 用最新 trim 而非旧 blueprint 时长
+    assert abs(trimmed[0]["source_in_sec"] - 0.2) < 1e-6
+
+
+def test_blueprint_fails_when_duration_unfillable(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    # 目标 600s 但只有 3 个 ~0.8s 镜头,即使复用也远填不满 → 应报错而非静默输出短片。
+    loop.upsert_brief("demo", {"character_query": "gojo", "duration_sec": 600, "aspect_ratio": "4:5"})
+    with pytest.raises(ValueError):
+        loop.generate_blueprints("demo")
 
 
 def test_api_value_error_returns_400(workspace: Path, monkeypatch: pytest.MonkeyPatch):

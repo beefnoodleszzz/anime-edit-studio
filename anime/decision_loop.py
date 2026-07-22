@@ -1,4 +1,4 @@
-"""Brief, scoring, review, gap analysis, blueprints, and preference learning."""
+"""Decision-loop workstation core."""
 from __future__ import annotations
 
 import json
@@ -13,7 +13,7 @@ import numpy as np
 
 from . import config, db, editspec, risk
 
-SCORE_VERSION = "decision-loop-v1"
+SCORE_VERSION = "decision-loop-v2"
 DEFAULT_WEIGHTS = {
     "technical_quality": 0.15,
     "composition_quality": 0.15,
@@ -89,6 +89,17 @@ def _text_words(*parts: str | None) -> set[str]:
     return words
 
 
+def _reference_dna_path(project_id: str) -> Path:
+    return config.PROJECTS / project_id / "reference-dna.json"
+
+
+def _reference_dna(project_id: str) -> dict | None:
+    path = _reference_dna_path(project_id)
+    if not path.exists():
+        return None
+    return _loads_json(path.read_text(), None)
+
+
 def classify_prototype(row: dict) -> str:
     tags = _text_words(row.get("tags"), row.get("action"), row.get("emotion"), row.get("camera"))
     motion = float(row.get("motion_mag") or 0)
@@ -97,7 +108,6 @@ def classify_prototype(row: dict) -> str:
     camera = (row.get("camera") or "").lower()
     character = (row.get("character") or "").lower()
     brightness = float(row.get("brightness") or 0)
-
     if {"eye", "eyes", "eyewear"} & tags:
         return "eye_detail"
     if {"close-up", "close", "portrait", "face"} & tags or ("close" in camera and character):
@@ -125,33 +135,6 @@ def classify_prototype(row: dict) -> str:
     return "hero_pose" if character else "environment"
 
 
-def _structure_match(role: str, prototype: str) -> float:
-    wanted = DEFAULT_STRUCTURE.get(role, [])
-    if prototype in wanted:
-        return 1.0
-    return 0.45 if prototype in DEFAULT_STRUCTURE.get("build", []) else 0.15
-
-
-def _brief_match(brief: dict, row: dict, prototype: str) -> tuple[float, dict]:
-    brief_words = _text_words(
-        brief.get("character_query"),
-        brief.get("theme"),
-        " ".join(brief.get("target_emotions", [])),
-    )
-    shot_words = _text_words(
-        row.get("character"),
-        row.get("action"),
-        row.get("emotion"),
-        row.get("tags"),
-        prototype,
-    )
-    if not brief_words:
-        return 0.5, {"matched_terms": [], "reason": "no brief terms"}
-    matched = sorted(brief_words & shot_words)
-    score = min(len(matched) / max(len(brief_words), 1), 1.0)
-    return score, {"matched_terms": matched}
-
-
 def _load_model(scope: str = "global") -> dict | None:
     conn = db.connect()
     row = conn.execute(
@@ -170,19 +153,19 @@ def _load_model(scope: str = "global") -> dict | None:
     }
 
 
-def _rule_preference(tags: set[str], scope: str = "global") -> tuple[float, dict]:
-    model = _load_model(scope)
+def _rule_preference(tags: set[str], scope: str = "global", model: dict | None = None) -> tuple[float, dict]:
+    model = model or _load_model(scope)
     if not model or model["model_type"] != "rule":
         return 0.5, {"mode": "cold_start"}
     weights = model["model"].get("tag_weights", {})
-    score = 0.5 + sum(float(weights.get(tag, 0)) for tag in tags)
+    score = 0.5 + sum(float(weights.get(tag, 0.0)) for tag in tags)
     return max(0.0, min(score, 1.0)), {"mode": "rule", "tag_weights": {k: weights[k] for k in tags if k in weights}}
 
 
-def _logistic_preference(features: dict[str, float], scope: str = "global") -> tuple[float, dict]:
-    model = _load_model(scope)
+def _logistic_preference(features: dict[str, float], scope: str = "global", model: dict | None = None) -> tuple[float, dict]:
+    model = model or _load_model(scope)
     if not model or model["model_type"] != "logistic":
-        return _rule_preference(set(), scope)
+        return _rule_preference(set(), scope, model)
     coeffs = model["model"].get("coefficients", {})
     bias = float(model["model"].get("bias", 0.0))
     value = bias
@@ -195,14 +178,14 @@ def _logistic_preference(features: dict[str, float], scope: str = "global") -> t
     return prob, {"mode": "logistic", "contributions": contributions}
 
 
-def _preference_score(row: dict, feature_map: dict[str, float], scope: str = "global") -> tuple[float, dict]:
-    model = _load_model(scope)
+def _preference_score(row: dict, feature_map: dict[str, float], scope: str = "global", model: dict | None = None) -> tuple[float, dict]:
+    model = model or _load_model(scope)
     tags = _text_words(row.get("tags"), row.get("character"), row.get("emotion"))
     if not model:
         return 0.5, {"mode": "cold_start"}
     if model["model_type"] == "logistic":
-        return _logistic_preference(feature_map, scope)
-    return _rule_preference(tags, scope)
+        return _logistic_preference(feature_map, scope, model)
+    return _rule_preference(tags, scope, model)
 
 
 def get_brief(project_id: str) -> dict | None:
@@ -217,6 +200,47 @@ def get_brief(project_id: str) -> dict | None:
     return data
 
 
+def attach_assets(project_id: str, asset_ids: list[str]) -> dict:
+    conn = db.connect()
+    existing = []
+    missing = []
+    for asset_id in asset_ids:
+        row = db.asset_by_id(conn, asset_id)
+        if row:
+            existing.append(row["id"])
+        else:
+            missing.append(asset_id)
+    db.attach_project_assets(conn, project_id, existing)
+    conn.close()
+    return {"project_id": project_id, "attached": existing, "missing": missing}
+
+
+def _ensure_project_assets(conn, project_id: str, brief: dict | None = None) -> list[str]:
+    asset_ids = db.project_asset_ids(conn, project_id)
+    if asset_ids:
+        return asset_ids
+    brief = brief or get_brief(project_id) or {}
+    query = (brief.get("character_query") or "").strip().lower()
+    if query:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT asset_id FROM shots
+            WHERE LOWER(COALESCE(character,'')) LIKE ?
+               OR LOWER(COALESCE(tags,'')) LIKE ?
+               OR LOWER(COALESCE(dialogue,'')) LIKE ?
+            """,
+            (f"%{query}%", f"%{query}%", f"%{query}%"),
+        ).fetchall()
+        asset_ids = [row["asset_id"] for row in rows]
+    if not asset_ids:
+        rows = conn.execute("SELECT id FROM assets ORDER BY created_at, id").fetchall()
+        if len(rows) == 1:
+            asset_ids = [rows[0]["id"]]
+    if asset_ids:
+        db.attach_project_assets(conn, project_id, asset_ids)
+    return asset_ids
+
+
 def upsert_brief(project_id: str, payload: dict) -> dict:
     target_emotions = payload.get("target_emotions") or payload.get("emotion") or []
     if isinstance(target_emotions, str):
@@ -227,8 +251,7 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
         """
         INSERT INTO creative_briefs (
             project_id, character_query, theme, target_emotions, duration_sec,
-            aspect_ratio, target_platform, structure_json, reference_video_path,
-            updated_at
+            aspect_ratio, target_platform, structure_json, reference_video_path, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(project_id) DO UPDATE SET
             character_query=excluded.character_query,
@@ -253,12 +276,30 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
             payload.get("reference_video_path") or payload.get("reference"),
         ),
     )
+    _ensure_project_assets(conn, project_id, payload)
     conn.commit()
     conn.close()
     return get_brief(project_id) or {}
 
 
-def _score_row(row: dict, brief: dict | None, scope: str = "global") -> ShotFeatures:
+def _brief_match(brief: dict, row: dict, prototype: str) -> tuple[float, dict]:
+    brief_words = _text_words(brief.get("character_query"), brief.get("theme"), " ".join(brief.get("target_emotions", [])))
+    shot_words = _text_words(row.get("character"), row.get("action"), row.get("emotion"), row.get("tags"), prototype)
+    if not brief_words:
+        return 0.5, {"matched_terms": [], "reason": "no brief terms"}
+    matched = sorted(brief_words & shot_words)
+    score = min(len(matched) / max(len(brief_words), 1), 1.0)
+    return score, {"matched_terms": matched}
+
+
+def _structure_match(role: str, prototype: str) -> float:
+    wanted = DEFAULT_STRUCTURE.get(role, [])
+    if prototype in wanted:
+        return 1.0
+    return 0.45 if prototype in DEFAULT_STRUCTURE.get("build", []) else 0.15
+
+
+def _score_row(row: dict, brief: dict | None, preference_model: dict | None = None) -> ShotFeatures:
     technical_quality = round((_norm(row.get("sharpness"), 450) * 0.6 + _norm(row.get("brightness"), 1.0) * 0.4), 4)
     composition_quality = round((1.0 - min(abs((row.get("reframe_x") or 0.0)), 1.0)) * 0.4 + _norm(row.get("sharpness"), 350) * 0.6, 4)
     character_salience = 1.0 if row.get("character") else (0.7 if "face" in (row.get("tags") or "") else 0.2)
@@ -278,6 +319,10 @@ def _score_row(row: dict, brief: dict | None, scope: str = "global") -> ShotFeat
         structure_role = next((name for name, wanted in brief.get("structure_json", DEFAULT_STRUCTURE).items() if prototype in wanted), "build")
     structure_match = _structure_match(structure_role, prototype)
     feature_map = {
+        "sharpness": _norm(row.get("sharpness"), 500),
+        "motion_mag": _norm(row.get("motion_mag"), 3),
+        "brightness": float(row.get("brightness") or 0),
+        "reframe_x": abs(float(row.get("reframe_x") or 0)),
         "technical_quality": technical_quality,
         "composition_quality": composition_quality,
         "character_salience": character_salience,
@@ -287,24 +332,24 @@ def _score_row(row: dict, brief: dict | None, scope: str = "global") -> ShotFeat
         "subtitle_risk": subtitle_risk,
         "watermark_risk": watermark_risk,
     }
-    preference_score, pref_explain = _preference_score(row, feature_map)
-    w = _weights()
+    preference_score, pref_explain = _preference_score(row, feature_map, model=preference_model)
+    weights = _weights()
     risk_penalty = max(subtitle_risk, watermark_risk)
     final_score = (
-        technical_quality * w["technical_quality"]
-        + composition_quality * w["composition_quality"]
-        + brief_match * w["brief_match"]
-        + structure_match * w["structure_match"]
-        + preference_score * w["preference_score"]
-        + diversity_score * w["diversity_score"]
-        - risk_penalty * w["risk_penalty"]
+        technical_quality * weights["technical_quality"]
+        + composition_quality * weights["composition_quality"]
+        + brief_match * weights["brief_match"]
+        + structure_match * weights["structure_match"]
+        + preference_score * weights["preference_score"]
+        + diversity_score * weights["diversity_score"]
+        - risk_penalty * weights["risk_penalty"]
     )
     explanation = {
         "prototype": prototype,
         "structure_role": structure_role,
         "brief": brief_explain,
         "preference": pref_explain,
-        "weights": w,
+        "weights": weights,
         "risk_penalty": risk_penalty,
         "subtitle_regions": row.get("subtitle_regions", {}),
         "watermark_regions": row.get("watermark_regions", {}),
@@ -335,22 +380,29 @@ def _score_row(row: dict, brief: dict | None, scope: str = "global") -> ShotFeat
 def score_project_shots(project_id: str) -> dict:
     brief = get_brief(project_id)
     conn = db.connect()
+    preference_model = _load_model()
+    asset_ids = _ensure_project_assets(conn, project_id, brief)
+    if not asset_ids:
+        conn.close()
+        return {"project_id": project_id, "scored_shots": 0, "max_score": 0}
     rows = conn.execute(
-        """
+        f"""
         SELECT s.*, a.path AS asset_path, a.proxy_path, a.width, a.height, a.duration,
                COALESCE(ss.subtitle_risk, 0) AS subtitle_risk,
                COALESCE(ss.watermark_risk, 0) AS watermark_risk
         FROM shots s
         JOIN assets a ON a.id=s.asset_id
         LEFT JOIN shot_scores ss ON ss.shot_id=s.id
+        WHERE s.asset_id IN ({",".join("?" for _ in asset_ids)})
         ORDER BY s.asset_id, s.idx
-        """
+        """,
+        asset_ids,
     ).fetchall()
     scored = []
     for row in rows:
         payload = dict(row)
         payload.update(risk.assess_keyframe(payload.get("keyframe")))
-        features = _score_row(payload, brief)
+        features = _score_row(payload, brief, preference_model)
         conn.execute(
             """
             INSERT INTO shot_scores (
@@ -407,8 +459,12 @@ def score_project_shots(project_id: str) -> dict:
 def _shot_rows(project_id: str) -> list[dict]:
     score_project_shots(project_id)
     conn = db.connect()
+    asset_ids = _ensure_project_assets(conn, project_id)
+    if not asset_ids:
+        conn.close()
+        return []
     rows = conn.execute(
-        """
+        f"""
         SELECT s.*, a.path AS asset_path, a.proxy_path, a.width, a.height, a.fps, a.duration AS asset_duration,
                sc.technical_quality, sc.composition_quality, sc.character_salience, sc.emotion_intensity,
                sc.action_intensity, sc.hook_potential, sc.climax_potential, sc.ending_potential,
@@ -422,9 +478,10 @@ def _shot_rows(project_id: str) -> list[dict]:
         LEFT JOIN shot_scores sc ON sc.shot_id=s.id
         LEFT JOIN review_decisions rv ON rv.project_id=? AND rv.shot_id=s.id
         LEFT JOIN source_records sr ON sr.asset_id=s.asset_id
+        WHERE s.asset_id IN ({",".join("?" for _ in asset_ids)})
         ORDER BY sc.final_score DESC, s.asset_id, s.idx
         """,
-        (project_id,),
+        (project_id, *asset_ids),
     ).fetchall()
     conn.close()
     result = []
@@ -450,6 +507,7 @@ def get_project(project_id: str) -> dict:
         "shot_count": len(shots),
         "reviewed_count": sum(1 for shot in shots if shot.get("decision")),
         "top_score": max((shot.get("final_score") or 0) for shot in shots) if shots else 0,
+        "asset_ids": sorted({shot["asset_id"] for shot in shots}),
     }
 
 
@@ -460,17 +518,43 @@ def list_reviews(project_id: str) -> list[dict]:
         (project_id,),
     ).fetchall()
     conn.close()
-    result = []
+    out = []
     for row in rows:
         item = dict(row)
         item["reasons"] = _loads_json(item.get("reasons"), [])
-        result.append(item)
-    return result
+        out.append(item)
+    return out
+
+
+def _validate_trim(conn, shot_id: str, trim_start_sec: float | None, trim_end_sec: float | None, project_id: str) -> tuple[float | None, float | None]:
+    shot = conn.execute("SELECT start_sec, end_sec FROM shots WHERE id=?", (shot_id,)).fetchone()
+    if not shot:
+        raise ValueError("shot not found")
+    existing = conn.execute(
+        "SELECT trim_start_sec, trim_end_sec FROM review_decisions WHERE project_id=? AND shot_id=?",
+        (project_id, shot_id),
+    ).fetchone()
+    start_value = trim_start_sec if trim_start_sec is not None else (existing["trim_start_sec"] if existing else None)
+    end_value = trim_end_sec if trim_end_sec is not None else (existing["trim_end_sec"] if existing else None)
+    source_start = float(shot["start_sec"])
+    source_end = float(shot["end_sec"])
+    if start_value is not None and not (source_start <= start_value < source_end):
+        raise ValueError("trim_start_sec out of range")
+    if end_value is not None and not (source_start < end_value <= source_end):
+        raise ValueError("trim_end_sec out of range")
+    if start_value is not None and end_value is not None and not (start_value < end_value):
+        raise ValueError("trim_start_sec must be earlier than trim_end_sec")
+    return start_value, end_value
 
 
 def put_review(project_id: str, shot_id: str, payload: dict) -> dict:
     reasons = payload.get("reasons") or []
     conn = db.connect()
+    existing = conn.execute(
+        "SELECT decision FROM review_decisions WHERE project_id=? AND shot_id=?",
+        (project_id, shot_id),
+    ).fetchone()
+    _validate_trim(conn, shot_id, payload.get("trim_start_sec"), payload.get("trim_end_sec"), project_id)
     conn.execute(
         """
         INSERT INTO review_decisions (
@@ -496,7 +580,7 @@ def put_review(project_id: str, shot_id: str, payload: dict) -> dict:
             payload.get("preferred_role"),
         ),
     )
-    if payload["decision"] == "use":
+    if payload["decision"] == "use" and (not existing or existing["decision"] != "use"):
         conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
     conn.commit()
     conn.close()
@@ -505,6 +589,7 @@ def put_review(project_id: str, shot_id: str, payload: dict) -> dict:
 
 def patch_trim(project_id: str, shot_id: str, trim_start_sec: float | None, trim_end_sec: float | None) -> dict:
     conn = db.connect()
+    _validate_trim(conn, shot_id, trim_start_sec, trim_end_sec, project_id)
     conn.execute(
         """
         INSERT INTO review_decisions (project_id, shot_id, decision, reasons, trim_start_sec, trim_end_sec, updated_at)
@@ -523,6 +608,10 @@ def patch_trim(project_id: str, shot_id: str, trim_start_sec: float | None, trim
 
 def upsert_source_record(asset_id: str, payload: dict) -> dict:
     conn = db.connect()
+    commercial = payload.get("commercial_allowed")
+    status = payload.get("status", "review")
+    if commercial is True and status != "blocked":
+        status = "approved"
     conn.execute(
         """
         INSERT INTO source_records (
@@ -556,7 +645,7 @@ def upsert_source_record(asset_id: str, payload: dict) -> dict:
             payload.get("title"),
             payload.get("license"),
             payload.get("license_url"),
-            payload.get("commercial_allowed"),
+            commercial,
             payload.get("modification_allowed"),
             payload.get("attribution_required"),
             payload.get("attribution_text"),
@@ -564,7 +653,7 @@ def upsert_source_record(asset_id: str, payload: dict) -> dict:
             payload.get("acquired_at"),
             payload.get("license_checked_at"),
             payload.get("expires_at"),
-            payload.get("status", "review"),
+            status,
             payload.get("notes"),
         ),
     )
@@ -581,6 +670,56 @@ def list_sources() -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def audit_sources(project_id: str | None = None) -> dict:
+    conn = db.connect()
+    asset_ids = db.project_asset_ids(conn, project_id) if project_id else []
+    if project_id and asset_ids:
+        rows = conn.execute(
+            f"""
+            SELECT a.id AS asset_id, a.path, sr.status, sr.commercial_allowed, sr.source_url, sr.license
+            FROM assets a
+            LEFT JOIN source_records sr ON sr.asset_id=a.id
+            WHERE a.id IN ({",".join("?" for _ in asset_ids)})
+            ORDER BY a.id
+            """,
+            asset_ids,
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT a.id AS asset_id, a.path, sr.status, sr.commercial_allowed, sr.source_url, sr.license
+            FROM assets a
+            LEFT JOIN source_records sr ON sr.asset_id=a.id
+            ORDER BY a.id
+            """
+        ).fetchall()
+    conn.close()
+    items = []
+    for row in rows:
+        item = dict(row)
+        status = item.get("status") or "review"
+        if item.get("commercial_allowed") == 1 and status != "blocked":
+            status = "approved"
+        item["effective_status"] = status
+        items.append(item)
+    return {
+        "project_id": project_id,
+        "items": items,
+        "approved": sum(item["effective_status"] == "approved" for item in items),
+        "review": sum(item["effective_status"] == "review" for item in items),
+        "blocked": sum(item["effective_status"] == "blocked" for item in items),
+    }
+
+
+def rights_report(project_id: str) -> dict:
+    audit = audit_sources(project_id)
+    return {
+        "project_id": project_id,
+        "export_allowed": all(item["effective_status"] == "approved" for item in audit["items"]),
+        "items": audit["items"],
+    }
 
 
 def gap_analysis(project_id: str) -> dict:
@@ -605,7 +744,7 @@ def gap_analysis(project_id: str) -> dict:
         summary[role] = {
             "required_types": needed,
             "have_count": len(pool),
-            "usable_count": sum(1 for shot in pool if (shot.get("decision") or "use") != "reject"),
+            "usable_count": sum(1 for shot in pool if shot.get("decision") != "reject"),
             "high_quality_count": len(high_quality),
             "clean_count": len(clean),
             "diversity": round(len(prototypes) / max(len(needed), 1), 3),
@@ -619,14 +758,51 @@ def gap_analysis(project_id: str) -> dict:
     return {"project_id": project_id, "brief": brief, "segments": summary}
 
 
-def _shot_to_candidate(row: dict, start_frame: int, duration_frames: int) -> editspec.Shot:
-    src = row.get("proxy_path") or row.get("asset_path")
+def _eligible_shots(project_id: str, *, export: bool) -> list[dict]:
+    shots = [shot for shot in _shot_rows(project_id) if shot.get("decision") != "reject"]
+    out = []
+    for shot in shots:
+        status = shot.get("source_status") or "review"
+        commercial = shot.get("commercial_allowed")
+        if status == "blocked":
+            continue
+        if export and not (status == "approved" and commercial == 1):
+            continue
+        out.append(shot)
+    return out
+
+
+def _segment_target_frames(role: str, brief: dict, reference_dna: dict | None) -> int:
+    fps = 30
+    total = int((brief.get("duration_sec") or 25) * fps)
+    distribution = {"hook": 0.18, "build": 0.27, "climax": 0.27, "release": 0.14, "ending": 0.14}
+    base = max(int(total * distribution.get(role, 0.2)), fps // 2)
+    if not reference_dna:
+        return base
+    if role == "hook" and reference_dna.get("hook_length"):
+        return max(int(float(reference_dna["hook_length"]) * fps), fps // 2)
+    if role == "ending" and reference_dna.get("ending_shot_length"):
+        return max(int(float(reference_dna["ending_shot_length"]) * fps), fps // 2)
+    median = float(np.median(reference_dna.get("shot_duration_distribution") or [base / fps]))
+    return max(int(median * fps * (1.25 if role == "build" else 1.0)), fps // 2)
+
+
+def _pick_duration_frames(shot: dict, requested: int) -> int:
+    source_in = shot.get("trim_start_sec") if shot.get("trim_start_sec") is not None else shot["start_sec"]
+    source_out = shot.get("trim_end_sec") if shot.get("trim_end_sec") is not None else shot["end_sec"]
+    available = max(round((source_out - source_in) * 30), 1)
+    return max(15, min(requested, available))
+
+
+def _shot_to_candidate(row: dict, start_frame: int, duration_frames: int, *, master: bool = False) -> editspec.Shot:
+    src = row.get("asset_path") if master else (row.get("proxy_path") or row.get("asset_path"))
+    source_in = row.get("trim_start_sec") if row.get("trim_start_sec") is not None else row["start_sec"]
     return editspec.Shot(
         id=row["id"],
         src=src,
-        source_in_sec=row.get("trim_start_sec") if row.get("trim_start_sec") is not None else row["start_sec"],
+        source_in_sec=source_in,
         start_frame=start_frame,
-        duration_in_frames=duration_frames,
+        duration_in_frames=_pick_duration_frames(row, duration_frames),
         reframe_x=row.get("reframe_x") or 0.0,
         fill_mode=row.get("fill_mode") or "crop",
     )
@@ -643,23 +819,12 @@ def _render_preview(spec: editspec.EditSpec, output: Path) -> str:
             duration = max(shot.duration_in_frames / spec.fps, 0.2)
             subprocess.run(
                 [
-                    ffmpeg,
-                    "-y",
-                    "-v",
-                    "error",
-                    "-ss",
-                    f"{shot.source_in_sec:.3f}",
-                    "-t",
-                    f"{duration:.3f}",
-                    "-i",
-                    shot.src,
-                    "-vf",
-                    "scale=-2:720",
-                    "-an",
-                    "-c:v",
-                    "libx264",
-                    "-pix_fmt",
-                    "yuv420p",
+                    ffmpeg, "-y", "-v", "error",
+                    "-ss", f"{shot.source_in_sec:.3f}",
+                    "-t", f"{duration:.3f}",
+                    "-i", shot.src,
+                    "-vf", f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=decrease,pad={spec.width}:{spec.height}:(ow-iw)/2:(oh-ih)/2:black,scale=-2:720",
+                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                     str(seg),
                 ],
                 check=True,
@@ -669,18 +834,10 @@ def _render_preview(spec: editspec.EditSpec, output: Path) -> str:
         concat.write_text("".join(f"file '{segment.as_posix()}'\n" for segment in segments))
         subprocess.run(
             [
-                ffmpeg,
-                "-y",
-                "-v",
-                "error",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(concat),
-                "-c",
-                "copy",
+                ffmpeg, "-y", "-v", "error",
+                "-f", "concat", "-safe", "0",
+                "-i", str(concat),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 str(output),
             ],
             check=True,
@@ -688,54 +845,64 @@ def _render_preview(spec: editspec.EditSpec, output: Path) -> str:
     return str(output)
 
 
+def _variant_score(selected_rows: list[dict]) -> float:
+    if not selected_rows:
+        return 0.0
+    return round(sum(float(row.get("final_score") or 0.0) for row in selected_rows) / len(selected_rows), 4)
+
+
 def generate_blueprints(project_id: str, variant_types: list[str] | None = None) -> dict:
     variant_types = variant_types or ["emotion", "action", "narrative"]
     brief = get_brief(project_id)
     if not brief:
         raise ValueError("请先创建 creative brief")
-    shots = [shot for shot in _shot_rows(project_id) if shot.get("decision") != "reject"]
+    shots = _eligible_shots(project_id, export=False)
     if not shots:
         raise ValueError("当前没有可用镜头")
-    out = []
     proj_dir = config.PROJECTS / project_id
     proj_dir.mkdir(parents=True, exist_ok=True)
     aspect = (brief.get("aspect_ratio") or "4:5").replace(":", "x")
     canvas = "4x5" if aspect == "4x5" else "auto"
+    width, height, _ = editspec.choose_canvas([{"asset_id": shot["asset_id"]} for shot in shots[:1]], canvas=canvas)
+    reference_dna = _reference_dna(project_id)
+    result = []
     for variant in variant_types:
         profile = VARIANT_PROFILES[variant]
-        selected = []
-        explanation = {"variant_type": variant, "selections": [], "gap_analysis": gap_analysis(project_id)["segments"]}
-        used = set()
+        selected_specs: list[editspec.Shot] = []
+        selected_rows: list[dict] = []
+        used: set[str] = set()
+        explanation = {"variant_type": variant, "reference_dna_used": bool(reference_dna), "selections": [], "gap_analysis": gap_analysis(project_id)["segments"]}
         start_frame = 0
-        total_duration = int((brief.get("duration_sec") or 25) * 30)
-        per_role = max(total_duration // max(len(profile), 1), 45)
         for role, prototype in profile.items():
-            pool = [shot for shot in shots if shot["prototype"] == prototype and shot["id"] not in used]
-            if not pool:
-                pool = [shot for shot in shots if shot["id"] not in used]
-            if not pool:
-                pool = [shot for shot in shots if shot["prototype"] == prototype]
-            if not pool:
-                pool = list(shots)
-            pick = max(pool, key=lambda shot: shot.get("final_score") or 0)
-            used.add(pick["id"])
-            duration_frames = max(30, min(per_role, round((pick["end_sec"] - pick["start_sec"]) * 30)))
-            selected.append(_shot_to_candidate(pick, start_frame, duration_frames))
-            start_frame += duration_frames
-            explanation["selections"].append(
-                {
-                    "shot_id": pick["id"],
-                    "role": role,
-                    "prototype": pick["prototype"],
-                    "reason": f"{variant} variant prefers {prototype} for {role}",
-                    "alternates": [item["id"] for item in sorted(pool, key=lambda shot: shot.get("final_score") or 0, reverse=True)[1:4]],
-                }
-            )
-        width, height, _ = editspec.choose_canvas(
-            [{"asset_id": shot["asset_id"]} for shot in shots[:1]] or [{"asset_id": shots[0]["asset_id"]}],
-            canvas=canvas,
-        )
-        spec = editspec.EditSpec(id=project_id, fps=30, width=width, height=height, duration_in_frames=start_frame, shots=selected)
+            target_frames = _segment_target_frames(role, brief, reference_dna)
+            accumulated = 0
+            while accumulated < target_frames:
+                pool = [shot for shot in shots if shot["prototype"] == prototype and shot["id"] not in used]
+                if not pool:
+                    pool = [shot for shot in shots if shot["id"] not in used]
+                if not pool:
+                    pool = [shot for shot in shots if shot["prototype"] == prototype]
+                if not pool:
+                    pool = shots
+                pick = max(pool, key=lambda shot: shot.get("final_score") or 0)
+                used.add(pick["id"])
+                duration_frames = _pick_duration_frames(pick, target_frames - accumulated or target_frames)
+                selected_specs.append(_shot_to_candidate(pick, start_frame, duration_frames, master=False))
+                selected_rows.append(pick)
+                start_frame += duration_frames
+                accumulated += duration_frames
+                explanation["selections"].append(
+                    {
+                        "shot_id": pick["id"],
+                        "role": role,
+                        "prototype": pick["prototype"],
+                        "reason": f"{variant} variant prefers {prototype} for {role}",
+                        "alternates": [item["id"] for item in sorted(pool, key=lambda shot: shot.get("final_score") or 0, reverse=True)[1:4]],
+                    }
+                )
+                if len(used) >= len(shots) and accumulated < target_frames:
+                    used.clear()
+        spec = editspec.EditSpec(id=project_id, fps=30, width=width, height=height, duration_in_frames=start_frame, shots=selected_specs)
         editspec_path = editspec.save(spec, name=f"blueprint.{variant}")
         preview_path = proj_dir / "outputs" / f"blueprint.{variant}.preview.mp4"
         rendered_preview = _render_preview(spec, preview_path)
@@ -752,15 +919,15 @@ def generate_blueprints(project_id: str, variant_types: list[str] | None = None)
                 variant,
                 str(editspec_path),
                 rendered_preview,
-                round(sum((shot.get("final_score") or 0) for shot in shots[: len(selected)]) / max(len(selected), 1), 4),
+                _variant_score(selected_rows),
                 db.json_dumps(explanation),
             ),
         )
         variant_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
         conn.commit()
         conn.close()
-        out.append({"id": variant_id, "variant_type": variant, "editspec_path": str(editspec_path), "preview_path": rendered_preview, "explanation": explanation})
-    return {"project_id": project_id, "variants": out}
+        result.append({"id": variant_id, "variant_type": variant, "editspec_path": str(editspec_path), "preview_path": rendered_preview, "explanation": explanation})
+    return {"project_id": project_id, "variants": result}
 
 
 def list_variants(project_id: str) -> list[dict]:
@@ -770,15 +937,19 @@ def list_variants(project_id: str) -> list[dict]:
         (project_id,),
     ).fetchall()
     conn.close()
-    result = []
+    out = []
     for row in rows:
         item = dict(row)
         item["explanation_json"] = _loads_json(item.get("explanation_json"), {})
-        result.append(item)
-    return result
+        out.append(item)
+    return out
 
 
 def select_variant(project_id: str, variant_id: int) -> dict:
+    report = rights_report(project_id)
+    if not report["export_allowed"]:
+        raise ValueError("存在未批准素材，不能生成终版")
+    rows_map = {item["id"]: item for item in _shot_rows(project_id)}
     conn = db.connect()
     conn.execute("UPDATE cut_variants SET selected=CASE WHEN id=? THEN 1 ELSE 0 END WHERE project_id=?", (variant_id, project_id))
     row = conn.execute("SELECT * FROM cut_variants WHERE id=? AND project_id=?", (variant_id, project_id)).fetchone()
@@ -786,11 +957,19 @@ def select_variant(project_id: str, variant_id: int) -> dict:
         conn.commit()
         conn.close()
         raise ValueError("variant not found")
-    spec = json.loads(Path(row["editspec_path"]).read_text())
-    for shot in spec.get("shots", []):
+    preview_spec = _loads_json(Path(row["editspec_path"]).read_text(), {})
+    final_spec = {
+        **preview_spec,
+        "shots": [],
+    }
+    for shot in preview_spec.get("shots", []):
+        shot_id = shot["id"]
+        selected_row = rows_map.get(shot_id)
+        if not selected_row:
+            continue
         existing = conn.execute(
             "SELECT decision FROM review_decisions WHERE project_id=? AND shot_id=?",
-            (project_id, shot["id"]),
+            (project_id, shot_id),
         ).fetchone()
         if existing and existing["decision"] == "reject":
             continue
@@ -803,13 +982,18 @@ def select_variant(project_id: str, variant_id: int) -> dict:
                 reasons='["variant_selected"]',
                 updated_at=datetime('now')
             """,
-            (project_id, shot["id"], None),
+            (project_id, shot_id, None),
         )
-        conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot["id"],))
+        if not existing or existing["decision"] != "use":
+            conn.execute("UPDATE shots SET picked=COALESCE(picked, 0) + 1 WHERE id=?", (shot_id,))
+        final_spec["shots"].append({**shot, "src": selected_row["asset_path"]})
+    final_path = config.PROJECTS / project_id / f"editspec.final.variant-{variant_id}.json"
+    final_path.write_text(json.dumps(final_spec, ensure_ascii=False, indent=2))
+    conn.execute("UPDATE cut_variants SET final_editspec_path=? WHERE id=?", (str(final_path), variant_id))
     conn.commit()
     conn.close()
     train_preference()
-    return {"project_id": project_id, "variant_id": variant_id, "selected": True, "shots": len(spec.get("shots", []))}
+    return {"project_id": project_id, "variant_id": variant_id, "selected": True, "shots": len(final_spec["shots"]), "final_editspec_path": str(final_path)}
 
 
 def train_preference() -> dict:
@@ -850,18 +1034,9 @@ def train_preference() -> dict:
         conn.commit()
         conn.close()
         return {"trained_on": total, "model_type": "rule", "features": len(payload["tag_weights"])}
-
     features = ["sharpness", "motion_mag", "brightness", "reframe_x"]
     x = np.array(
-        [
-            [
-                float(row["sharpness"] or 0) / 500.0,
-                float(row["motion_mag"] or 0) / 3.0,
-                float(row["brightness"] or 0),
-                abs(float(row["reframe_x"] or 0)),
-            ]
-            for row in rows
-        ],
+        [[float(row["sharpness"] or 0) / 500.0, float(row["motion_mag"] or 0) / 3.0, float(row["brightness"] or 0), abs(float(row["reframe_x"] or 0))] for row in rows],
         dtype=np.float32,
     )
     y = np.array([1.0 if row["decision"] == "use" else 0.0 for row in rows], dtype=np.float32)
@@ -893,6 +1068,14 @@ def train_preference() -> dict:
     conn.commit()
     conn.close()
     return {"trained_on": total, "model_type": "logistic", "features": features}
+
+
+def reset_preference() -> dict:
+    conn = db.connect()
+    deleted = conn.execute("DELETE FROM preference_models WHERE scope='global'").rowcount
+    conn.commit()
+    conn.close()
+    return {"deleted": deleted}
 
 
 def explain_preference(shot_id: str) -> dict:

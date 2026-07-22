@@ -149,6 +149,7 @@ def _migration_002_decision_loop(conn: sqlite3.Connection) -> None:
             variant_type      TEXT NOT NULL,
             editspec_path     TEXT NOT NULL,
             preview_path      TEXT,
+            final_editspec_path TEXT,
             score             REAL NOT NULL DEFAULT 0,
             explanation_json  TEXT NOT NULL DEFAULT '{}',
             selected          INTEGER NOT NULL DEFAULT 0,
@@ -174,9 +175,66 @@ def _migration_002_decision_loop(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_003_project_scope(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS project_assets (
+            project_id   TEXT NOT NULL,
+            asset_id     TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY(project_id, asset_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_project_assets_project ON project_assets(project_id, asset_id);
+        """
+    )
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(cut_variants)").fetchall()]
+    if "final_editspec_path" not in cols:
+        conn.execute("ALTER TABLE cut_variants ADD COLUMN final_editspec_path TEXT")
+    _import_legacy_rights(conn)
+
+
+def _import_legacy_rights(conn: sqlite3.Connection) -> None:
+    legacy = config.LIBRARY / "rights.json"
+    if not legacy.exists():
+        return
+    try:
+        payload = json.loads(legacy.read_text())
+    except json.JSONDecodeError:
+        return
+    for asset_id, row in payload.items():
+        if not isinstance(row, dict):
+            continue
+        conn.execute(
+            """
+            INSERT INTO source_records (asset_id, source_url, license, notes, commercial_allowed, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(asset_id) DO UPDATE SET
+                source_url=COALESCE(source_records.source_url, excluded.source_url),
+                license=COALESCE(source_records.license, excluded.license),
+                notes=COALESCE(source_records.notes, excluded.notes),
+                commercial_allowed=COALESCE(source_records.commercial_allowed, excluded.commercial_allowed),
+                status=CASE
+                    WHEN source_records.status IS NULL OR source_records.status=''
+                    THEN excluded.status
+                    ELSE source_records.status
+                END
+            """,
+            (
+                asset_id,
+                row.get("source"),
+                row.get("license"),
+                row.get("notes"),
+                1 if row.get("commercial_cleared") else 0 if row.get("commercial_cleared") is not None else None,
+                "approved" if row.get("commercial_cleared") else "review",
+            ),
+        )
+
+
 MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (1, _migration_001_base),
     (2, _migration_002_decision_loop),
+    (3, _migration_003_project_scope),
 ]
 
 
@@ -281,3 +339,23 @@ def rows_to_dicts(rows: Iterable[sqlite3.Row]) -> list[dict]:
 
 def json_dumps(value) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+def attach_project_assets(conn: sqlite3.Connection, project_id: str, asset_ids: Iterable[str]) -> int:
+    count = 0
+    for asset_id in asset_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO project_assets(project_id, asset_id) VALUES (?, ?)",
+            (project_id, asset_id),
+        )
+        count += 1
+    conn.commit()
+    return count
+
+
+def project_asset_ids(conn: sqlite3.Connection, project_id: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT asset_id FROM project_assets WHERE project_id=? ORDER BY asset_id",
+        (project_id,),
+    ).fetchall()
+    return [row["asset_id"] for row in rows]

@@ -333,11 +333,13 @@ review_app = typer.Typer(add_completion=False, help="review workstation")
 preference_app = typer.Typer(add_completion=False, help="preference learning")
 variant_app = typer.Typer(add_completion=False, help="cut variants")
 reference_app = typer.Typer(add_completion=False, help="reference dna")
+project_app = typer.Typer(add_completion=False, help="project asset scope")
 app.add_typer(brief_app, name="brief")
 app.add_typer(review_app, name="review")
 app.add_typer(preference_app, name="preference")
 app.add_typer(variant_app, name="variant")
 app.add_typer(reference_app, name="reference")
+app.add_typer(project_app, name="project")
 
 
 @brief_app.command("create")
@@ -397,6 +399,15 @@ def variant_select_cmd(project_id: str, variant_id: int, json: bool = typer.Opti
     _out(decision_loop.select_variant(project_id, variant_id), json)
 
 
+@project_app.command("attach")
+def project_attach_cmd(project_id: str, asset_ids: str, json: bool = typer.Option(False, "--json")):
+    """绑定项目素材池。asset_ids 传逗号分隔。"""
+    from . import decision_loop
+
+    ids = [item.strip() for item in asset_ids.split(",") if item.strip()]
+    _out(decision_loop.attach_assets(project_id, ids), json)
+
+
 @review_app.command("serve")
 def review_serve_cmd(
     project_id: str,
@@ -428,12 +439,69 @@ def preference_explain_cmd(shot_id: str, json: bool = typer.Option(False, "--jso
     _out(decision_loop.explain_preference(shot_id), json)
 
 
+@preference_app.command("reset")
+def preference_reset_cmd(json: bool = typer.Option(False, "--json")):
+    """清空偏好模型。"""
+    from . import decision_loop
+
+    _out(decision_loop.reset_preference(), json)
+
+
+@preference_app.command("rebuild")
+def preference_rebuild_cmd(json: bool = typer.Option(False, "--json")):
+    """重建偏好模型。"""
+    from . import decision_loop
+
+    decision_loop.reset_preference()
+    _out(decision_loop.train_preference(), json)
+
+
 @reference_app.command("analyze")
 def reference_analyze_cmd(project_id: str, video: str, json: bool = typer.Option(False, "--json")):
     """提取参考剪辑节奏 DNA。"""
     from . import reference
 
     _out(reference.analyze_reference(project_id, video), json)
+
+
+@app.command("source-register")
+def source_register_cmd(asset_id: str,
+                        source_url: str = typer.Option(None, "--source-url"),
+                        creator: str = typer.Option(None, "--creator"),
+                        title: str = typer.Option(None, "--title"),
+                        license: str = typer.Option(None, "--license"),
+                        commercial: bool = typer.Option(None, "--commercial"),
+                        status: str = typer.Option("review", "--status"),
+                        notes: str = typer.Option(None, "--notes"),
+                        json: bool = typer.Option(False, "--json")):
+    """登记素材来源和权利状态。"""
+    from . import decision_loop
+
+    _out(decision_loop.upsert_source_record(asset_id, {
+        "source_url": source_url,
+        "creator": creator,
+        "title": title,
+        "license": license,
+        "commercial_allowed": commercial,
+        "status": status,
+        "notes": notes,
+    }), json)
+
+
+@app.command("source-audit")
+def source_audit_cmd(project_id: str = typer.Option(None, "--project"), json: bool = typer.Option(False, "--json")):
+    """审计素材来源状态。"""
+    from . import decision_loop
+
+    _out(decision_loop.audit_sources(project_id), json)
+
+
+@app.command("rights-report")
+def rights_report_cmd(project_id: str, json: bool = typer.Option(False, "--json")):
+    """输出项目权利报告。"""
+    from . import decision_loop
+
+    _out(decision_loop.rights_report(project_id), json)
 
 
 @app.command("doctor")

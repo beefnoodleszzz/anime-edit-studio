@@ -85,7 +85,7 @@ async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function ReviewApp() {
-  const projectId = new URLSearchParams(window.location.search).get("project") || "demo";
+  const [projectId, setProjectId] = useState<string>("demo");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
@@ -95,6 +95,23 @@ export function ReviewApp() {
   const [onlyPending, setOnlyPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const queryProject = new URLSearchParams(window.location.search).get("project");
+    if (queryProject) {
+      setProjectId(queryProject);
+      return;
+    }
+    readJson<{ default_project_id?: string }>("/api/config")
+      .then((payload) => {
+        const nextProject = payload.default_project_id || "demo";
+        setProjectId(nextProject);
+        const url = new URL(window.location.href);
+        url.searchParams.set("project", nextProject);
+        window.history.replaceState({}, "", url);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -117,6 +134,7 @@ export function ReviewApp() {
   };
 
   useEffect(() => {
+    if (!projectId) return;
     void load();
   }, [projectId]);
 
@@ -216,6 +234,33 @@ export function ReviewApp() {
   }, [current, filtered]);
 
   const previewSrc = current ? `/api/assets/${current.asset_id}/preview` : "";
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !current) return;
+    const sync = () => {
+      video.currentTime = current.trim_start_sec ?? current.start_sec;
+    };
+    if (video.readyState >= 1) {
+      sync();
+    } else {
+      video.addEventListener("loadedmetadata", sync, { once: true });
+      return () => video.removeEventListener("loadedmetadata", sync);
+    }
+  }, [current?.id, current?.trim_start_sec, current?.start_sec]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !current) return;
+    const onTimeUpdate = () => {
+      const outPoint = current.trim_end_sec ?? current.end_sec;
+      if (video.currentTime >= outPoint) {
+        video.pause();
+      }
+    };
+    video.addEventListener("timeupdate", onTimeUpdate);
+    return () => video.removeEventListener("timeupdate", onTimeUpdate);
+  }, [current?.id, current?.trim_end_sec, current?.end_sec]);
 
   return (
     <main className="app-shell">

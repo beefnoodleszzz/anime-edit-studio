@@ -79,6 +79,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/api/config")
+    def get_config():
+        return {"default_project_id": getattr(app.state, "default_project_id", "demo")}
+
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str):
         return decision_loop.get_project(project_id)
@@ -154,4 +158,3 @@ def create_app() -> FastAPI:
         return FileResponse(path)
 
     return app
-

@@ -25,6 +25,9 @@ review = [
     "fastapi>=0.116",
     "uvicorn>=0.35",
 ]
+dev = [
+    "pytest>=9.0",
+]
 
 [project.scripts]
 anime = "anime.cli:app"

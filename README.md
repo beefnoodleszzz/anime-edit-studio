@@ -14,6 +14,15 @@
 - Review Web 通过本地 FastAPI 提供真实后端
 - 所有 CLI 保持 `--json` 输出能力
 
+安装：
+
+```bash
+uv venv --python 3.11 && source .venv/bin/activate
+uv pip install -e ".[review,dev]"
+cd review-web && npm install && cd ..
+cd renderer && npm install && cd ..
+```
+
 ---
 
 ## 目录组织
@@ -78,6 +87,7 @@ anime ingest  <视频文件>
 anime shots   <asset_id>
 anime analyze <asset_id>
 anime brief create <project_id> --character gojo --theme awakening --emotion intense --duration 25 --aspect 4:5 --platform douyin
+anime project attach <project_id> <asset_id_1,asset_id_2>
 anime gap <project_id>
 anime blueprint <project_id>
 anime review serve <project_id>
@@ -87,7 +97,8 @@ anime review serve <project_id>
 
 ```bash
 anime variant select <project_id> <variant_id>
-anime render projects/<project_id>/editspec.blueprint.emotion.json --preview
+anime rights-report <project_id>
+anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 ```
 
 ## 状态(M1–M4 全部完成,已在真实五条悟素材上端到端验证)

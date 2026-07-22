@@ -5,5 +5,10 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": resolve(__dirname, "./src") } },
-  server: { fs: { allow: [resolve(__dirname, ".."), resolve(__dirname)] } },
+  server: {
+    fs: { allow: [resolve(__dirname, ".."), resolve(__dirname)] },
+    proxy: {
+      "/api": "http://127.0.0.1:8765",
+    },
+  },
 });

@@ -28,3 +28,14 @@
   color: var(--muted);
   font: 500 8px DM Mono;
 }
+
+.brief-promise {
+  display: block;
+  max-width: 520px;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--muted);
+  font: 500 9px DM Mono;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

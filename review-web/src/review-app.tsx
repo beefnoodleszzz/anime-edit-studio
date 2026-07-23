@@ -41,6 +41,17 @@ type Project = {
     theme?: string;
     duration_sec?: number;
     aspect_ratio?: string;
+    creative_contract_json?: {
+      content_lane?: string;
+      audience_context?: string;
+      viewer_promise?: string;
+      payoff?: string;
+      ending_aftertaste?: string;
+      edit_mode?: string;
+      visual_motif?: string;
+      sound_strategy?: string;
+      success_criteria?: string;
+    };
   };
 };
 
@@ -306,7 +317,17 @@ export function ReviewApp() {
       <section className="summary-strip">
         <div>
           <p className="eyebrow">CURRENT BRIEF</p>
-          <strong>{project?.brief?.theme || "No brief"} {project?.brief?.aspect_ratio ? `· ${project.brief.aspect_ratio}` : ""}</strong>
+          <strong>
+            {project?.brief?.creative_contract_json?.content_lane || project?.brief?.theme || "No brief"}
+            {project?.brief?.creative_contract_json?.edit_mode ? ` · ${project.brief.creative_contract_json.edit_mode}` : ""}
+            {project?.brief?.aspect_ratio ? ` · ${project.brief.aspect_ratio}` : ""}
+          </strong>
+          {project?.brief?.creative_contract_json?.viewer_promise && (
+            <small className="brief-promise">
+              {project.brief.creative_contract_json.viewer_promise}
+              {project.brief.creative_contract_json.payoff ? ` → ${project.brief.creative_contract_json.payoff}` : ""}
+            </small>
+          )}
         </div>
         <div className="summary-item"><Film /><span><b>{project?.shot_count || 0}</b> shots</span></div>
         <div className="summary-item"><Check /><span><b>{project?.reviewed_count || 0}</b> reviewed</span></div>

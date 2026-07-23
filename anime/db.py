@@ -326,6 +326,14 @@ def _migration_006_extreme_line(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_007_creative_contract(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(creative_briefs)")}
+    if "creative_contract_json" not in cols:
+        conn.execute(
+            "ALTER TABLE creative_briefs ADD COLUMN creative_contract_json TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
 MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (1, _migration_001_base),
     (2, _migration_002_decision_loop),
@@ -333,6 +341,7 @@ MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (4, _migration_004_aesthetic),
     (5, _migration_005_growth_experiments),
     (6, _migration_006_extreme_line),
+    (7, _migration_007_creative_contract),
 ]
 
 

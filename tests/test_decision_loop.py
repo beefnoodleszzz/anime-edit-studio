@@ -610,3 +610,45 @@ def test_sound_atempo_chain_covers_extreme_speed():
     from anime import sound
     assert sound._atempo(.25) == "atempo=0.500000,atempo=0.500000"
     assert sound._atempo(4) == "atempo=2.000000,atempo=2.000000"
+
+
+def test_creative_contract_persists_and_gates_production(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    incomplete = loop.upsert_brief("contract-demo", {
+        "character_query": "gojo",
+        "target_emotions": ["intense"],
+        "duration_sec": 24,
+        "target_platform": "douyin",
+        "creative_contract_json": {
+            "content_lane": "single_character",
+            "viewer_promise": "压抑后的失控",
+        },
+    })
+    assert incomplete["creative_contract_json"]["viewer_promise"] == "压抑后的失控"
+    assert loop.validate_brief("contract-demo")["ready"] is False
+
+    contract = {
+        "content_lane": "single_character",
+        "audience_context": "fans_and_newcomers",
+        "viewer_promise": "看见压抑如何变成失控",
+        "payoff": "领域展开兑现力量反差",
+        "ending_aftertaste": "黑场余响",
+        "edit_mode": "arc",
+        "visual_motif": "blue_eye_light",
+        "sound_strategy": "quiet_dialogue_to_impact",
+        "must_include": ["eye reveal"],
+        "must_avoid": ["burned subtitles", "spoiler text"],
+        "success_criteria": "非粉丝能理解蓄力和爆发",
+    }
+    loop.upsert_brief("contract-demo", {
+        "character_query": "gojo",
+        "target_emotions": ["intense"],
+        "duration_sec": 24,
+        "target_platform": "douyin",
+        "creative_contract_json": contract,
+    })
+    result = loop.validate_brief("contract-demo")
+    assert result["ready"] is True
+    assert "承诺" in result["summary"]
+    assert result["contract"]["must_avoid"] == ["burned subtitles", "spoiler text"]

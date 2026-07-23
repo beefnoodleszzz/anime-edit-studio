@@ -200,6 +200,8 @@ def get_brief(project_id: str) -> dict | None:
     data = dict(row)
     data["target_emotions"] = _loads_json(data.get("target_emotions"), [])
     data["structure_json"] = _loads_json(data.get("structure_json"), DEFAULT_STRUCTURE)
+    data["creative_contract_json"] = _loads_json(
+        data.get("creative_contract_json"), {})
     return data
 
 
@@ -249,13 +251,20 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
     if isinstance(target_emotions, str):
         target_emotions = [item.strip() for item in target_emotions.split(",") if item.strip()]
     structure = payload.get("structure_json") or payload.get("structure") or DEFAULT_STRUCTURE
+    contract = payload.get("creative_contract_json") or payload.get("creative_contract") or {}
+    for key in ("must_include", "must_avoid"):
+        if isinstance(contract.get(key), str):
+            contract[key] = [
+                item.strip() for item in contract[key].split(",") if item.strip()
+            ]
     conn = db.connect()
     conn.execute(
         """
         INSERT INTO creative_briefs (
             project_id, character_query, theme, target_emotions, duration_sec,
-            aspect_ratio, target_platform, structure_json, reference_video_path, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            aspect_ratio, target_platform, structure_json, creative_contract_json,
+            reference_video_path, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(project_id) DO UPDATE SET
             character_query=excluded.character_query,
             theme=excluded.theme,
@@ -264,6 +273,7 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
             aspect_ratio=excluded.aspect_ratio,
             target_platform=excluded.target_platform,
             structure_json=excluded.structure_json,
+            creative_contract_json=excluded.creative_contract_json,
             reference_video_path=excluded.reference_video_path,
             updated_at=datetime('now')
         """,
@@ -276,6 +286,7 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
             payload.get("aspect_ratio") or payload.get("aspect"),
             payload.get("target_platform") or payload.get("platform"),
             db.json_dumps(structure),
+            db.json_dumps(contract),
             payload.get("reference_video_path") or payload.get("reference"),
         ),
     )
@@ -283,6 +294,38 @@ def upsert_brief(project_id: str, payload: dict) -> dict:
     conn.commit()
     conn.close()
     return get_brief(project_id) or {}
+
+
+def validate_brief(project_id: str) -> dict:
+    brief = get_brief(project_id)
+    if not brief:
+        return {"project_id": project_id, "ready": False,
+                "missing": ["creative_brief"], "contract": {}}
+    contract = brief.get("creative_contract_json") or {}
+    required = (
+        "content_lane", "audience_context", "viewer_promise", "payoff",
+        "ending_aftertaste", "edit_mode", "visual_motif", "sound_strategy",
+        "success_criteria",
+    )
+    missing = [key for key in required if not contract.get(key)]
+    if not brief.get("character_query"):
+        missing.append("character_query")
+    if not brief.get("target_emotions"):
+        missing.append("target_emotions")
+    if not brief.get("duration_sec"):
+        missing.append("duration_sec")
+    if not brief.get("target_platform"):
+        missing.append("target_platform")
+    summary = (
+        f"{brief.get('character_query') or '未定主体'} · "
+        f"{contract.get('content_lane') or '未定内容线'} / "
+        f"{contract.get('edit_mode') or '未定形态'} · "
+        f"承诺：{contract.get('viewer_promise') or '未定'} → "
+        f"兑现：{contract.get('payoff') or '未定'} → "
+        f"余味：{contract.get('ending_aftertaste') or '未定'}"
+    )
+    return {"project_id": project_id, "ready": not missing,
+            "missing": missing, "summary": summary, "contract": contract}
 
 
 def _brief_match(brief: dict, row: dict, prototype: str) -> tuple[float, dict]:

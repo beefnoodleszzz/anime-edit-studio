@@ -619,6 +619,18 @@ def brief_create_cmd(
     aspect: str = typer.Option(None, "--aspect"),
     platform: str = typer.Option(None, "--platform"),
     reference: str = typer.Option(None, "--reference"),
+    content_lane: str = typer.Option(None, "--content-lane"),
+    audience: str = typer.Option(None, "--audience"),
+    viewer_promise: str = typer.Option(None, "--viewer-promise"),
+    payoff: str = typer.Option(None, "--payoff"),
+    ending: str = typer.Option(None, "--ending-aftertaste"),
+    edit_mode: str = typer.Option(None, "--edit-mode"),
+    visual_motif: str = typer.Option(None, "--visual-motif"),
+    sound_strategy: str = typer.Option(None, "--sound-strategy"),
+    must_include: str = typer.Option("", "--must-include"),
+    must_avoid: str = typer.Option("", "--must-avoid"),
+    success_criteria: str = typer.Option(None, "--success-criteria"),
+    contract_json: str = typer.Option(None, "--contract-json"),
     from_json: str = typer.Option(None, "--from-json"),
     json: bool = typer.Option(False, "--json"),
 ):
@@ -628,6 +640,24 @@ def brief_create_cmd(
     payload = {}
     if from_json:
         payload = _json.loads(Path(from_json).read_text())
+    contract = payload.get("creative_contract_json") or {}
+    if contract_json:
+        contract.update(_json.loads(Path(contract_json).read_text()))
+    contract.update({
+        key: value for key, value in {
+            "content_lane": content_lane,
+            "audience_context": audience,
+            "viewer_promise": viewer_promise,
+            "payoff": payoff,
+            "ending_aftertaste": ending,
+            "edit_mode": edit_mode,
+            "visual_motif": visual_motif,
+            "sound_strategy": sound_strategy,
+            "must_include": [item.strip() for item in must_include.split(",") if item.strip()] or None,
+            "must_avoid": [item.strip() for item in must_avoid.split(",") if item.strip()] or None,
+            "success_criteria": success_criteria,
+        }.items() if value is not None
+    })
     payload.update(
         {
             "character_query": payload.get("character_query") or character,
@@ -637,9 +667,20 @@ def brief_create_cmd(
             "aspect_ratio": payload.get("aspect_ratio") or aspect,
             "target_platform": payload.get("target_platform") or platform,
             "reference_video_path": payload.get("reference_video_path") or reference,
+            "creative_contract_json": contract,
         }
     )
     _out(decision_loop.upsert_brief(project_id, payload), json)
+
+
+@brief_app.command("validate")
+def brief_validate_cmd(
+    project_id: str,
+    json: bool = typer.Option(False, "--json"),
+):
+    """验证导演合约是否足以进入素材缺口分析和制作。"""
+    from . import decision_loop
+    _out(decision_loop.validate_brief(project_id), json)
 
 
 @app.command("gap")

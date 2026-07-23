@@ -6,6 +6,27 @@
 
 `Brief → Shot Scoring → Gap Analysis → Review Decisions → Preference Learning → Blueprints → Variant Select → Render → Hook A/B → Publication Metrics → Next-cut Learning`
 
+新作品先完成导演合约，不从分辨率、转场或模型参数开始。合约将内容方向与剪辑形态分开，
+明确目标观众、前三秒承诺、高潮兑现、结尾余味、视觉母题、声音策略、必须出现/禁止出现
+以及可观察的成功标准：
+
+```bash
+anime brief create demo \
+  --character rengoku --emotion tragic,heroic --duration 24 --platform douyin \
+  --content-lane single_character --audience fans_and_newcomers \
+  --viewer-promise '他为什么没有后退' \
+  --payoff '最后一次爆发兑现选择' \
+  --ending-aftertaste '平静余震' --edit-mode arc \
+  --visual-motif '火焰由暗到亮' \
+  --sound-strategy '低声原音→音乐与冲击爆发' \
+  --must-include '握刀起身,最终爆发,微笑' \
+  --must-avoid '结局文字剧透,职员表,连续频闪' \
+  --success-criteria '非粉丝能理解坚持、爆发与代价' --json
+anime brief validate demo --json
+```
+
+只有 `brief validate` 返回 `ready: true`，才进入素材绑定、缺口分析和导演首剪。
+
 原则：
 
 - 本地优先，适配 Apple Silicon

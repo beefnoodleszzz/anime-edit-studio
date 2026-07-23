@@ -33,6 +33,7 @@ class BriefPayload(BaseModel):
     aspect_ratio: str | None = None
     target_platform: str | None = None
     structure_json: dict = Field(default_factory=dict)
+    creative_contract_json: dict = Field(default_factory=dict)
     reference_video_path: str | None = None
 
 

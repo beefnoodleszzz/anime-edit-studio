@@ -65,9 +65,12 @@ def add(src: str, text: str = "END", hold: float = 2.5, dim: float = 0.45,
           f"[0:v][ov]overlay=0:0:format=auto[v]")
     out_path = out or str(Path(src).with_name(Path(src).stem + "_end" + Path(src).suffix))
     subprocess.run(
-        [ffmpeg, "-y", "-v", "error", "-i", src, "-loop", "1", "-i", card,
+        # -loop 输入必须 -t 硬限长:无界图片流 + -shortest 在 filter_complex 下
+        # 不可靠终止,曾致 videotoolbox 无限编码撑爆文件;编码器改 libx264 彻底绕开。
+        [ffmpeg, "-y", "-v", "error", "-i", src,
+         "-loop", "1", "-t", f"{dur:.3f}", "-i", card,
          "-filter_complex", fc, "-map", "[v]", "-map", "0:a?", "-shortest",
-         "-c:v", "h264_videotoolbox", "-b:v", "12M", "-tag:v", "avc1",
+         "-c:v", "libx264", "-preset", "medium", "-crf", "17",
          "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
          "-c:a", "copy", "-movflags", "+faststart", out_path],
         check=True)

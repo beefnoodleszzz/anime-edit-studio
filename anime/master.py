@@ -1,4 +1,4 @@
-"""母带与平台版:两遍 EBU R128 loudnorm(-14 LUFS / TP -1.0)+ 平台分辨率导出。"""
+"""母带与平台版:两遍 EBU R128 loudnorm(-10 LUFS / TP -1.0)+ 平台分辨率导出。"""
 from __future__ import annotations
 
 import json
@@ -8,8 +8,8 @@ from pathlib import Path
 
 from . import config
 
-TARGET_I = -14.0
-TARGET_TP = -1.0
+TARGET_I = float(config.get("delivery", "master_lufs", -10.0))
+TARGET_TP = float(config.get("delivery", "true_peak_dbfs", -1.0))
 TARGET_LRA = 11.0
 
 

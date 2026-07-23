@@ -1,0 +1,8 @@
+{
+  "generated_at": "2026-07-22T11:37:05",
+  "policy": {
+    "min_source_height": 1080,
+    "reject_burned_subtitles_by_default": true
+  },
+  "candidates": []
+}

@@ -113,10 +113,12 @@ def assemble_cmd(project_id: str, query: str = "", asset_id: str = typer.Option(
 
 
 @app.command("beat")
-def beat_cmd(audio: str, project: str = typer.Option(None), json: bool = typer.Option(False, "--json")):
+def beat_cmd(audio: str, project: str = typer.Option(None),
+             mult: int = typer.Option(1, "--mult", help="拍网格倍频细分(快曲 Nightcore/phonk 传 2,修 half-tempo 误判)"),
+             json: bool = typer.Option(False, "--json")):
     """节拍分析:BPM / beat / downbeat / onset。"""
     from . import beat
-    bm = beat.analyze(audio)
+    bm = beat.analyze(audio, beat_mult=mult)
     if project:
         bm["saved"] = str(beat.save(project, bm))
     _out({k: v for k, v in bm.items() if k != "onsets"} |
@@ -148,6 +150,7 @@ def slots_cmd(asset_id: str, force: bool = False, json: bool = typer.Option(Fals
 def direct_cmd(project_id: str, audio: str = typer.Option(..., "--audio"),
                query: str = typer.Option("", "--query"), asset_id: str = typer.Option(None, "--asset"),
                must_tag: str = typer.Option(None, "--must-tag"),
+               exclude: str = typer.Option("", "--exclude", help="剔除的 shot id(逗号分隔;审片去字幕/OP·ED/跑题镜头)"),
                start_s: float = typer.Option(0.0, "--start"), duration_s: float = typer.Option(None, "--duration"),
                mode: str = typer.Option("arc", "--mode", help="arc=情绪弧(钩子→高潮→收束) | showcase=混剪(闪切开场+恒定锁拍+每刀转场)"),
                fill: str = typer.Option("crop", "--fill", help="默认主体跟踪裁切 | auto=按素材决定 | fit_blur=完整画面"),
@@ -155,15 +158,20 @@ def direct_cmd(project_id: str, audio: str = typer.Option(..., "--audio"),
                width: int = typer.Option(None, "--width"),
                height: int = typer.Option(None, "--height"),
                fps: int = 60,
+               beat_mult: int = typer.Option(1, "--beat-mult", help="拍网格倍频(快曲 Nightcore/phonk 传 2,修 librosa half-tempo 误判致切点太稀)"),
+               hook: str = typer.Option("", "--hook", help="showcase 前3秒钩子文案(压在冷开场王炸帧上,大字)"),
+               hook_sub: str = typer.Option("", "--hook-sub", help="钩子副行(角色名/tagline,小字)"),
                json: bool = typer.Option(False, "--json")):
     """AI 导演编排 → editspec.arc.json。--mode arc 情绪弧 / --mode showcase 高速混剪。"""
     from . import beat, director
-    bm = beat.analyze(audio)
+    bm = beat.analyze(audio, beat_mult=beat_mult)
     beat.save(project_id, bm)
     _out({"project": project_id, "bpm": bm["bpm"],
           **director.direct(project_id, bm, query, asset_id=asset_id, must_tag=must_tag,
+                            exclude_ids={s for s in exclude.split(",") if s},
                             start_s=start_s, duration_s=duration_s, fps=fps, mode=mode, fill=fill,
-                            canvas=canvas, width=width, height=height)}, json)
+                            canvas=canvas, width=width, height=height,
+                            hook_text=hook or None, hook_sub=hook_sub)}, json)
 
 
 @app.command("slowmo")
@@ -236,13 +244,39 @@ def interpolate_cmd(editspec_path: str, shots: str = typer.Option("", "--shots")
 @app.command("render")
 def render_cmd(editspec_path: str, out: str = typer.Option(None),
                preview: bool = typer.Option(False, "--preview"),
+               draft: bool = typer.Option(False, "--draft"),
                json: bool = typer.Option(False, "--json")):
-    """Remotion 无头渲染 EditSpec(镜头级缓存;--preview 走 0.5 缩放快速迭代)。
+    """渲染 EditSpec。三档由快到精:
 
-    正式导出按 shot.id 从库里回源本地最高画质母版(而非代理);--preview 只出快速预览。
+    --draft   纯 ffmpeg 代理低分辨率,免 Remotion/webpack/40GB 临时件——最快,判断选片+节奏+裁切。
+    --preview Remotion 0.5 缩放,能看特效/转场。
+    (默认)  Remotion 全分辨率正式导出,按 shot.id 回源本地母版。
     """
     from . import render
-    _out({"output": render.render(editspec_path, out=out, preview=preview)}, json)
+    if draft:
+        _out({"output": render.draft(editspec_path, out=out), "mode": "draft"}, json)
+    else:
+        _out({"output": render.render(editspec_path, out=out, preview=preview),
+              "mode": "preview" if preview else "final"}, json)
+
+
+@app.command("finalize")
+def finalize_cmd(editspec_path: str,
+                 shots: str = typer.Option("", "--shots", help="只增强这些 shot id(逗号分隔),空=全镜头"),
+                 target_fps: float = typer.Option(60.0, "--target-fps"),
+                 endcard: bool = typer.Option(False, "--endcard", help="平台版尾部叠加 END 卡(混剪硬收尾)"),
+                 no_clean: bool = typer.Option(False, "--no-clean", help="保留渲染缓存,不回收磁盘"),
+                 quality_gate: bool = typer.Option(True, "--quality-gate/--no-quality-gate"),
+                 json: bool = typer.Option(False, "--json")):
+    """锁定后一键出终版:restore→RIFE60→超分→4K 渲染→声音→母带→(endcard)→QA→清理。
+
+    仅在 draft/preview 确认镜头选取与合成效果满意、cut 锁定后运行。
+    """
+    from . import finalize
+    ids = [s for s in shots.split(",") if s] or None
+    _out(finalize.finalize(editspec_path, shots=ids, target_fps=target_fps,
+                           endcard=endcard, clean=not no_clean,
+                           quality_gate_enabled=quality_gate), json)
 
 
 @app.command("matte")
@@ -276,15 +310,22 @@ def enhance_cmd(src: str, upscale: bool = False, interp: bool = False, mult: int
 
 
 @app.command("sound")
-def sound_cmd(editspec_path: str, json: bool = typer.Option(False, "--json")):
-    """分层声音设计:合成 SFX(impact/riser/whoosh/subdrop)按结构混入 BGM,remux 到成片。"""
+def sound_cmd(
+    editspec_path: str,
+    source_audio: bool = typer.Option(True, "--source-audio/--no-source-audio"),
+    source_gain: float = typer.Option(.28, "--source-gain"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """分层声音设计:BGM + SFX + 可控原声床 + ducking。"""
     from . import sound
-    _out({"output": sound.build(editspec_path)}, json)
+    _out({"output": sound.build(editspec_path, include_source_audio=source_audio,
+                                source_gain=source_gain),
+          "capabilities": sound.capabilities()}, json)
 
 
 @app.command("master")
 def master_cmd(path: str, json: bool = typer.Option(False, "--json")):
-    """母带:loudnorm -14 LUFS + 保持原画幅的平台版导出。"""
+    """母带:loudnorm -10 LUFS + 保持原画幅的平台版导出。"""
     from . import master
     _out(master.master(path), json)
 
@@ -338,6 +379,9 @@ variant_app = typer.Typer(add_completion=False, help="cut variants")
 reference_app = typer.Typer(add_completion=False, help="reference dna")
 project_app = typer.Typer(add_completion=False, help="project asset scope")
 library_app = typer.Typer(add_completion=False, help="本地素材库入库与磁盘回收")
+experiment_app = typer.Typer(add_completion=False, help="Hook A/B 与发布数据回灌")
+quality_app = typer.Typer(add_completion=False, help="导演结构与增强 A/B 质量门禁")
+extreme_app = typer.Typer(add_completion=False, help="极致线能力与发布就绪门禁")
 app.add_typer(brief_app, name="brief")
 app.add_typer(review_app, name="review")
 app.add_typer(preference_app, name="preference")
@@ -345,6 +389,187 @@ app.add_typer(variant_app, name="variant")
 app.add_typer(reference_app, name="reference")
 app.add_typer(project_app, name="project")
 app.add_typer(library_app, name="library")
+app.add_typer(experiment_app, name="experiment")
+app.add_typer(quality_app, name="quality")
+app.add_typer(extreme_app, name="extreme")
+
+
+@experiment_app.command("create")
+def experiment_create_cmd(
+    project_id: str,
+    name: str,
+    editspec_path: str,
+    hook: list[str] = typer.Option(..., "--hook", help="候选 Hook；至少重复传两次"),
+    hook_sub: list[str] = typer.Option([], "--hook-sub", help="与 Hook 同序的副行"),
+    platform: str = typer.Option("douyin", "--platform"),
+    duration: float = typer.Option(2.8, "--duration"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """由同一正文生成只改变开头文案的可归因 A/B EditSpec。"""
+    from . import experiment
+    _out(experiment.create(project_id, name, editspec_path, hook,
+                           subs=hook_sub, platform=platform,
+                           duration_sec=duration), json)
+
+
+@experiment_app.command("matrix")
+def experiment_matrix_cmd(
+    project_id: str,
+    name: str,
+    editspec_path: str,
+    factors_json: str = typer.Option(..., "--factors-json",
+                                     help="JSON 数组；可含 hook/sub/hook_shot_id/audio_offset_frames/style"),
+    platform: str = typer.Option("douyin", "--platform"),
+    duration: float = typer.Option(2.8, "--duration"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """生成文字×首镜×音乐入点的受控多维实验。"""
+    from . import experiment
+    factors = _json.loads(Path(factors_json).read_text())
+    if not isinstance(factors, list):
+        raise typer.BadParameter("factors-json 顶层必须是数组")
+    _out(experiment.create_matrix(project_id, name, editspec_path, factors,
+                                  platform=platform, duration_sec=duration), json)
+
+
+@experiment_app.command("record")
+def experiment_record_cmd(
+    variant_id: int,
+    views: int = typer.Option(..., "--views"),
+    likes: int = typer.Option(0, "--likes"),
+    comments: int = typer.Option(0, "--comments"),
+    shares: int = typer.Option(0, "--shares"),
+    follows: int = typer.Option(0, "--follows"),
+    retention_2s: float = typer.Option(None, "--retention-2s"),
+    retention_3s: float = typer.Option(None, "--retention-3s"),
+    completion_rate: float = typer.Option(None, "--completion-rate"),
+    avg_watch_sec: float = typer.Option(None, "--avg-watch-sec"),
+    published_at: str = typer.Option(None, "--published-at"),
+    retention_curve_json: str = typer.Option(None, "--retention-curve-json",
+                                             help='JSON 数组:[{"second":0,"rate":1},…]'),
+    external_post_id: str = typer.Option(None, "--external-post-id"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """录入平台真实表现；比例统一使用 0..1。"""
+    from . import experiment
+    curve = (_json.loads(Path(retention_curve_json).read_text())
+             if retention_curve_json else None)
+    _out(experiment.record(
+        variant_id, views=views, likes=likes, comments=comments,
+        shares=shares, follows=follows, retention_2s=retention_2s,
+        retention_3s=retention_3s, completion_rate=completion_rate,
+        avg_watch_sec=avg_watch_sec, published_at=published_at,
+        retention_curve=curve, external_post_id=external_post_id,
+    ), json)
+
+
+@experiment_app.command("report")
+def experiment_report_cmd(
+    project_id: str,
+    name: str,
+    json: bool = typer.Option(False, "--json"),
+):
+    """按留存优先的置信加权分数报告结果；样本不足时不会伪报赢家。"""
+    from . import experiment
+    _out(experiment.report(project_id, name), json)
+
+
+@experiment_app.command("learn")
+def experiment_learn_cmd(
+    project_id: str = typer.Option(None, "--project"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """把足量样本的镜头留存表现回灌 growth_score。"""
+    from . import experiment
+    _out(experiment.learn(project_id), json)
+
+
+@experiment_app.command("import")
+def experiment_import_cmd(
+    project_id: str,
+    name: str,
+    csv_path: str,
+    json: bool = typer.Option(False, "--json"),
+):
+    """导入平台授权导出的标准 CSV，不接管账号凭据。"""
+    from . import experiment
+    _out(experiment.import_metrics(project_id, name, csv_path), json)
+
+
+@experiment_app.command("insights")
+def experiment_insights_cmd(
+    project_id: str = typer.Option(None, "--project"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """聚合角色/Hook/首镜/音乐入点等因子的真实表现。"""
+    from . import experiment
+    _out(experiment.insights(project_id), json)
+
+
+@quality_app.command("audit")
+def quality_audit_cmd(
+    editspec_path: str,
+    visual: bool = typer.Option(False, "--visual", help="抽取中点帧做近重复指纹检测"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """检查交付规格、素材多样性、runway、字幕风险、重复与连续性。"""
+    from . import quality_gate
+    _out(quality_gate.audit(editspec_path, visual=visual), json)
+
+
+@quality_app.command("compare")
+def quality_compare_cmd(
+    project_id: str,
+    shot_id: str,
+    stage: str,
+    source_path: str,
+    processed_path: str,
+    json: bool = typer.Option(False, "--json"),
+):
+    """建立增强前后逐镜 A/B 指标并进入人工决策队列。"""
+    from . import quality_gate
+    _out(quality_gate.compare(project_id, shot_id, stage,
+                              source_path, processed_path), json)
+
+
+@quality_app.command("decide")
+def quality_decide_cmd(
+    review_id: int,
+    decision: str,
+    notes: str = typer.Option(None, "--notes"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """接受或拒绝一项增强结果。"""
+    from . import quality_gate
+    _out(quality_gate.decide(review_id, decision, notes), json)
+
+
+@quality_app.command("status")
+def quality_status_cmd(
+    project_id: str,
+    json: bool = typer.Option(False, "--json"),
+):
+    """显示项目增强门禁是否全部批准。"""
+    from . import quality_gate
+    _out(quality_gate.status(project_id), json)
+
+
+@extreme_app.command("capabilities")
+def extreme_capabilities_cmd(json: bool = typer.Option(False, "--json")):
+    """显示高级能力、真实可用状态与安全降级。"""
+    from . import extreme
+    _out(extreme.capabilities(), json)
+
+
+@extreme_app.command("status")
+def extreme_status_cmd(
+    project_id: str,
+    editspec_path: str = typer.Option(None, "--editspec"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """聚合结构、增强审批、发布实验和工具链的最终发布门禁。"""
+    from . import extreme
+    _out(extreme.status(project_id, editspec_path), json)
 
 
 @library_app.command("add")
@@ -549,10 +774,15 @@ def source_report_cmd(project_id: str, json: bool = typer.Option(False, "--json"
 @app.command("doctor")
 def doctor_cmd(json: bool = typer.Option(False, "--json")):
     """检查工具链是否就绪。"""
-    from . import config
+    from . import aesthetic, config, sound
     names = ["ffmpeg", "ffprobe", "whisper", "realesrgan", "rife", "chrome"]
     status = {n: config.tool_optional(n) for n in names}
-    _out({"tools": status, "missing": [n for n, v in status.items() if not v]}, json)
+    # 美学评分头缺失不算致命:筛选会回退清晰度启发式,但选片质量下降。
+    status["aesthetic_model"] = aesthetic.available()
+    _out({"tools": status,
+          "missing": [n for n, v in status.items() if not v and n != "aesthetic_model"],
+          "aesthetic_scoring": "on" if aesthetic.available() else "degraded(清晰度启发式)",
+          "audio": sound.capabilities()}, json)
 
 
 if __name__ == "__main__":

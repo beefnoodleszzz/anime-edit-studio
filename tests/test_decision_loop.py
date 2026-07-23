@@ -438,3 +438,175 @@ def test_api_config_and_candidates_ignore_rights(workspace: Path, monkeypatch: p
     assert candidate_map["asset002"]["status"] != "reject"  # blocked 不再硬拒
     # 两条技术属性相同的素材(short_edge 360、30fps、无字幕)得分相同——版权不参与打分。
     assert candidate_map["asset001"]["score"] == candidate_map["asset002"]["score"]
+
+
+def test_growth_experiment_creates_isolated_hook_specs(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.experiment as experiment
+    importlib.reload(experiment)
+    source = workspace / "projects" / "demo" / "editspec.arc.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({
+        "id": "demo", "fps": 60, "width": 3072, "height": 3840,
+        "duration_in_frames": 1200, "shots": [], "audio": [],
+        "overlays": [{"text": "old", "sub": "", "start_frame": 0,
+                      "duration_in_frames": 60, "style": "hook", "anchor": "center"}],
+    }))
+    result = experiment.create(
+        "demo", "hook-v1", str(source), ["他为什么没有回头？", "这一刀之后，一切都变了"],
+        subs=["A", "B"],
+    )
+    assert [item["label"] for item in result["variants"]] == ["A", "B"]
+    a = json.loads(Path(result["variants"][0]["editspec_path"]).read_text())
+    b = json.loads(Path(result["variants"][1]["editspec_path"]).read_text())
+    assert a["shots"] == b["shots"]
+    assert a["overlays"][0]["text"] != b["overlays"][0]["text"]
+    assert a["overlays"][0]["duration_in_frames"] == 168
+
+
+def test_growth_experiment_requires_real_sample_before_winner(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.experiment as experiment
+    importlib.reload(experiment)
+    source = workspace / "projects" / "demo" / "editspec.arc.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({
+        "id": "demo", "fps": 60, "width": 3072, "height": 3840,
+        "duration_in_frames": 1200, "shots": [], "audio": [], "overlays": [],
+    }))
+    created = experiment.create("demo", "hook-v1", str(source), ["A hook", "B hook"])
+    aid, bid = [item["id"] for item in created["variants"]]
+    experiment.record(aid, views=100, likes=20, retention_2s=.9,
+                      retention_3s=.8, completion_rate=.7)
+    experiment.record(bid, views=100, likes=10, retention_2s=.7,
+                      retention_3s=.6, completion_rate=.5)
+    assert experiment.report("demo", "hook-v1")["decision"] == "collect_more_data"
+    experiment.record(aid, views=5000, likes=900, shares=200,
+                      retention_2s=.9, retention_3s=.82, completion_rate=.72)
+    experiment.record(bid, views=5000, likes=300, shares=50,
+                      retention_2s=.65, retention_3s=.52, completion_rate=.4)
+    report = experiment.report("demo", "hook-v1")
+    assert report["decision"] == "winner"
+    assert report["winner"] == "A"
+
+
+def test_growth_metrics_reject_impossible_counts(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.experiment as experiment
+    importlib.reload(experiment)
+    with pytest.raises(ValueError, match="not found"):
+        experiment.record(99999, views=1)
+
+
+def test_growth_matrix_curve_attribution_and_learning(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _, db_mod, loop, _, _, _ = _reload_modules(monkeypatch, workspace)
+    _seed_data(workspace, db_mod, loop)
+    import anime.experiment as experiment
+    importlib.reload(experiment)
+    source = workspace / "projects" / "demo" / "editspec.arc.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({
+        "id": "demo", "fps": 60, "width": 3072, "height": 3840,
+        "duration_in_frames": 120,
+        "shots": [
+            {"id": "asset001-0", "src": str(workspace / "library" / "sample_gojo.mp4"),
+             "source_in_sec": 0, "start_frame": 0, "duration_in_frames": 60},
+            {"id": "asset001-1", "src": str(workspace / "library" / "sample_gojo.mp4"),
+             "source_in_sec": .8, "start_frame": 60, "duration_in_frames": 60},
+        ],
+        "audio": [{"id": "bgm", "src": "music.wav", "start_frame": 0,
+                   "trim_start_frames": 10, "gain_db": 0}],
+        "overlays": [],
+    }))
+    created = experiment.create_matrix("demo", "matrix-v1", str(source), [
+        {"label": "A", "hook": "A", "hook_shot_id": "asset001-0"},
+        {"label": "B", "hook": "B", "hook_shot_id": "asset001-1",
+         "audio_offset_frames": 3},
+    ])
+    b = json.loads(Path(created["variants"][1]["editspec_path"]).read_text())
+    assert b["shots"][0]["id"].startswith("asset001-1@hook-b")
+    assert b["audio"][0]["trim_start_frames"] == 13
+    curve_a = [{"second": 0, "rate": 1}, {"second": 1, "rate": .9},
+               {"second": 2, "rate": .82}]
+    curve_b = [{"second": 0, "rate": 1}, {"second": 1, "rate": .7},
+               {"second": 2, "rate": .5}]
+    aid, bid = [item["id"] for item in created["variants"]]
+    experiment.record(aid, views=5000, retention_2s=.82, retention_3s=.8,
+                      completion_rate=.75, retention_curve=curve_a)
+    experiment.record(bid, views=5000, retention_2s=.5, retention_3s=.45,
+                      completion_rate=.4, retention_curve=curve_b)
+    report = experiment.report("demo", "matrix-v1")
+    assert report["ranked_variants"][0]["shot_outcomes"]
+    learned = experiment.learn("demo")
+    assert learned["shots_updated"] >= 1
+    conn = db_mod.connect()
+    score = conn.execute("SELECT growth_score FROM shots WHERE id='asset001-0'").fetchone()["growth_score"]
+    conn.close()
+    assert score != 0
+
+
+def test_retention_curve_rejects_non_monotonic_input(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.experiment as experiment
+    importlib.reload(experiment)
+    with pytest.raises(ValueError, match="单调"):
+        experiment._validate_curve([
+            {"second": 0, "rate": .8}, {"second": 1, "rate": .9},
+        ])
+
+
+def test_quality_audit_enforces_delivery_contract(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.quality_gate as quality_gate
+    importlib.reload(quality_gate)
+    spec = workspace / "projects" / "bad.json"
+    spec.write_text(json.dumps({
+        "id": "bad", "fps": 30, "width": 1920, "height": 1080,
+        "duration_in_frames": 300, "shots": [], "audio": [], "overlays": [],
+    }))
+    report = quality_gate.audit(str(spec))
+    codes = {item["code"] for item in report["hard_failures"]}
+    assert {"delivery_canvas", "delivery_fps", "delivery_duration",
+            "source_diversity", "empty_timeline"} <= codes
+
+
+def test_enhancement_compare_requires_explicit_decision(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.quality_gate as quality_gate
+    importlib.reload(quality_gate)
+    video = workspace / "source.mp4"
+    _make_video(video)
+    result = quality_gate.compare("demo", "shot-1", "restore", str(video), str(video))
+    assert quality_gate.status("demo")["pending"] == 1
+    quality_gate.decide(result["review_id"], "accept", "A/B clean")
+    status = quality_gate.status("demo")
+    assert status["pass"] is True
+
+
+def test_restore_preserves_original_audio_reference(workspace: Path, monkeypatch: pytest.MonkeyPatch):
+    _reload_modules(monkeypatch, workspace)
+    import anime.restore as restore
+    importlib.reload(restore)
+    source = workspace / "source.mp4"
+    _make_video(source)
+    spec = workspace / "projects" / "demo" / "editspec.json"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(json.dumps({
+        "id": "demo", "fps": 60, "width": 3072, "height": 3840,
+        "duration_in_frames": 60,
+        "shots": [{"id": "shot-1", "src": str(source), "source_in_sec": .25,
+                   "start_frame": 0, "duration_in_frames": 60, "speed": 1}],
+        "audio": [], "overlays": [],
+    }))
+    monkeypatch.setattr(restore, "_restore_segment",
+                        lambda src, in_sec, dur_sec: str(workspace / "restored.mov"))
+    result = restore.restore_editspec(str(spec))
+    derived = json.loads(Path(result["editspec"]).read_text())
+    assert derived["shots"][0]["source_audio_src"] == str(source)
+    assert derived["shots"][0]["source_audio_in_sec"] == .25
+
+
+def test_sound_atempo_chain_covers_extreme_speed():
+    from anime import sound
+    assert sound._atempo(.25) == "atempo=0.500000,atempo=0.500000"
+    assert sound._atempo(4) == "atempo=2.000000,atempo=2.000000"

@@ -11,7 +11,11 @@ from pathlib import Path
 from . import config
 
 
-def analyze(audio_path: str) -> dict:
+def analyze(audio_path: str, beat_mult: int = 1) -> dict:
+    """节拍分析。beat_mult>1 把 librosa 的拍网格按整数细分——用于快速电子曲
+    (Nightcore/phonk):librosa 常把 ~180BPM 锁成 half-tempo ~90BPM,纯音频启发式
+    无法可靠区分感知速度(实测正常曲也有强 8 分音符周期性),故用确定性手动倍频。
+    快曲传 2,切点密度翻倍贴上真实鼓点;正常抒情曲保持 1。"""
     import librosa
     import numpy as np
 
@@ -30,6 +34,15 @@ def analyze(audio_path: str) -> dict:
         while interval > 0 and last + interval < duration:
             last += interval
             beats.append(round(last, 4))
+    # 手动倍频细分:每个拍间隔等分为 beat_mult 份(2=插中点),对齐更快的真实脉冲
+    if beat_mult >= 2 and len(beats) >= 2:
+        b = np.array(beats)
+        sub = []
+        for i in range(len(b) - 1):
+            sub.extend(np.linspace(b[i], b[i + 1], beat_mult, endpoint=False).tolist())
+        sub.append(float(b[-1]))
+        beats = [round(float(t), 4) for t in sub]
+        bpm *= beat_mult
     # 逐拍能量(RMS)→ 归一化 0..1,驱动切点疏密与段落
     rms = librosa.feature.rms(y=y)[0]
     rms_t = librosa.times_like(rms, sr=sr)

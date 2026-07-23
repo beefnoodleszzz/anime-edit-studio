@@ -64,7 +64,9 @@ def qa(path: str, *, expected_width: int | None = None,
         "checks": {
             "resolution_ok": dimensions_match,
             "audio_ok": has_audio == expected_audio,
-            "loudness_ok": ((lufs is not None and -16 <= lufs <= -12)
+            # 与 master 共用交付目标；允许编码/测量带来的 1 LU 偏差。
+            "loudness_ok": ((lufs is not None and
+                             abs(lufs - float(config.get("delivery", "master_lufs", -10.0))) <= 1.0)
                             if expected_audio else not has_audio),
             "no_clip": tp is None or tp <= -0.1,   # 真峰值不削波
         },

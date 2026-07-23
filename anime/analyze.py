@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -55,16 +56,20 @@ def _frame_at(source: str, t: float, width: int = 256) -> np.ndarray | None:
 
 
 def _motion(source: str, t0: float, t1: float) -> tuple[str, float]:
-    """两帧之间的稠密光流主导方向(Farneback)。"""
+    """两帧之间的稠密光流(Farneback):方向取均值向量角度,强度取逐像素幅值**中位数**。
+
+    幅值不能用均值向量的模——横摇与主体反向运动会互相抵消得到接近 0。中位数反映
+    画面里真实存在多少运动,对"这镜是动是静"更稳。
+    """
     a, b = _frame_at(source, t0), _frame_at(source, t1)
     if a is None or b is None:
         return ("none", 0.0)
     ga, gb = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)
     flow = cv2.calcOpticalFlowFarneback(ga, gb, None, 0.5, 3, 15, 3, 5, 1.2, 0)
     fx, fy = float(flow[..., 0].mean()), float(flow[..., 1].mean())
-    mag = float(np.hypot(fx, fy))
+    mag = float(np.median(np.hypot(flow[..., 0], flow[..., 1])))
     if mag < 0.3:
-        return ("static", mag)
+        return ("static", round(mag, 3))
     ang = np.degrees(np.arctan2(fy, fx))
     dirs = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"]
     return (dirs[int(((ang + 202.5) % 360) // 45)], round(mag, 3))
@@ -87,23 +92,31 @@ def analyze(asset_id: str, force: bool = False) -> list[dict]:
     rows = conn.execute("SELECT * FROM shots WHERE asset_id=? ORDER BY idx", (asset["id"],)).fetchall()
 
     scan_t, scan_y = _brightness_scan(source)   # 逐帧亮度,一次扫描
-    results = []
-    for r in rows:
-        mid = (r["start_sec"] + r["end_sec"]) / 2
-        img = _frame_at(source, mid)
+
+    def _work(r) -> dict | None:
+        # 代表帧直接读已选最优 keyframe(embed 阶段抽好),省一次 seek;缺失才回退中点。
+        img = cv2.imread(r["keyframe"]) if r["keyframe"] else None
         if img is None:
-            continue
+            img = _frame_at(source, (r["start_sec"] + r["end_sec"]) / 2)
+        if img is None:
+            return None
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         brightness = round(float(gray.mean()) / 255, 3)            # 代表值(给 slot 分类)
         sharpness = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 1)
-        # 镜头内逐帧最小亮度(抓任意位置暗瞬)
-        m = (scan_t >= r["start_sec"]) & (scan_t < r["end_sec"])
+        m = (scan_t >= r["start_sec"]) & (scan_t < r["end_sec"])   # 镜内逐帧最小亮度(抓暗瞬)
         min_brightness = round(float(scan_y[m].min()), 3) if m.any() else brightness
         span = max(r["end_sec"] - r["start_sec"], 0.1)
         mdir, mmag = _motion(source, r["start_sec"] + span * 0.25, r["start_sec"] + span * 0.75)
-        fields = {"brightness": brightness, "min_brightness": min_brightness,
-                  "sharpness": sharpness, "motion_dir": mdir, "motion_mag": mmag}
-        db.update_shot_analysis(conn, r["id"], fields)
-        results.append({"id": r["id"], **fields})
+        return {"id": r["id"], "brightness": brightness, "min_brightness": min_brightness,
+                "sharpness": sharpness, "motion_dir": mdir, "motion_mag": mmag}
+
+    # 逐镜 ffmpeg seek + 光流是瓶颈:并行计算(外部进程/释放 GIL),DB 写入回主线程串行。
+    with ThreadPoolExecutor(max_workers=(os.cpu_count() or 4)) as pool:
+        computed = [c for c in pool.map(_work, rows) if c]
+    results = []
+    for c in computed:
+        fields = {k: v for k, v in c.items() if k != "id"}
+        db.update_shot_analysis(conn, c["id"], fields)
+        results.append(c)
     conn.close()
     return results

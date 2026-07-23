@@ -4,7 +4,7 @@
 
 当前主闭环：
 
-`Brief → Shot Scoring → Gap Analysis → Review Decisions → Preference Learning → Blueprints → Variant Select → Render`
+`Brief → Shot Scoring → Gap Analysis → Review Decisions → Preference Learning → Blueprints → Variant Select → Render → Hook A/B → Publication Metrics → Next-cut Learning`
 
 原则：
 
@@ -115,6 +115,65 @@ anime render projects/<project_id>/editspec.final.variant-<variant_id>.json
 
 > 入出点在 Review Web 里改后,`variant select` 会按最新 trim 重算 Final EditSpec 的入点与时长,无需重跑蓝图。
 
+## Hook A/B 与发布数据复盘
+
+锁定正文后，只改变前 2–3 秒文案生成可归因变体；Hook 文案必须由创作者提供，系统不杜撰角色结论：
+
+```bash
+anime experiment create demo hook-v1 projects/demo/editspec.arc.json \
+  --hook '他为什么没有回头？' \
+  --hook '这一刀之后，一切都变了' \
+  --platform douyin --json
+
+anime experiment record <variant-id> --views 5000 --likes 800 --shares 120 \
+  --retention-2s .88 --retention-3s .79 --completion-rate .68 --json
+anime experiment report demo hook-v1 --json
+```
+
+报告以 2s/3s 留存和完播为主、互动为辅，并按播放样本量降权；样本不足或领先不明显时返回
+`collect_more_data`，不会伪报赢家。
+
+### 极致线：多维实验、镜头归因与回灌
+
+实验不再局限于文字。因子矩阵可以控制 Hook 文案、首镜、BGM 入点和文字样式：
+
+```json
+[
+  {"label":"A","hook":"他为什么没有回头？","hook_shot_id":"shot-a","audio_offset_frames":0},
+  {"label":"B","hook":"这一刀之后，一切都变了","hook_shot_id":"shot-b","audio_offset_frames":12}
+]
+```
+
+```bash
+anime experiment matrix demo hook-matrix projects/demo/editspec.arc.json \
+  --factors-json factors.json --json
+anime experiment record <variant-id> --views 5000 \
+  --retention-curve-json retention-a.json --completion-rate .68 --json
+anime experiment learn --project demo --json
+anime experiment insights --project demo --json
+```
+
+留存曲线按镜头时间范围插值生成 `shot_outcomes`；样本达到门槛后回灌
+`shots.growth_score`，下一次检索会使用真实表现信号。平台授权导出的数据可用
+`anime experiment import <project> <experiment> metrics.csv` 导入，不接管账号凭据。
+
+## 导演质量与增强 A/B 门禁
+
+```bash
+anime quality audit projects/demo/editspec.arc.json --visual --json
+anime quality status demo --json
+anime quality decide <review-id> accept --notes '逐帧 A/B 无融脸/线条漂移' --json
+anime extreme status demo --editspec projects/demo/editspec.arc.json --json
+```
+
+结构审计硬检 3072×3840/60、≥20 秒、≥2 独立源、连续时间线、源 runway 和高字幕风险；
+视觉模式额外检查近重复与镜头连续性。`finalize` 默认生成 restore/RIFE/超分逐镜 A/B
+记录并暂停，全部人工接受后再次执行才继续渲染、声音、母带和 QA。
+
+声音层现在是 `BGM + authored SFX + source audio bed`。`anime doctor` 和
+`anime extreme capabilities` 会报告 Rubber Band、Demucs、VapourSynth、逐帧 matte、
+线性光合成与平台接口的真实状态；不可用能力不会被静默宣称完成。
+
 ## 本地素材库(入库与磁盘回收)
 
 源文件永久住在素材库根目录(`config.toml` 的 `[library] sources_root`,默认 `~/Desktop/anime-material-library/sources`;可用 `ANIME_MATERIAL_ROOT` 覆盖)。`ingest` 只记录路径不复制,**入库后不要移动/改名**,否则回源渲染/relink/candidates 断链。
@@ -144,7 +203,7 @@ anime library clean demo --apply --json  # 真正删除;保留源、母版、eng
 - ✅ **M1** `ingest / shots / analyze / search / assemble / render / qa` —— 端到端自适应画幅/60fps
 - ✅ **M2** `beat` + `roughcut` —— 节拍驱动多版本(节奏/情绪/视觉流),切点落拍、附速度+特效
 - ✅ **M3** `EffectStack` —— 调色 + 真辉光(blur+screen)+ 色差(SVG chromatic aberration)+ 暗角,确定性 DOM/SVG/CSS,4K/60fps 520 帧≈48s
-- ✅ **M4a** `master` —— EBU R128 两遍 loudnorm(-14 LUFS)+ 保持原画幅的平台版导出
+- ✅ **M4a** `master` —— EBU R128 两遍 loudnorm(-10 LUFS)+ 保持原画幅的平台版导出
 - ✅ **M4b** `slowmo` —— RIFE 光流插帧,慢镜顺滑(闪切镜头自动跳过)
 - ✅ **M4c** `embed` + 语义检索 —— 本地 CLIP(ViT-B-32/MPS),`search "man with white hair"` → 命中五条悟
 - ✅ **M4d** `matte` —— rembg(isnet-anime)主体遮罩 + EffectStack 主体高亮

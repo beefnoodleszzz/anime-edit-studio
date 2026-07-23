@@ -50,6 +50,11 @@ def restore_editspec(editspec_path: str, only_ids: list[str] | None = None) -> d
         if only_ids and shot["id"] not in only_ids:
             continue
         shown = (float(shot["duration_in_frames"]) / fps) * float(shot["speed"])
+        # Picture enhancement strips audio. Preserve the immutable original
+        # source reference so the final sound stage can still build dialogue,
+        # impacts and ambience from the approved source range.
+        shot.setdefault("source_audio_src", shot["src"])
+        shot.setdefault("source_audio_in_sec", float(shot["source_in_sec"]))
         shot["src"] = _restore_segment(shot["src"], float(shot["source_in_sec"]), shown + 0.15)
         shot["source_in_sec"] = 0.0
         restored += 1

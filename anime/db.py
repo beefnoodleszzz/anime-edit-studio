@@ -231,10 +231,108 @@ def _import_legacy_rights(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_004_aesthetic(conn: sqlite3.Connection) -> None:
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(shots)").fetchall()]
+    if "aesthetic" not in cols:
+        conn.execute("ALTER TABLE shots ADD COLUMN aesthetic REAL")
+
+
+def _migration_005_growth_experiments(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS growth_experiments (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id      TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            base_spec_path  TEXT NOT NULL,
+            platform        TEXT,
+            status          TEXT NOT NULL DEFAULT 'draft'
+                            CHECK(status IN ('draft','running','complete')),
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(project_id, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS growth_variants (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            experiment_id       INTEGER NOT NULL REFERENCES growth_experiments(id) ON DELETE CASCADE,
+            label               TEXT NOT NULL,
+            hook_text           TEXT NOT NULL,
+            hook_sub            TEXT NOT NULL DEFAULT '',
+            editspec_path       TEXT NOT NULL,
+            views               INTEGER NOT NULL DEFAULT 0,
+            likes               INTEGER NOT NULL DEFAULT 0,
+            comments            INTEGER NOT NULL DEFAULT 0,
+            shares              INTEGER NOT NULL DEFAULT 0,
+            follows             INTEGER NOT NULL DEFAULT 0,
+            retention_2s        REAL,
+            retention_3s        REAL,
+            completion_rate     REAL,
+            avg_watch_sec       REAL,
+            published_at        TEXT,
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(experiment_id, label)
+        );
+        CREATE INDEX IF NOT EXISTS idx_growth_experiment_project
+            ON growth_experiments(project_id, status);
+        """
+    )
+
+
+def _migration_006_extreme_line(conn: sqlite3.Connection) -> None:
+    shot_cols = {row["name"] for row in conn.execute("PRAGMA table_info(shots)")}
+    if "growth_score" not in shot_cols:
+        conn.execute("ALTER TABLE shots ADD COLUMN growth_score REAL NOT NULL DEFAULT 0")
+    variant_cols = {row["name"] for row in conn.execute("PRAGMA table_info(growth_variants)")}
+    for name, declaration in (
+        ("factors_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ("retention_curve_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("external_post_id", "TEXT"),
+    ):
+        if name not in variant_cols:
+            conn.execute(f"ALTER TABLE growth_variants ADD COLUMN {name} {declaration}")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS shot_outcomes (
+            variant_id          INTEGER NOT NULL REFERENCES growth_variants(id) ON DELETE CASCADE,
+            shot_id             TEXT NOT NULL,
+            start_sec           REAL NOT NULL,
+            end_sec             REAL NOT NULL,
+            retention_in        REAL,
+            retention_out       REAL,
+            retention_drop      REAL,
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY(variant_id, shot_id, start_sec)
+        );
+
+        CREATE TABLE IF NOT EXISTS enhancement_reviews (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id          TEXT NOT NULL,
+            shot_id             TEXT NOT NULL,
+            stage               TEXT NOT NULL CHECK(stage IN ('restore','rife','superres','matte','other')),
+            source_path         TEXT NOT NULL,
+            processed_path      TEXT NOT NULL,
+            metrics_json        TEXT NOT NULL DEFAULT '{}',
+            recommendation      TEXT NOT NULL CHECK(recommendation IN ('accept','review','reject')),
+            decision            TEXT CHECK(decision IN ('accept','reject')),
+            notes               TEXT,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(project_id, shot_id, stage, processed_path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_shot_outcomes_shot ON shot_outcomes(shot_id);
+        CREATE INDEX IF NOT EXISTS idx_enhancement_review_project
+            ON enhancement_reviews(project_id, decision, stage);
+        """
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (1, _migration_001_base),
     (2, _migration_002_decision_loop),
     (3, _migration_003_project_scope),
+    (4, _migration_004_aesthetic),
+    (5, _migration_005_growth_experiments),
+    (6, _migration_006_extreme_line),
 ]
 
 

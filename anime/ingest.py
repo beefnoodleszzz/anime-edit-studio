@@ -1,4 +1,4 @@
-"""导入素材:sha256 + ffprobe 元数据 + 1080p 代理(VideoToolbox)。"""
+"""导入素材:sha256 + ffprobe 元数据 + 1080p 代理(硬编优先,软件可靠降级)。"""
 from __future__ import annotations
 
 import json
@@ -36,12 +36,30 @@ def _make_proxy(src: str, asset_id: str) -> str:
     dst = config.PROXIES / f"{asset_id}.mp4"
     if dst.exists():
         return str(dst)
-    subprocess.run(
-        [ffmpeg, "-y", "-v", "error", "-i", src,
-         "-vf", f"scale=-2:{height}", "-c:v", "h264_videotoolbox", "-b:v", "8M",
-         "-c:a", "aac", "-b:a", "160k", str(dst)],
-        check=True,
+    common = [
+        ffmpeg, "-y", "-v", "error", "-i", src,
+        "-vf", f"scale=-2:{height}", "-c:a", "aac", "-b:a", "160k",
+    ]
+    hardware = subprocess.run(
+        [*common, "-c:v", "h264_videotoolbox", "-b:v", "8M", str(dst)],
+        capture_output=True, text=True,
     )
+    if hardware.returncode:
+        # VideoToolbox can refuse a compression session when the hardware is
+        # busy or for small/synthetic inputs.  A proxy is a reliability layer:
+        # remove the partial file and retry deterministically in software.
+        dst.unlink(missing_ok=True)
+        software = subprocess.run(
+            [*common, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+             "-pix_fmt", "yuv420p", str(dst)],
+            capture_output=True, text=True,
+        )
+        if software.returncode:
+            dst.unlink(missing_ok=True)
+            raise RuntimeError(
+                "代理生成失败。VideoToolbox:\n"
+                f"{hardware.stderr.strip()}\nlibx264:\n{software.stderr.strip()}"
+            )
     return str(dst)
 
 

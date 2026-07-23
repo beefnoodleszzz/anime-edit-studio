@@ -55,6 +55,19 @@ class AudioLayer(BaseModel):
     gain_db: float = 0.0
 
 
+class TextOverlay(BaseModel):
+    """成片时间线上的动态文字层(前3秒钩子文案/角色名条)。渲染在所有镜头之上。
+
+    仅 Remotion(preview/finalize)渲染;draft 纯 ffmpeg 结构预览不烧字。
+    """
+    text: str                       # 主行(大字)
+    sub: str = ""                   # 副行(小字,可空)
+    start_frame: int
+    duration_in_frames: int
+    style: str = "hook"             # hook(居中钩子大字) | name(下方角色名条)
+    anchor: str = "center"          # center | top | bottom
+
+
 class EditSpec(BaseModel):
     id: str
     fps: int = 60
@@ -63,6 +76,7 @@ class EditSpec(BaseModel):
     duration_in_frames: int
     shots: list[Shot] = Field(default_factory=list)
     audio: list[AudioLayer] = Field(default_factory=list)
+    overlays: list[TextOverlay] = Field(default_factory=list)
 
 
 def choose_canvas(candidates: list[dict], *, canvas: str = "4x5",

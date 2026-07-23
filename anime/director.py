@@ -20,6 +20,35 @@ SLOT_PROMPTS = {
 }
 
 
+def _hdir(motion_dir: str | None) -> int:
+    """光流方向的水平分量:向右 +1,向左 -1,无水平运动(纯竖向/静止/无值)0。"""
+    if not motion_dir:
+        return 0
+    if "right" in motion_dir:
+        return 1
+    if "left" in motion_dir:
+        return -1
+    return 0
+
+
+def _apply_motion_whips(shots, dirs) -> None:
+    """把 whip 转场方向从「镜号奇偶」改成「跟随出画镜头的真实水平运动」。
+
+    renderer/src/effects/apply.ts:38 的位移语义:whipLeft 入镜从左侧滑入(settle 向右)、
+    whipRight 从右侧滑入(settle 向左)。让 settle 方向续接上一镜的水平运动,眼睛保持
+    同向流动——运动向右→whipLeft(续右),向左→whipRight(续左);上一镜无水平运动时
+    退回本镜方向,仍无则保留原决定(奇偶回退)。只改已判定为 whip 的镜,不新增转场。
+    """
+    for i, s in enumerate(shots):
+        if s.transition not in ("whipLeft", "whipRight"):
+            continue
+        h = (_hdir(dirs[i - 1]) if i > 0 else 0) or _hdir(dirs[i])
+        if h > 0:
+            s.transition = "whipLeft"
+        elif h < 0:
+            s.transition = "whipRight"
+
+
 def classify_slots(asset_id: str, force: bool = False) -> int:
     """z-score 相对打分:把镜头分到"相对最突出"的 slot,避免绝对分数使某类通吃;
     再叠加动作(→climax)、暗调(→ending)信号,让四个 slot 都能填满。"""
@@ -197,24 +226,49 @@ def _make_showcase_shot(c, sources, start_f, dur, k, is_down, energy, fps) -> ed
 
 
 def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
-                       by_slot, pool, sources, fps, width, height, canvas) -> dict:
-    """混剪/showcase 体裁:开场闪切爆发钩子 + 恒定密度能量锁拍 + 每刀冲击转场。
+                       by_slot, pool, sources, fps, width, height, canvas,
+                       hook_text: str | None = None, hook_sub: str = "") -> dict:
+    """混剪/showcase 体裁:冷开场王炸单帧钩子 → strobe 爆发 → 恒定密度能量锁拍。
 
-    复用 arc 的能量驱动切点引擎与 _pick 选片去重,只换掉「开场/结尾长握」为
-    「开场 strobe 爆发 + 全程能量密度」,并给每刀配落拍转场。END 卡走 endcard 后处理。
+    前3秒钩子公式(留住完播率):
+    0) 冷开场王炸单帧:最高美学的 hero 特写定帧 ~0.5s,干净可读(仅微辉光+慢推),
+       先让观众 registered「谁/什么」,可选压钩子文案;末帧 flash 炸进 strobe。
+    1) strobe 爆发:第一个拍间隔切成 ~6 个 3–5 帧微镜,flash 转场,爆点。
+    2) 正片:能量驱动变长握拍 + 每刀落拍冲击转场。END 卡走 endcard 后处理。
     """
     n = len(beats)
     used: list = []
     used_ids: set[str] = set()
     cursors: dict = {}
     shots = []
+    dirs: list = []                          # 每镜源画面的光流方向,供 whip 续接运动方向
     t0 = beats[0]
-
-    # 1) 开场闪切爆发:把第一个拍间隔切成 ~6 个 3–5 帧微镜(不同镜头),flash 转场当钩子
     multi = len({p["asset_id"] for p in pool}) > 1        # 多番池才启用相邻去源
     prev_asset = None
     beat_len = max(round((beats[1] - beats[0]) * fps), 6)
+
+    # 0) 冷开场王炸单帧。opening 池已按美学降序;取最惊艳的 hero 特写定帧。
+    hold_f = round(fps * 0.5)
+    hero_pool = by_slot.get("opening") or by_slot.get("climax") or []
+    cold = hero_pool[0] if hero_pool else None
+    off = 0
+    if cold is not None:
+        used_ids.add(cold["shot_id"])
+        prev_asset = cold["asset_id"]
+        if cold.get("embedding") is not None:
+            used.append(cold["embedding"])
+        s = _make_showcase_shot(cold, sources, 0, hold_f, 0, False, 1.0, fps)
+        s.effects = [editspec.Effect(type="glow", intensity=0.28)]   # 干净可读,不抢脸
+        s.camera_move, s.camera_amount = "pushIn", 0.10
+        s.transition, s.transition_intensity = "none", 0.0
+        s.ramp = "decel"                                             # 减速冲进定帧
+        shots.append(s)
+        dirs.append(cold.get("motion_dir"))
+        off = hold_f
+
+    # 1) strobe 爆发:第一个拍间隔切成 ~6 个 3–5 帧微镜(不同镜头),flash 转场当爆点。
     n_strobe = min(6, beat_len // 3)
+    kk = len(shots)
     for j in range(n_strobe):
         c = _pick(by_slot, "climax", used, cursors,
                   avoid_asset=prev_asset if multi else None, used_ids=used_ids)
@@ -224,19 +278,22 @@ def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
             used.append(c["embedding"]); used[:] = used[-6:]
         sf = round(j * beat_len / n_strobe)
         ef = round((j + 1) * beat_len / n_strobe)
-        s = _make_showcase_shot(c, sources, sf, max(ef - sf, 1), j, False, 1.0, fps)
+        s = _make_showcase_shot(c, sources, off + sf, max(ef - sf, 1), kk, False, 1.0, fps)
         s.transition, s.transition_intensity = "flash", 0.7
         s.camera_move, s.camera_amount = "pushIn", 0.14
         shots.append(s)
+        dirs.append(c.get("motion_dir"))
+        kk += 1
 
-    # 2) 正片:能量驱动的变长握拍(高能每拍、低能 2–3 拍),但不做开场/结尾长握
+    # 2) 正片:能量驱动的变长握拍,但不做开场/结尾长握。
+    # 密度判据用局部包络(邻拍滚动最大)而非逐拍 RMS——倍频网格(--beat-mult)的 offbeat
+    # RMS 偏低,直接用会把 drop 拉稀成半拍切;取包络让高能段每拍都炸(0.325s@184BPM)。
     cuts, i = [], 1
     while i < n - 1:
         cuts.append(i)
-        e = energy[i]
-        i += 1 if e > 0.55 else 2 if e > 0.3 else 3
+        e = max(energy[max(0, i - 1):i + 2])
+        i += 1 if e > 0.45 else 2 if e > 0.28 else 3
 
-    k0 = len(shots)
     for k, bi in enumerate(cuts):
         c = _pick(by_slot, "climax" if energy[bi] > 0.5 else "build", used, cursors,
                   avoid_asset=prev_asset if multi else None, used_ids=used_ids)
@@ -245,32 +302,56 @@ def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
         if c.get("embedding") is not None:
             used.append(c["embedding"]); used[:] = used[-6:]
         end_bi = cuts[k + 1] if k + 1 < len(cuts) else min(bi + 3, n - 1)
-        start_f = round((beats[bi] - t0) * fps)
+        start_f = off + round((beats[bi] - t0) * fps)
         dur = max(round((beats[end_bi] - beats[bi]) * fps), 1)
-        shots.append(_make_showcase_shot(c, sources, start_f, dur, k0 + k,
+        shots.append(_make_showcase_shot(c, sources, start_f, dur, kk,
                                          beats[bi] in downbeats, energy[bi], fps))
+        dirs.append(c.get("motion_dir"))
+        kk += 1
 
+    _apply_motion_whips(shots, dirs)
     total = shots[-1].start_frame + shots[-1].duration_in_frames
     if total / fps < 20:
         raise ValueError("交付剪辑不得短于 20 秒；请扩大音频窗口")
+
+    # 音频回拉:让 t0(第一拍/drop)精确落在 strobe 起点(时间线 off 帧),
+    # 王炸帧压在 drop 前的起手音上,鼓点与画面全程对齐。
+    pre = round(t0 * fps)
+    if pre >= off:
+        a_trim, a_start = pre - off, 0
+    else:
+        a_trim, a_start = 0, off - pre
+
+    overlays = []
+    if hook_text:
+        # 钩子文案主要压在干净的王炸帧上,炸进 strobe 时淡出(组件自带末帧快出)。
+        ov_dur = max((off or hold_f) + round(beat_len * 0.5), round(fps * 0.6))
+        overlays.append(editspec.TextOverlay(
+            text=hook_text, sub=hook_sub, start_frame=0,
+            duration_in_frames=ov_dur, style="hook", anchor="center"))
+
     spec = editspec.EditSpec(
         id=project_id, fps=fps, width=width, height=height,
         duration_in_frames=total, shots=shots,
         audio=[editspec.AudioLayer(id="bgm", src=beatmap["audio"],
-                                   trim_start_frames=round(t0 * fps))],
+                                   start_frame=a_start, trim_start_frames=a_trim)],
+        overlays=overlays,
     )
     path = editspec.save(spec, name="arc")
     return {"editspec": str(path), "shots": len(shots), "mode": "showcase",
             "canvas": canvas, "width": width, "height": height,
-            "strobe": n_strobe, "duration_s": round(total / fps, 1),
+            "strobe": n_strobe, "cold_open": cold is not None,
+            "hook_text": hook_text or "", "duration_s": round(total / fps, 1),
             "audio_start_s": round(t0, 3)}
 
 
 def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None = None,
-           must_tag: str | None = None, start_s: float = 0.0,
+           must_tag: str | None = None, exclude_ids: set[str] | None = None,
+           start_s: float = 0.0,
            duration_s: float | None = None, fps: int = 60, mode: str = "arc",
            fill: str = "crop", canvas: str = "4x5", width: int | None = None,
-           height: int | None = None) -> dict:
+           height: int | None = None,
+           hook_text: str | None = None, hook_sub: str = "") -> dict:
     from . import search
 
     if duration_s is not None and duration_s < 20:
@@ -289,10 +370,15 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     if n < 4:
         raise ValueError("所选音频窗口内节拍太少")
 
-    cands = search.search(query, asset_id=asset_id, limit=120)
+    # must_tag 会在检索后过滤,若仍只取 top-120,被要求的标签可能大半不在其中而饿死候选池;
+    # 指定标签时扩大检索窗口,保证过滤后仍有足够同标签镜头(实测 tanjirou 在 top-400 有 ~110+)。
+    cands = search.search(query, asset_id=asset_id, limit=400 if must_tag else 120)
     if must_tag:
         tag = must_tag.casefold()
         cands = [c for c in cands if tag in (c.get("tags") or "").casefold()]
+    # 人工审片剔除:烧录字幕/OP·ED credit/跑题镜头等,自动检测不可靠时的确定性排除口。
+    if exclude_ids:
+        cands = [c for c in cands if c["shot_id"] not in exclude_ids]
     if not cands:
         raise ValueError("候选池为空")
     if len({c["asset_id"] for c in cands}) < 2:
@@ -337,11 +423,12 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     by_slot.get("climax", []).sort(key=lambda c: -(c.get("motion_mag") or 0))
     by_slot.get("ending", []).sort(
         key=lambda c: ((c.get("brightness") or 0) < 0.06, c.get("motion_mag") or 0))
-    by_slot.get("opening", []).sort(key=lambda c: -(c.get("sharpness") or 0))
+    by_slot.get("opening", []).sort(key=lambda c: (-(c.get("aesthetic") or 0), -(c.get("sharpness") or 0)))
 
     if mode == "showcase":
         return _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
-                                  by_slot, pool, sources, fps, out_w, out_h, orientation)
+                                  by_slot, pool, sources, fps, out_w, out_h, orientation,
+                                  hook_text=hook_text, hook_sub=hook_sub)
 
     asset_cycle = list(dict.fromkeys(c["asset_id"] for c in pool))
     diversity_asset = min(asset_cycle, key=lambda asset: sum(c["asset_id"] == asset for c in pool))
@@ -369,6 +456,7 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     used_ids: set[str] = set()
     cursors: dict = {}
     shots = []
+    dirs: list = []                          # 每镜源画面的光流方向,供 whip 续接运动方向
     t0 = beats[cuts[0]]
     structure = {"opening": 0, "build": 0, "climax": 0, "ending": 0}
     for k, bi in enumerate(cuts):
@@ -395,7 +483,9 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
         speed = 0.5 if (k == peak_cut and section == "climax") else 1.0
         shots.append(_make_shot(c, sources, start_f, dur, k,
                                 section, beats[bi] in downbeats, energy[bi], fps, speed))
+        dirs.append(c.get("motion_dir"))
 
+    _apply_motion_whips(shots, dirs)
     total = shots[-1].start_frame + shots[-1].duration_in_frames
     if total / fps < 20:
         raise ValueError("交付剪辑不得短于 20 秒；请扩大音频窗口")

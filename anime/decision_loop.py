@@ -303,7 +303,13 @@ def _structure_match(role: str, prototype: str) -> float:
 
 
 def _score_row(row: dict, brief: dict | None, preference_model: dict | None = None) -> ShotFeatures:
-    technical_quality = round((_norm(row.get("sharpness"), 450) * 0.6 + _norm(row.get("brightness"), 1.0) * 0.4), 4)
+    # 画质用 LAION 美学分为主(真"好看"信号,归一 aesthetic/10),清晰度只作次要项;
+    # 美学分缺失(未 embed 或权重不可用)时回退旧式清晰度/亮度组合。
+    aesthetic = row.get("aesthetic")
+    if aesthetic is not None:
+        technical_quality = round(min(float(aesthetic) / 10.0, 1.0) * 0.8 + _norm(row.get("sharpness"), 450) * 0.2, 4)
+    else:
+        technical_quality = round((_norm(row.get("sharpness"), 450) * 0.6 + _norm(row.get("brightness"), 1.0) * 0.4), 4)
     composition_quality = round((1.0 - min(abs((row.get("reframe_x") or 0.0)), 1.0)) * 0.4 + _norm(row.get("sharpness"), 350) * 0.6, 4)
     character_salience = 1.0 if row.get("character") else (0.7 if "face" in (row.get("tags") or "") else 0.2)
     emotion_intensity = 1.0 if row.get("emotion") else min(_norm(row.get("brightness"), 1.0) + 0.2, 1.0)

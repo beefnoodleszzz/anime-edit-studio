@@ -11,10 +11,14 @@ realesrgan_model  = "realesr-animevideov3-x2"                        # 动漫 2x
 rife       = "~/.local/opt/rife-ncnn-vulkan/rife-ncnn-vulkan"
 rife_model = "~/.local/opt/rife-ncnn-vulkan/rife-v4.6"
 chrome     = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# LAION 美学评分头(nn.Linear(512,1),配 OpenAI CLIP ViT-B/32)。缺失则筛选走清晰度启发式降级。
+aesthetic_model = "kit/models/sa_0_4_vit_b_32_linear.pth"
 
 [delivery]
-canvas = "auto"                     # 按候选素材主导画幅，不写死横屏/竖屏
+canvas = "4x5"                      # 新作品固定竖屏 4:5；auto 仅作显式 legacy 例外
 fps    = 60
+master_lufs = -10.0                 # 高能短视频母带；平台差异由 preset 显式覆盖
+true_peak_dbfs = -1.0
 master_codec   = "prores_videotoolbox"   # 母版
 platform_codec = "h264_videotoolbox"      # 平台版
 

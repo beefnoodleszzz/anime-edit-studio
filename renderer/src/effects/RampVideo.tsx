@@ -27,6 +27,19 @@ const curve = (ramp: string, p: number): number => {
   if (ramp === "accel") return p * p; // 慢→快
   if (ramp === "smooth")
     return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOut
+  // — 顶尖燃剪的定格钱镜(源侧需备足 span 长度,把命中帧摆在窗口末尾) —
+  if (ramp === "hold") return 0; // 纯定格:整镜冻在 source_in 帧(定格海报/招式名)
+  if (ramp === "freezeEnd") {
+    // 命中定格:减速冲进命中帧后冻住,末段静止让冲击力落地(动作片最常用)
+    const q = Math.min(p / 0.62, 1);
+    return 1 - (1 - q) * (1 - q);
+  }
+  if (ramp === "snyder") {
+    // 快→定格→快:斯奈德式,前段疾走到中点定格一拍再疾走收尾
+    if (p < 0.35) return 0.5 * (p / 0.35);
+    if (p < 0.6) return 0.5;
+    return 0.5 + 0.5 * ((p - 0.6) / 0.4);
+  }
   return p; // linear
 };
 

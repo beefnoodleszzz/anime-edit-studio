@@ -7,6 +7,7 @@ import {
 } from "remotion";
 import { flashOpacity, shotTransform, transitionFilter } from "./effects/apply";
 import { EffectStack } from "./effects/EffectStack";
+import { TextOverlayLayer } from "./effects/TextOverlay";
 import type { EditSpec, Shot } from "./schema";
 
 // src 由 render 桥接暂存到 renderer/public/sources/ 下,故用 staticFile。
@@ -35,7 +36,7 @@ const ShotLayer: React.FC<{ shot: Shot }> = ({ shot }) => {
   );
 };
 
-export const Edit: React.FC<EditSpec> = ({ shots, audio }) => {
+export const Edit: React.FC<EditSpec> = ({ shots, audio, overlays }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
       {shots.map((shot) => (
@@ -45,6 +46,15 @@ export const Edit: React.FC<EditSpec> = ({ shots, audio }) => {
           durationInFrames={shot.duration_in_frames}
         >
           <ShotLayer shot={shot} />
+        </Sequence>
+      ))}
+      {(overlays ?? []).map((o, i) => (
+        <Sequence
+          key={`ov-${i}`}
+          from={o.start_frame}
+          durationInFrames={o.duration_in_frames}
+        >
+          <TextOverlayLayer overlay={o} />
         </Sequence>
       ))}
       {audio.map((a) => (

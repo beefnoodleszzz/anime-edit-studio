@@ -54,6 +54,26 @@ type Variant = {
   };
 };
 
+type ExperimentReport = {
+  experiment: { id: number; name: string; status: string };
+  decision: "winner" | "collect_more_data";
+  winner?: string | null;
+  ranked_variants: Array<{
+    id: number;
+    label: string;
+    views: number;
+    score: number;
+    retention_3s?: number | null;
+    completion_rate?: number | null;
+  }>;
+};
+
+type QualityStatus = {
+  pass: boolean;
+  pending: number;
+  rejected: number;
+};
+
 const reasonHotkeys: Record<string, string> = {
   h: "highlight",
   b: "boring",
@@ -90,6 +110,8 @@ export function ReviewApp() {
   const [project, setProject] = useState<Project | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentReport[]>([]);
+  const [quality, setQuality] = useState<QualityStatus | null>(null);
   const [selected, setSelected] = useState(0);
   const [query, setQuery] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
@@ -117,14 +139,18 @@ export function ReviewApp() {
     setLoading(true);
     setError(null);
     try {
-      const [projectPayload, shotPayload, variantPayload] = await Promise.all([
+      const [projectPayload, shotPayload, variantPayload, experimentPayload, qualityPayload] = await Promise.all([
         readJson<Project>(`/api/projects/${projectId}`),
         readJson<{ items: Shot[] }>(`/api/projects/${projectId}/shots`),
         readJson<{ items: Variant[] }>(`/api/projects/${projectId}/variants`),
+        readJson<{ items: ExperimentReport[] }>(`/api/projects/${projectId}/experiments`),
+        readJson<QualityStatus>(`/api/projects/${projectId}/quality`),
       ]);
       setProject(projectPayload);
       setShots(shotPayload.items);
       setVariants(variantPayload.items);
+      setExperiments(experimentPayload.items);
+      setQuality(qualityPayload);
       setSelected((current) => Math.min(current, Math.max(shotPayload.items.length - 1, 0)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "unknown error");
@@ -285,6 +311,9 @@ export function ReviewApp() {
         <div className="summary-item"><Film /><span><b>{project?.shot_count || 0}</b> shots</span></div>
         <div className="summary-item"><Check /><span><b>{project?.reviewed_count || 0}</b> reviewed</span></div>
         <div className="summary-item"><Gauge /><span><b>{(project?.top_score || 0).toFixed(2)}</b> top score</span></div>
+        <div className={quality?.pass ? "summary-item" : "summary-item warning"}>
+          <Gauge /><span><b>{quality?.pending || 0}</b> enhancement pending</span>
+        </div>
       </section>
 
       {loading ? <section className="workspace"><div className="preview-panel">Loading…</div></section> : error ? <section className="workspace"><div className="preview-panel">API error: {error}</div></section> : (
@@ -406,6 +435,22 @@ export function ReviewApp() {
                         {variant.variant_type} #{variant.id}
                       </button>
                     ))}
+                  </div>
+                </div>
+                <div className="tag-group">
+                  <p className="eyebrow">GROWTH EXPERIMENTS</p>
+                  <div className="experiment-list">
+                    {experiments.length ? experiments.map((item) => (
+                      <div className="experiment-card" key={item.experiment.id}>
+                        <b>{item.experiment.name}</b>
+                        <span>{item.winner ? `Winner ${item.winner}` : "Collect more data"}</span>
+                        {item.ranked_variants.slice(0, 2).map((variant) => (
+                          <small key={variant.id}>
+                            {variant.label} · {variant.views} views · 3s {variant.retention_3s != null ? `${(variant.retention_3s * 100).toFixed(0)}%` : "—"}
+                          </small>
+                        ))}
+                      </div>
+                    )) : <span className="empty-copy">No experiment data</span>}
                   </div>
                 </div>
               </>

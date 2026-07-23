@@ -42,6 +42,15 @@ export const audioSchema = z.object({
   gain_db: z.number().default(0),
 });
 
+export const overlaySchema = z.object({
+  text: z.string(),
+  sub: z.string().default(""),
+  start_frame: z.number(),
+  duration_in_frames: z.number(),
+  style: z.string().default("hook"),
+  anchor: z.string().default("center"),
+});
+
 export const editSpecSchema = z.object({
   id: z.string(),
   fps: z.number().default(60),
@@ -50,8 +59,10 @@ export const editSpecSchema = z.object({
   duration_in_frames: z.number(),
   shots: z.array(shotSchema).default([]),
   audio: z.array(audioSchema).default([]),
+  overlays: z.array(overlaySchema).default([]),
 });
 
 export type EditSpec = z.infer<typeof editSpecSchema>;
 export type Shot = z.infer<typeof shotSchema>;
 export type Effect = z.infer<typeof effectSchema>;
+export type TextOverlay = z.infer<typeof overlaySchema>;

@@ -10,6 +10,7 @@ const fallback: EditSpec = {
   duration_in_frames: 60,
   shots: [],
   audio: [],
+  overlays: [],
 };
 
 export const RemotionRoot: React.FC = () => {

@@ -97,9 +97,11 @@ def search(query: str = "", *, asset_id: str | None = None, slot: str | None = N
         score = (
             semantic.get(s["id"], 0.0) * 5.0        # 语义匹配主导
             + order.get(s["id"], 0.0) * 2.0
+            + min((s["aesthetic"] or 0) / 10, 1.0) * 1.5   # LAION 美学分:真画质信号
             + min((s["sharpness"] or 0) / 500, 1.0)
             + min((s["motion_mag"] or 0) / 5, 1.0)
             + (s["picked"] or 0) * 0.3
+            + min(max(s["growth_score"] or 0, -1.0), 1.0) * 1.2
         )
         scored.append((score, s))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -110,6 +112,7 @@ def search(query: str = "", *, asset_id: str | None = None, slot: str | None = N
         "start_sec": s["start_sec"], "end_sec": s["end_sec"],
         "keyframe": s["keyframe"], "motion_dir": s["motion_dir"],
         "motion_mag": s["motion_mag"], "sharpness": s["sharpness"],
+        "aesthetic": s["aesthetic"],
         "brightness": s["brightness"], "dialogue": s["dialogue"],
         "tags": s["tags"], "reframe_x": s["reframe_x"] or 0.0,
         "score": round(score, 3),

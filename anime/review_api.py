@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import config, db, decision_loop
+from . import config, db, decision_loop, experiment, quality_gate
 
 
 class ReviewPayload(BaseModel):
@@ -128,6 +128,14 @@ def create_app() -> FastAPI:
     @app.get("/api/projects/{project_id}/variants")
     def get_variants(project_id: str):
         return {"items": decision_loop.list_variants(project_id)}
+
+    @app.get("/api/projects/{project_id}/experiments")
+    def get_experiments(project_id: str):
+        return {"items": experiment.list_project(project_id)}
+
+    @app.get("/api/projects/{project_id}/quality")
+    def get_quality(project_id: str):
+        return quality_gate.status(project_id)
 
     @app.post("/api/projects/{project_id}/variants/{variant_id}/select")
     def post_select_variant(project_id: str, variant_id: int, payload: VariantSelectPayload):

@@ -147,13 +147,25 @@ EditSpec 用秒 + 显式 `timebase`，帧数由 compiler 换算。
 
 ## 6. Resolve 开发须知（实测踩坑记录）
 
+**完整列表见 `config/resolve_capabilities.yaml` 的 `pitfalls` 段。** 摘要：
+
 | # | 坑 | 应对 |
 |---|---|---|
 | P1 | 进程名是 `Resolve`，不是 `DaVinci Resolve` | 健康检查用 `pgrep -x Resolve` |
 | P2 | Resolve 未运行时 `scriptapp()` **静默返回 None**，不抛异常 | 必须显式判空并给出可操作的报错 |
-| P3 | 系统 Python 3.14 与 fusionscript 不兼容 | 强制 venv 3.11；启动校验 `sys.version_info` |
-| P4 | 素材真实帧率 23.976 | 见 R8 |
+| P3 | 系统 Python 3.14 与 fusionscript 不兼容 | 强制 venv 3.11；启动校验 |
+| P4 | 素材真实帧率 23.976，且同库内混有 29.97 | 见 R8 |
 | P5 | Resolve 必须前台运行，无真 headless | 启动等待 + 健康检查；渲染串行排队 |
+| P6 | 源素材的章节标记被片段继承，同一帧不能有两个标记 | `mark_clip` 找空闲帧；只认 `aes:` 前缀 |
+| P7 | `GetSourceStartFrame`/`GetLeftOffset` 跨帧率不可靠 | 一律用 `GetSourceStartTime()`（返回秒） |
+| P8 | `AppendToTimeline` 的 `endFrame` 是**开区间** | `end = start + n`，不减 1 |
+| P9 | 时间线起始帧默认 **86400**（01:00:00:00） | `recordFrame` 必须加 `GetStartFrame()` |
+| P10 | **`AppendToTimeline` 无法填补轨道空洞** | 时间线全量重建；增量下沉到渲染层 |
+| P11 | 入点 floor + 出点 ceil 会多出一帧 | 按**时长**取帧，不独立取整入出点 |
+
+> **P10 是架构级约束**，直接决定了增量更新的实现层次：
+> 在 Resolve 里搭时间线廉价、渲染昂贵，
+> 所以 compiler 全量重排时间线，但报告 `changed_ranges` 供渲染层只渲变化区间。
 
 环境变量（`connection.py` 负责注入，不要求用户手工 export）：
 

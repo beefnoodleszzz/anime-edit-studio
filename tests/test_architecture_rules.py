@@ -110,8 +110,12 @@ def test_r3_require_rejects_unverified_capability():
 
 
 def test_r8_pitfalls_are_documented():
-    """R8/P4：帧率坑必须留在能力矩阵里，防止后人重犯。"""
+    """实测踩过的坑必须留在能力矩阵里，防止后人重犯。
+
+    每个 P 编号都对应一次真实的静默错位，删除它们等于把坑重新埋回去。
+    """
     from studio.core.capabilities import load_capabilities
 
     ids = {p["id"] for p in load_capabilities().get("pitfalls", [])}
-    assert {"P1", "P2", "P3", "P4", "P5"} <= ids
+    expected = {f"P{n}" for n in range(1, 12)}
+    assert expected <= ids, f"缺失的坑位记录: {sorted(expected - ids)}"

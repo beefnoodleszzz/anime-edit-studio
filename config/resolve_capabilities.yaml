@@ -46,7 +46,7 @@ capabilities:
     path: native_api
     api: "MediaPool.AddSubFolder"
     probed: true
-    verified: false          # 方法存在，尚未实测
+    verified: true           # Phase 1：ensure_bin('source') 实测通过
 
   create_timeline:
     path: native_api
@@ -286,3 +286,46 @@ pitfalls:
     issue: "Resolve 必须前台运行，无真正 headless"
     impact: "批量自动化受限"
     fix: "启动等待 + 健康检查；渲染任务串行排队"
+
+  # ── 以下为 Phase 1 实测新增（2026-07-25），每一条都曾导致片段静默错位 ──
+
+  - id: P6
+    issue: "源素材自带的章节标记会被时间线片段继承，且 Resolve 拒绝在已有标记的帧上再加标记"
+    impact: |
+      蓝光/WEB 片源常在第 0 帧就有 "Chapter N"。
+      在第 0 帧写 clip_id 标记会静默失败，导致增量更新无法定位该片段。
+    fix: "mark_clip 向后扫描第一个空闲帧；查找时只认 aes: 前缀的 customData"
+
+  - id: P7
+    issue: "GetSourceStartFrame() 含媒体起始时间码；GetLeftOffset() 在跨帧率时被套格重映射"
+    impact: |
+      实测 29.97 素材放进 24fps 时间线，请求源帧 720 后 GetLeftOffset() 返回 576。
+      用任一帧号反推源入点都会错。
+    fix: "统一用 GetSourceStartTime() / GetSourceEndTime()，它们直接返回秒，跨帧率语义稳定"
+
+  - id: P8
+    issue: "AppendToTimeline 的 endFrame 是开区间"
+    impact: "按闭区间处理会让每个片段少一帧"
+    fix: "endFrame = startFrame + 帧数，不减 1。实测 240→288 得 48 帧"
+
+  - id: P9
+    issue: "时间线起始帧默认是 86400（01:00:00:00），不是 0"
+    impact: |
+      recordFrame 若不加这个偏移，第二个及以后的片段会被静默丢弃 ——
+      AppendToTimeline 对失败项返回 None 而不抛异常。
+    fix: "recordFrame = timeline.GetStartFrame() + 目标帧；并显式检查返回值中的 None"
+
+  - id: P10
+    issue: "AppendToTimeline 只能在时间线末端追加，无法填补轨道中间的空洞"
+    impact: |
+      ★ 架构级约束 ★
+      「删掉变化的片段再插回原位」这条增量更新路线走不通，该位置返回 None。
+    fix: |
+      时间线总是全量重建（按时间线位置升序放置）；
+      增量下沉到渲染层 —— compiler 报告 changed_ranges，只渲变化区间。
+      在 Resolve 里搭时间线是廉价的，渲染才是昂贵的。
+
+  - id: P11
+    issue: "源帧数按「入点 floor + 出点 ceil」计算会让片段多出一帧"
+    impact: "实测 29.97 素材取 2.0s 得 61 源帧，套格到 24fps 后是 49 帧而非 48"
+    fix: "按时长取帧：n = duration_frames(in, duration)，end = start + n"

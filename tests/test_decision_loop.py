@@ -635,6 +635,7 @@ def test_creative_contract_persists_and_gates_production(workspace: Path, monkey
         "payoff": "领域展开兑现力量反差",
         "ending_aftertaste": "黑场余响",
         "edit_mode": "arc",
+        "cut_technique": "anchor-smooth",
         "visual_motif": "blue_eye_light",
         "sound_strategy": "quiet_dialogue_to_impact",
         "must_include": ["eye reveal"],

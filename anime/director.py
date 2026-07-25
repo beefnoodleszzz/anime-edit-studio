@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 import numpy as np
 
 from . import db, editspec
@@ -18,6 +19,60 @@ SLOT_PROMPTS = {
     "build": "a character medium shot, tension building, movement",
     "ending": "a lonely melancholic silhouette, quiet, character from behind, somber",
 }
+
+
+ANCHOR_TAGS = ("portrait", "close-up", "upper_body", "looking_at_viewer", "solo")
+
+
+def _anchor_score(c) -> float:
+    """anchor-smooth 选镜分:正脸可读(WD 构图标签) + 主体居中(reframe 位移小)。
+
+    对标顶尖单角色高光段的手艺:每刀主体都落在同一屏幕位置/景别,硬切也丝滑。
+    """
+    tg = c.get("tags") or ""
+    s = sum(t in tg for t in ANCHOR_TAGS) / len(ANCHOR_TAGS)
+    s += max(0.0, 0.5 - abs(c.get("reframe_x") or 0.0))
+    return s
+
+
+def _normalize_technique(cut_technique: str | None) -> str | None:
+    if not cut_technique:
+        return None
+    t = cut_technique.strip().lower().replace("_", "-")
+    if t not in ("anchor-smooth", "micro-pushpull", "whip-drag"):
+        raise ValueError(
+            f"未知剪辑手法: {cut_technique}"
+            "(可选 anchor-smooth | micro-pushpull | whip-drag)"
+        )
+    return t
+
+
+def _reference_cut_steps(project_id: str) -> list[float]:
+    """Load the reusable beat-length phrase produced by `reference analyze`."""
+    from . import config
+
+    path = config.PROJECTS / project_id / "reference-dna.json"
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text())
+        units = payload.get("rhythm_grammar", {}).get("shot_units") or []
+        return [float(value) for value in units if 0.5 <= float(value) <= 8.0]
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return []
+
+
+def _cuts_from_reference(n: int, units: list[float]) -> list[int]:
+    """Map a reference phrase onto the target beat grid without copying timestamps."""
+    if n < 2 or not units:
+        return []
+    cuts, beat_index, phrase_index = [], 0, 0
+    while beat_index < n - 1:
+        cuts.append(beat_index)
+        step = max(1, int(round(units[phrase_index % len(units)])))
+        beat_index += step
+        phrase_index += 1
+    return cuts
 
 
 def _hdir(motion_dir: str | None) -> int:
@@ -47,6 +102,55 @@ def _apply_motion_whips(shots, dirs) -> None:
             s.transition = "whipLeft"
         elif h < 0:
             s.transition = "whipRight"
+
+
+def _apply_exit_smears(shots) -> None:
+    """给每个「入场 whip」镜的上一镜镜尾补同名同向「出镜拖尾」,合成完整两段式甩镜
+    (出镜糊出去→切→入镜糊进来,同向连续)。渲染器 exit_transition 取入场同名即续同向。
+    只在上一镜够长(≥8 帧)时施加,避免短镜整段糊成一团;不新增/改动入场转场。
+    """
+    for i in range(1, len(shots)):
+        s = shots[i]
+        if s.transition not in ("whipLeft", "whipRight"):
+            continue
+        prev = shots[i - 1]
+        if prev.duration_in_frames < 8 or prev.exit_transition != "none":
+            continue
+        prev.exit_transition = s.transition
+        prev.exit_intensity = s.transition_intensity or 0.6
+
+
+def _apply_pushpull_hook(shots, sections, fps) -> None:
+    """micro-pushpull 招牌钩子:开场若干镜连续「加速推镜」,把观众从环境/剪影一路推进到
+    最紧的脸/眼特写,落在段末——复现参考片「穿发丝→眼睛落拍」的一镜到底推入感。
+    全 pushIn、速度递增、camera_from/to 线性接力;末镜微减速坐实落拍。
+    """
+    idx = [i for i, sec in enumerate(sections) if sec == "opening"]
+    if len(idx) < 2:
+        return
+    v0, v1, m = 0.05, 0.13, len(idx)                 # 起手慢、末段快(加速冲进特写)
+    for j, i in enumerate(idx):
+        s = shots[i]
+        v = v0 + (v1 - v0) * (j / (m - 1))
+        amp = min(v * (s.duration_in_frames / fps), 0.14)
+        s.camera_from, s.camera_to = 1.0, 1.0 + amp
+        s.camera_move, s.camera_amount = "none", 0.0
+        s.transition, s.transition_intensity = "none", 0.0
+        s.effects = []
+        s.ramp = "decel" if j == m - 1 else "none"
+
+
+def _tightness(c: dict) -> int:
+    """镜头景别紧度(WD 构图标签):大远景/全身 松 → 特写 紧。用于 micro-pushpull 钩子
+    把开场按 松→紧 排序,让连续推镜逐步逼近脸/眼。"""
+    tg = c.get("tags") or ""
+    if "close-up" in tg:
+        return 3
+    if "portrait" in tg or "upper_body" in tg:
+        return 2
+    if "full_body" in tg or "wide" in tg or "scenery" in tg:
+        return 0
+    return 1
 
 
 def classify_slots(asset_id: str, force: bool = False) -> int:
@@ -160,14 +264,57 @@ def _pick(by_slot: dict, want: str, used: list, cursors: dict,
     raise ValueError("无候选")
 
 
-def _make_shot(c, sources, start_f, dur, k, section, is_down, energy, fps, speed=1.0) -> editspec.Shot:
+def _make_shot(c, sources, start_f, dur, k, section, is_down, energy, fps, speed=1.0,
+               technique: str | None = None) -> editspec.Shot:
     fast = (c.get("motion_mag") or 0) > 0.8
     # 长镜可能超出片段末尾 → 播过片尾会黑;把源起点回退,保证足够源可播
     needed = dur / fps + 0.1
     src_in = min(c["start_sec"], max(0.0, c.get("clip_dur", 1e9) - needed))
     eff, cam, amt, tr, ti, ramp = [], "pushIn", 0.08, "none", 0.0, "none"
+    cfrom, cto = 0.0, 0.0                     # 连续推镜起止 scale(>0 时线性,覆盖 camera_move)
+    exit_tr, exit_ti = "none", 0.0
 
-    if section == "opening":                       # 钩子:hero 长镜,稳,微辉光
+    if technique == "anchor-smooth":
+        # 锚点丝滑:全程硬切零特效帧,丝滑感来自选镜纪律(正脸/主体居中/同景别),
+        # 不来自转场。只保留不打断锚点的轻运镜与段落标点(开场微辉光/收尾暗角)。
+        cam, amt = "pushIn", 0.06
+        if section == "opening":
+            eff = [editspec.Effect(type="glow", intensity=0.2)]
+            amt = 0.10
+        elif section == "ending":
+            cam, amt = "pushOut", 0.10
+            eff = [editspec.Effect(type="vignette", intensity=0.3)]
+            ramp = "smooth"
+        elif section == "climax" and fast:
+            ramp = "decel"
+    elif technique == "micro-pushpull":
+        # 单角色微推拉:连续「线性」推镜(camera_from→camera_to),匀速、无 ease-in-out
+        # 归零,跨剪辑点同向接力读作一镜连续推——这是替换旧「机械钟摆」的关键。
+        # 以推近为主、间歇拉远(推拉的"拉")、每组留一次真静止破节律。开场钩子由
+        # _apply_pushpull_hook 覆写成「加速推入特写」。不靠闪白/甩镜/RGB 分离。
+        tr, ti, eff, ramp, cam, amt = "none", 0.0, [], "none", "none", 0.0
+        seconds = dur / fps
+        amp = min(0.055 * seconds, 0.06)                 # 匀速手感;长镜不过冲
+        if section == "ending":
+            cfrom, cto = 1.0 + amp * 0.8, 1.0            # 收束拉远
+        elif k % 7 == 6:
+            cfrom, cto = 0.0, 0.0                        # 每 7 镜一次真静止
+        elif k % 3 == 2:
+            cfrom, cto = 1.0 + amp, 1.0                  # 间歇拉远
+        else:
+            cfrom, cto = 1.0, 1.0 + amp                  # 推近为主
+    elif technique == "whip-drag" and section in ("build", "climax"):
+        # 甩镜拉扯:build+climax 每刀甩镜(下拍→闪切),同向由 _apply_motion_whips 续接、
+        # 上一镜镜尾由 _apply_exit_smears 补出镜拖尾,合成完整两段式甩镜。密度远高于默认。
+        eff = [editspec.Effect(type="rgbSplit", intensity=0.4 if fast else 0.25)]
+        if is_down:
+            tr, ti = "flash", 0.6
+        else:
+            tr, ti = ("whipLeft" if k % 2 else "whipRight"), 0.6
+            eff.append(editspec.Effect(type="shake", intensity=0.35 if fast else 0.22))
+        cam, amt = "pushIn", 0.07
+        ramp = "decel" if fast else "none"
+    elif section == "opening":                     # 钩子:hero 长镜,稳,微辉光
         cam, amt = "pushIn", 0.12
         eff = [editspec.Effect(type="glow", intensity=0.25)]
         tr, ti = ("flash", 0.4) if k == 0 else ("none", 0.0)
@@ -179,7 +326,8 @@ def _make_shot(c, sources, start_f, dur, k, section, is_down, energy, fps, speed
         eff = [editspec.Effect(type="rgbSplit", intensity=0.5 if fast else 0.3)]
         if is_down:
             tr, ti = "flash", 0.6
-        elif fast:
+        elif fast or technique == "whip-drag":
+            # whip-drag:高潮段每刀甩镜拉扯(不只快镜),左右交替由 _apply_motion_whips 续接运动
             tr, ti = ("whipLeft" if k % 2 else "whipRight"), 0.6
             eff.append(editspec.Effect(type="shake", intensity=0.4))
         ramp = "decel" if fast else "none"
@@ -194,23 +342,27 @@ def _make_shot(c, sources, start_f, dur, k, section, is_down, energy, fps, speed
         id=f"{c['shot_id']}@{k}", src=sources[c["asset_id"]],
         source_in_sec=round(src_in, 3), start_frame=start_f, duration_in_frames=dur,
         speed=speed, effects=eff, camera_move=cam, camera_amount=amt,
-        transition=tr, transition_intensity=ti, ramp=ramp,
+        camera_from=cfrom, camera_to=cto,
+        transition=tr, transition_intensity=ti,
+        exit_transition=exit_tr, exit_intensity=exit_ti, ramp=ramp,
         reframe_x=c.get("reframe_x", 0.0), fill_mode=c.get("fill_mode", "crop"),
     )
 
 
-def _make_showcase_shot(c, sources, start_f, dur, k, is_down, energy, fps) -> editspec.Shot:
+def _make_showcase_shot(c, sources, start_f, dur, k, is_down, energy, fps,
+                        technique: str | None = None) -> editspec.Shot:
     """Showcase 混剪镜头:恒定电影调 + 每刀落拍冲击转场(下拍闪、否则甩镜/变焦punch 交替)。"""
     fast = (c.get("motion_mag") or 0) > 0.8
     needed = dur / fps + 0.1
     src_in = min(c["start_sec"], max(0.0, c.get("clip_dur", 1e9) - needed))
     eff = [editspec.Effect(type="rgbSplit", intensity=0.4 if fast else 0.25)]
-    # 每刀必上转场:下拍→闪切;快镜→甩镜(带抖);其余→冲击变焦
+    # 每刀必上转场:下拍→闪切;whip-drag/快镜→甩镜(带抖);其余→冲击变焦。
+    # whip-drag 混剪:非下拍一律甩镜,把 A 那种同向甩切拉扯做满(出镜拖尾另由 _apply_exit_smears 补)。
     if is_down:
         tr, ti = "flash", 0.6
-    elif fast:
+    elif technique == "whip-drag" or fast:
         tr, ti = ("whipLeft" if k % 2 else "whipRight"), 0.6
-        eff.append(editspec.Effect(type="shake", intensity=0.35))
+        eff.append(editspec.Effect(type="shake", intensity=0.35 if fast else 0.2))
     else:
         tr, ti = "zoomPunch", 0.55
     # 运镜:短镜推近、长镜交替横摇,给静镜一点生命力
@@ -227,7 +379,9 @@ def _make_showcase_shot(c, sources, start_f, dur, k, is_down, energy, fps) -> ed
 
 def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
                        by_slot, pool, sources, fps, width, height, canvas,
-                       hook_text: str | None = None, hook_sub: str = "") -> dict:
+                       hook_text: str | None = None, hook_sub: str = "",
+                       technique: str | None = None,
+                       reference_steps: list[float] | None = None) -> dict:
     """混剪/showcase 体裁:冷开场王炸单帧钩子 → strobe 爆发 → 恒定密度能量锁拍。
 
     前3秒钩子公式(留住完播率):
@@ -288,11 +442,14 @@ def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
     # 2) 正片:能量驱动的变长握拍,但不做开场/结尾长握。
     # 密度判据用局部包络(邻拍滚动最大)而非逐拍 RMS——倍频网格(--beat-mult)的 offbeat
     # RMS 偏低,直接用会把 drop 拉稀成半拍切;取包络让高能段每拍都炸(0.325s@184BPM)。
-    cuts, i = [], 1
-    while i < n - 1:
-        cuts.append(i)
-        e = max(energy[max(0, i - 1):i + 2])
-        i += 1 if e > 0.45 else 2 if e > 0.28 else 3
+    reference_steps = reference_steps or []
+    cuts = [index + 1 for index in _cuts_from_reference(n - 1, reference_steps)]
+    if not cuts:
+        cuts, i = [], 1
+        while i < n - 1:
+            cuts.append(i)
+            e = max(energy[max(0, i - 1):i + 2])
+            i += 1 if e > 0.45 else 2 if e > 0.28 else 3
 
     for k, bi in enumerate(cuts):
         c = _pick(by_slot, "climax" if energy[bi] > 0.5 else "build", used, cursors,
@@ -305,11 +462,13 @@ def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
         start_f = off + round((beats[bi] - t0) * fps)
         dur = max(round((beats[end_bi] - beats[bi]) * fps), 1)
         shots.append(_make_showcase_shot(c, sources, start_f, dur, kk,
-                                         beats[bi] in downbeats, energy[bi], fps))
+                                         beats[bi] in downbeats, energy[bi], fps,
+                                         technique=technique))
         dirs.append(c.get("motion_dir"))
         kk += 1
 
     _apply_motion_whips(shots, dirs)
+    _apply_exit_smears(shots)                          # whip-drag 混剪:入场 whip 补出镜拖尾
     total = shots[-1].start_frame + shots[-1].duration_in_frames
     if total / fps < 20:
         raise ValueError("交付剪辑不得短于 20 秒；请扩大音频窗口")
@@ -341,6 +500,7 @@ def _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
     return {"editspec": str(path), "shots": len(shots), "mode": "showcase",
             "canvas": canvas, "width": width, "height": height,
             "strobe": n_strobe, "cold_open": cold is not None,
+            "reference_rhythm_used": bool(reference_steps),
             "hook_text": hook_text or "", "duration_s": round(total / fps, 1),
             "audio_start_s": round(t0, 3)}
 
@@ -351,9 +511,16 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
            duration_s: float | None = None, fps: int = 60, mode: str = "arc",
            fill: str = "crop", canvas: str = "4x5", width: int | None = None,
            height: int | None = None,
-           hook_text: str | None = None, hook_sub: str = "") -> dict:
+           hook_text: str | None = None, hook_sub: str = "",
+           cut_technique: str | None = None) -> dict:
     from . import search
 
+    technique = _normalize_technique(cut_technique)
+    if technique in ("anchor-smooth", "micro-pushpull") and mode == "showcase":
+        raise ValueError(
+            f"showcase 的体裁标识就是每刀转场,与 {technique} 矛盾;"
+            "单角色硬切高光请用 --mode arc,或改选 whip-drag"
+        )
     if duration_s is not None and duration_s < 20:
         raise ValueError("交付剪辑不得短于 20 秒；--duration 必须至少为 20")
     if asset_id and len({part.strip() for part in asset_id.split(",") if part.strip()}) < 2:
@@ -424,29 +591,47 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     by_slot.get("ending", []).sort(
         key=lambda c: ((c.get("brightness") or 0) < 0.06, c.get("motion_mag") or 0))
     by_slot.get("opening", []).sort(key=lambda c: (-(c.get("aesthetic") or 0), -(c.get("sharpness") or 0)))
+    if technique in ("anchor-smooth", "micro-pushpull"):
+        # 锚点丝滑的丝滑感一半在选镜:正脸可读+主体居中优先,其后才轮到烈度/美学
+        for lst in by_slot.values():
+            lst.sort(key=lambda c: -_anchor_score(c))
+    if technique == "micro-pushpull":
+        # 钩子按景别 松→紧 排序:连续推镜逐步逼近脸/眼特写(_apply_pushpull_hook 会加速这段)
+        by_slot.get("opening", []).sort(key=_tightness)
 
+    reference_steps = _reference_cut_steps(project_id)
     if mode == "showcase":
         return _assemble_showcase(project_id, beatmap, beats, energy, downbeats,
                                   by_slot, pool, sources, fps, out_w, out_h, orientation,
-                                  hook_text=hook_text, hook_sub=hook_sub)
+                                  hook_text=hook_text, hook_sub=hook_sub, technique=technique,
+                                  reference_steps=reference_steps)
 
     asset_cycle = list(dict.fromkeys(c["asset_id"] for c in pool))
     diversity_asset = min(asset_cycle, key=lambda asset: sum(c["asset_id"] == asset for c in pool))
 
-    open_end = max(1, int(n * 0.08))
+    # 微推拉钩子要多镜「加速推入特写」,故开场窗口更宽、切得更密(≥3 镜给 _apply_pushpull_hook 加速)
+    open_end = max(3, int(n * 0.14)) if technique == "micro-pushpull" else max(1, int(n * 0.08))
     end_start = int(n * 0.86)
 
-    # 能量驱动的切点(变长握拍)
-    cuts, i = [], 0
-    while i < n - 1:
-        cuts.append(i)
-        if i < open_end:
-            i += 4                                  # 开场长镜
-        elif i >= end_start:
-            i += 6                                  # 结尾长镜
-        else:
-            e = energy[i]
-            i += 1 if e > 0.6 else 2 if e > 0.32 else 3
+    # A project-level reference supplies the phrase shape. Without one, retain the
+    # energy-driven fallback so existing projects stay deterministic.
+    cuts = _cuts_from_reference(n, reference_steps)
+    if not cuts:
+        cuts, i = [], 0
+        body_shots = 0
+        while i < n - 1:
+            cuts.append(i)
+            if i < open_end:
+                i += 2 if technique == "micro-pushpull" else 4
+            elif i >= end_start:
+                i += 6
+            else:
+                e = energy[i]
+                if technique == "micro-pushpull" and body_shots > 0 and body_shots % 7 == 0:
+                    i += 4
+                else:
+                    i += 1 if e > 0.6 else 2 if e > 0.32 else 3
+                body_shots += 1
 
     # 能量峰所在切点 → hero 真慢镜落地(speed 0.5,render 自动 RIFE 平滑)
     peak_bi = int(np.argmax(energy))
@@ -459,6 +644,7 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     dirs: list = []                          # 每镜源画面的光流方向,供 whip 续接运动方向
     t0 = beats[cuts[0]]
     structure = {"opening": 0, "build": 0, "climax": 0, "ending": 0}
+    sec_list: list[str] = []
     for k, bi in enumerate(cuts):
         if bi < open_end:
             section = "opening"
@@ -467,6 +653,7 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
         else:
             section = "climax" if energy[bi] > 0.55 else "build"
         structure[section] += 1
+        sec_list.append(section)
         # 高潮每三切优先换一次来源，避免排序一直吸附同一素材。
         prefer_asset = None
         if len(asset_cycle) > 1 and section == "climax" and k % 3 == 0:
@@ -482,10 +669,14 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
         dur = max(round((beats[end_bi] - beats[bi]) * fps), 1)
         speed = 0.5 if (k == peak_cut and section == "climax") else 1.0
         shots.append(_make_shot(c, sources, start_f, dur, k,
-                                section, beats[bi] in downbeats, energy[bi], fps, speed))
+                                section, beats[bi] in downbeats, energy[bi], fps, speed,
+                                technique=technique))
         dirs.append(c.get("motion_dir"))
 
     _apply_motion_whips(shots, dirs)
+    if technique == "micro-pushpull":
+        _apply_pushpull_hook(shots, sec_list, fps)     # 招牌:开场加速推入特写
+    _apply_exit_smears(shots)                          # 给入场 whip 补出镜拖尾(whip-drag 完整甩镜)
     total = shots[-1].start_frame + shots[-1].duration_in_frames
     if total / fps < 20:
         raise ValueError("交付剪辑不得短于 20 秒；请扩大音频窗口")
@@ -497,5 +688,7 @@ def direct(project_id: str, beatmap: dict, query: str, *, asset_id: str | None =
     )
     path = editspec.save(spec, name="arc")
     return {"editspec": str(path), "shots": len(shots), "structure": structure,
+            "cut_technique": technique or "legacy-heuristic",
+            "reference_rhythm_used": bool(reference_steps),
             "canvas": orientation, "width": out_w, "height": out_h,
             "duration_s": round(total / fps, 1), "audio_start_s": round(t0, 3)}

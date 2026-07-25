@@ -40,8 +40,12 @@ class Shot(BaseModel):
     # M5 运动设计
     camera_move: str = "none"       # none|pushIn|pushOut|panLeft|panRight|panUp|panDown
     camera_amount: float = 0.0      # 运镜幅度(~0.06–0.14)
-    transition: str = "none"        # none|flash|whipLeft|whipRight|zoomBlur(入场转场)
+    camera_from: float = 0.0        # 连续推镜起始 scale 倍率(>0 且 camera_to>0 时启用,线性,覆盖 camera_move)
+    camera_to: float = 0.0          # 连续推镜结束 scale 倍率
+    transition: str = "none"        # none|flash|whipLeft|whipRight|zoomBlur|zoomPunch(入场转场)
     transition_intensity: float = 0.0
+    exit_transition: str = "none"   # none|whipLeft|whipRight(镜尾出镜拖尾,与下一镜入场 whip 合成完整甩镜)
+    exit_intensity: float = 0.0
     ramp: str = "none"              # none|decel|accel|smooth(速度曲线;配合 speed 作平均倍率)
     reframe_x: float = 0.0          # 主体感知横向重构图偏移(-1..1,跨画幅时防切主体)
     fill_mode: str = "crop"         # crop=满屏 | fit_blur=毛玻璃背景+完整画面居中(保构图)

@@ -1,0 +1,699 @@
+{
+  "id": "kimetsu-zenitsu-arc",
+  "fps": 60,
+  "width": 3072,
+  "height": 3840,
+  "duration_in_frames": 1439,
+  "shots": [
+    {
+      "id": "6e44ae983e86-30@0",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_nced_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 71.28,
+      "start_frame": 0,
+      "duration_in_frames": 120,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "glow",
+          "intensity": 0.25,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.12,
+      "transition": "flash",
+      "transition_intensity": 0.4,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e8040f8451e4-115@1",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep03_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 262.095,
+      "start_frame": 120,
+      "duration_in_frames": 91,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.034,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "f9aaa3027c92-182@2",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep04_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 479.604,
+      "start_frame": 210,
+      "duration_in_frames": 91,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": -0.252,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "4059e92b3a41-9@3",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep02_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 22.231,
+      "start_frame": 301,
+      "duration_in_frames": 89,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "zoomBlur",
+      "transition_intensity": 0.45,
+      "ramp": "none",
+      "reframe_x": 0.105,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-387@4",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 1399.023,
+      "start_frame": 390,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.052,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-274@5",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 999.624,
+      "start_frame": 450,
+      "duration_in_frames": 89,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": -0.129,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-130@6",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 458.291,
+      "start_frame": 539,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "zoomBlur",
+      "transition_intensity": 0.45,
+      "ramp": "none",
+      "reframe_x": -0.254,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-175@7",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 639.18,
+      "start_frame": 599,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": -0.17,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "f9aaa3027c92-295@8",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep04_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 812.77,
+      "start_frame": 628,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.064,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-215@9",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 818.776,
+      "start_frame": 688,
+      "duration_in_frames": 61,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "zoomBlur",
+      "transition_intensity": 0.45,
+      "ramp": "none",
+      "reframe_x": -0.131,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e8040f8451e4-73@10",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep03_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 167.876,
+      "start_frame": 750,
+      "duration_in_frames": 31,
+      "speed": 0.5,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": 0.16,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-20@11",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 93.594,
+      "start_frame": 780,
+      "duration_in_frames": 88,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.071,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-44@12",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 162.746,
+      "start_frame": 868,
+      "duration_in_frames": 61,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "zoomBlur",
+      "transition_intensity": 0.45,
+      "ramp": "none",
+      "reframe_x": 0.053,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-262@13",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 983.274,
+      "start_frame": 929,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": -0.247,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-182@14",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 675.466,
+      "start_frame": 960,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": -0.111,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-26@15",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 120.996,
+      "start_frame": 989,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": -0.377,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "4059e92b3a41-151@16",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep02_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 433.683,
+      "start_frame": 1020,
+      "duration_in_frames": 59,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.075,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "f9aaa3027c92-183@17",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep04_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 480.772,
+      "start_frame": 1078,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": 0.349,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-395@18",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 1410.451,
+      "start_frame": 1109,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "zoomBlur",
+      "transition_intensity": 0.45,
+      "ramp": "none",
+      "reframe_x": -0.127,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-169@19",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 624.707,
+      "start_frame": 1169,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.22,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.08,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.042,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "f9aaa3027c92-186@20",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s2/kimetsu_s2_ep04_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 490.323,
+      "start_frame": 1229,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.5,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.08,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "decel",
+      "reframe_x": 0.011,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "89a293af79cf-24@21",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/kimetsu/s1/kimetsu_s1_ep17_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 111.945,
+      "start_frame": 1259,
+      "duration_in_frames": 180,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "vignette",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushOut",
+      "camera_amount": 0.12,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "ramp": "smooth",
+      "reframe_x": 0.016,
+      "fill_mode": "crop"
+    }
+  ],
+  "audio": [
+    {
+      "id": "bgm",
+      "src": "/Users/zhangxiaolong/Desktop/python-power/downloads/media/NYCK CAUTION - PRESSURE! (Instrumental) [1768533966].wav",
+      "start_frame": 0,
+      "trim_start_frames": 458,
+      "gain_db": 0.0
+    }
+  ],
+  "overlays": []
+}

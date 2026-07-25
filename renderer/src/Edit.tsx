@@ -4,6 +4,7 @@ import {
   Sequence,
   staticFile,
   useCurrentFrame,
+  useVideoConfig,
 } from "remotion";
 import { flashOpacity, shotTransform, transitionFilter } from "./effects/apply";
 import { EffectStack } from "./effects/EffectStack";
@@ -16,7 +17,8 @@ const resolve = (src: string): string =>
 
 const ShotLayer: React.FC<{ shot: Shot }> = ({ shot }) => {
   const frame = useCurrentFrame();
-  const transform = shotTransform(shot, frame);
+  const { width } = useVideoConfig();
+  const transform = shotTransform(shot, frame, width);
   const flash = flashOpacity(shot, frame);
   const tFilter = transitionFilter(shot, frame);
   return (

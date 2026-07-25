@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from pathlib import Path
 
@@ -59,6 +60,7 @@ def analyze_reference(project_id: str, video_path: str) -> dict:
         index += 1
     capture.release()
 
+    rhythm_grammar = _rhythm_grammar(source, shot_lengths, cut_points)
     hook_length = shot_lengths[0] if shot_lengths else 0.0
     climax_density = round(len([length for length in shot_lengths if length <= statistics.median(shot_lengths or [1.0])]) / max(len(shot_lengths), 1), 4)
     ending_length = shot_lengths[-1] if shot_lengths else 0.0
@@ -78,12 +80,83 @@ def analyze_reference(project_id: str, video_path: str) -> dict:
         "hook_length": hook_length,
         "climax_shot_density": climax_density,
         "ending_shot_length": ending_length,
+        "rhythm_grammar": rhythm_grammar,
     }
     out = config.PROJECTS / project_id / "reference-dna.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(dna, ensure_ascii=False, indent=2))
     dna["output"] = str(out)
     return dna
+
+
+def _rhythm_grammar(
+    source: Path,
+    shot_lengths: list[float],
+    cut_points: list[float],
+) -> dict:
+    """Convert raw scene lengths into a beat-relative pattern the director can reuse."""
+    try:
+        from . import beat
+
+        beatmap = beat.analyze(str(source))
+        beats = beatmap.get("beats") or []
+    except Exception:  # Reference video can be silent or use an unsupported audio codec.
+        beatmap, beats = {}, []
+
+    intervals = [right - left for left, right in zip(beats, beats[1:])]
+    beat_sec = statistics.median(intervals) if intervals else 0.0
+    if beat_sec <= 0:
+        return {
+            "bpm": 0.0,
+            "beat_sec": 0.0,
+            "shot_units": [],
+            "cut_alignment": [],
+            "aligned_cut_ratio": 0.0,
+            "clusters": [],
+        }
+
+    # Half-beat precision preserves deliberate syncopation without copying frame noise.
+    shot_units = [max(0.5, round((length / beat_sec) * 2) / 2) for length in shot_lengths]
+    alignments = []
+    for cut in cut_points:
+        nearest = min(beats, key=lambda value: abs(value - cut))
+        delta_beats = (cut - nearest) / beat_sec
+        alignments.append(round(delta_beats, 3))
+
+    clusters = _duration_clusters(shot_units)
+    aligned = sum(abs(delta) <= 0.18 for delta in alignments)
+    return {
+        "bpm": round(60.0 / beat_sec, 2),
+        "beat_sec": round(beat_sec, 4),
+        "shot_units": shot_units,
+        "cut_alignment": alignments,
+        "aligned_cut_ratio": round(aligned / max(len(alignments), 1), 4),
+        "median_shot_units": round(statistics.median(shot_units), 2) if shot_units else 0.0,
+        "clusters": clusters,
+    }
+
+
+def _duration_clusters(units: list[float]) -> list[dict]:
+    """Summarize runs as burst/breath phrases rather than one global density score."""
+    if not units:
+        return []
+    labels = ["burst" if value <= 1.25 else "breath" for value in units]
+    result = []
+    start = 0
+    for index in range(1, len(labels) + 1):
+        if index < len(labels) and labels[index] == labels[start]:
+            continue
+        values = units[start:index]
+        result.append(
+            {
+                "kind": labels[start],
+                "start_shot": start,
+                "shot_count": len(values),
+                "total_beats": round(math.fsum(values), 2),
+            }
+        )
+        start = index
+    return result
 
 
 def _alternation_score(curve: list[float]) -> float:

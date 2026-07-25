@@ -153,6 +153,9 @@ def direct_cmd(project_id: str, audio: str = typer.Option(..., "--audio"),
                exclude: str = typer.Option("", "--exclude", help="剔除的 shot id(逗号分隔;审片去字幕/OP·ED/跑题镜头)"),
                start_s: float = typer.Option(0.0, "--start"), duration_s: float = typer.Option(None, "--duration"),
                mode: str = typer.Option("arc", "--mode", help="arc=情绪弧(钩子→高潮→收束) | showcase=混剪(闪切开场+恒定锁拍+每刀转场)"),
+               cut_technique: str = typer.Option(
+                   None, "--cut-technique",
+                   help="anchor-smooth=锚点硬切 | micro-pushpull=单角色微推拉硬切 | whip-drag=甩镜拉扯;不传则读 brief 合同"),
                fill: str = typer.Option("crop", "--fill", help="默认主体跟踪裁切 | auto=按素材决定 | fit_blur=完整画面"),
                canvas: str = typer.Option("4x5", "--canvas", help="默认4x5=3072x3840真4K | auto | landscape | portrait | square"),
                width: int = typer.Option(None, "--width"),
@@ -163,7 +166,10 @@ def direct_cmd(project_id: str, audio: str = typer.Option(..., "--audio"),
                hook_sub: str = typer.Option("", "--hook-sub", help="钩子副行(角色名/tagline,小字)"),
                json: bool = typer.Option(False, "--json")):
     """AI 导演编排 → editspec.arc.json。--mode arc 情绪弧 / --mode showcase 高速混剪。"""
-    from . import beat, director
+    from . import beat, decision_loop, director
+    if cut_technique is None:
+        brief = decision_loop.get_brief(project_id) or {}
+        cut_technique = (brief.get("creative_contract_json") or {}).get("cut_technique")
     bm = beat.analyze(audio, beat_mult=beat_mult)
     beat.save(project_id, bm)
     _out({"project": project_id, "bpm": bm["bpm"],
@@ -171,7 +177,8 @@ def direct_cmd(project_id: str, audio: str = typer.Option(..., "--audio"),
                             exclude_ids={s for s in exclude.split(",") if s},
                             start_s=start_s, duration_s=duration_s, fps=fps, mode=mode, fill=fill,
                             canvas=canvas, width=width, height=height,
-                            hook_text=hook or None, hook_sub=hook_sub)}, json)
+                            hook_text=hook or None, hook_sub=hook_sub,
+                            cut_technique=cut_technique)}, json)
 
 
 @app.command("slowmo")
@@ -324,10 +331,14 @@ def sound_cmd(
 
 
 @app.command("master")
-def master_cmd(path: str, json: bool = typer.Option(False, "--json")):
-    """母带:loudnorm -10 LUFS + 保持原画幅的平台版导出。"""
+def master_cmd(
+    path: str,
+    platform: bool = typer.Option(False, "--platform"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """母带:loudnorm -10 LUFS；默认只输出 master，平台版需显式请求。"""
     from . import master
-    _out(master.master(path), json)
+    _out(master.master(path, platform=platform), json)
 
 
 @app.command("endcard")
@@ -625,6 +636,7 @@ def brief_create_cmd(
     payoff: str = typer.Option(None, "--payoff"),
     ending: str = typer.Option(None, "--ending-aftertaste"),
     edit_mode: str = typer.Option(None, "--edit-mode"),
+    cut_technique: str = typer.Option(None, "--cut-technique"),
     visual_motif: str = typer.Option(None, "--visual-motif"),
     sound_strategy: str = typer.Option(None, "--sound-strategy"),
     must_include: str = typer.Option("", "--must-include"),
@@ -651,6 +663,7 @@ def brief_create_cmd(
             "payoff": payoff,
             "ending_aftertaste": ending,
             "edit_mode": edit_mode,
+            "cut_technique": cut_technique,
             "visual_motif": visual_motif,
             "sound_strategy": sound_strategy,
             "must_include": [item.strip() for item in must_include.split(",") if item.strip()] or None,

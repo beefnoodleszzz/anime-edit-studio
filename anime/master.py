@@ -1,4 +1,4 @@
-"""母带与平台版:两遍 EBU R128 loudnorm(-10 LUFS / TP -1.0)+ 平台分辨率导出。"""
+"""母带:两遍 EBU R128 loudnorm(-10 LUFS / TP -1.0)，平台版按需导出。"""
 from __future__ import annotations
 
 import json
@@ -47,8 +47,8 @@ def _lut_path() -> str | None:
     return str(p) if p.exists() else None
 
 
-def master(src: str) -> dict:
-    """输出母版 + 保持原画幅的平台版；支持有声或明确静音交付。"""
+def master(src: str, *, platform: bool = False) -> dict:
+    """默认只输出母版；显式请求时再输出保持原画幅的平台版。"""
     src = str(Path(src).resolve())
     ffmpeg = config.tool("ffmpeg")
     outdir = Path(src).parent
@@ -83,29 +83,31 @@ def master(src: str) -> dict:
          *audio_args, "-movflags", "+faststart", str(master_path)],
         check=True)
 
-    # Platform copy caps landscape at 1920x1080 and portrait at 1080x1920,
-    # while preserving any cinematic/non-standard aspect ratio.
-    max_w, max_h = ((1920, 1080) if src_w >= src_h else (1080, 1920))
-    ratio = min(1.0, max_w / src_w, max_h / src_h)
-    plat_w = max(2, int(src_w * ratio) // 2 * 2)
-    plat_h = max(2, int(src_h * ratio) // 2 * 2)
-    platform_path = outdir / f"platform_{plat_w}x{plat_h}.mp4"
-    plat_vf = f"scale={plat_w}:{plat_h}:flags=lanczos" + (f",{lut_vf}" if lut_vf else "")
-    subprocess.run(
-        [ffmpeg, "-y", "-v", "error", "-i", src, "-vf", plat_vf,
-         "-c:v", "h264_videotoolbox", "-b:v", "12M", "-tag:v", "avc1",
-         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-         *audio_args, "-movflags", "+faststart", str(platform_path)],
-        check=True)
-
-    return {
+    result = {
         "has_audio": has_audio,
         "measured_lufs": float(meas["input_i"]) if meas else None,
         "target_lufs": TARGET_I,
         "master_bitrate_mbps": master_mbps,
         "lut": lut,
         "master": str(master_path),
-        "platform": str(platform_path),
-        "platform_width": plat_w,
-        "platform_height": plat_h,
     }
+    if platform:
+        # Optional compatibility copy; the normal delivery path is master-only.
+        max_w, max_h = ((1920, 1080) if src_w >= src_h else (1080, 1920))
+        ratio = min(1.0, max_w / src_w, max_h / src_h)
+        plat_w = max(2, int(src_w * ratio) // 2 * 2)
+        plat_h = max(2, int(src_h * ratio) // 2 * 2)
+        platform_path = outdir / f"platform_{plat_w}x{plat_h}.mp4"
+        plat_vf = f"scale={plat_w}:{plat_h}:flags=lanczos" + (f",{lut_vf}" if lut_vf else "")
+        subprocess.run(
+            [ffmpeg, "-y", "-v", "error", "-i", src, "-vf", plat_vf,
+             "-c:v", "h264_videotoolbox", "-b:v", "12M", "-tag:v", "avc1",
+             "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+             *audio_args, "-movflags", "+faststart", str(platform_path)],
+            check=True)
+        result.update({
+            "platform": str(platform_path),
+            "platform_width": plat_w,
+            "platform_height": plat_h,
+        })
+    return result

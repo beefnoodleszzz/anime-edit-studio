@@ -83,26 +83,29 @@ def finalize(editspec_path: str, *, shots: list[str] | None = None,
     steps["render"] = render.render(cur, preview=False, relink_master=False)
     steps["sound"] = sound.build(cur)
 
-    m = master.master(steps["sound"])
+    m = master.master(steps["sound"], platform=False)
     steps["master"] = m
-    platform = m["platform"]
+    delivery = m["master"]
     if endcard:
-        platform = endcard_mod.add(platform, text=endcard_text)
-        steps["endcard"] = platform
+        delivery = endcard_mod.add(
+            m["master"], text=endcard_text,
+            out=str(Path(m["master"]).with_name("master.endcard.mp4")),
+        )
+        steps["endcard"] = delivery
 
     spec_json = json.loads(Path(cur).read_text())
-    report = qa.qa(m["master"], expected_width=spec_json["width"],
+    report = qa.qa(delivery, expected_width=spec_json["width"],
                    expected_height=spec_json["height"], expected_audio=True)
     steps["qa"] = report
     if not report["pass"]:
         return {"project_id": project_id, "delivered": False,
                 "reason": "QA 硬项未通过,已停在交付前", "checks": report["checks"],
-                "master": m["master"], "steps": steps}
+                "master": delivery, "steps": steps}
 
     if clean:
         steps["clean"] = library.clean(project_id, apply=True)
 
     return {"project_id": project_id, "delivered": True,
-            "editspec": cur, "master": m["master"], "platform": platform,
+            "editspec": cur, "master": delivery,
             "width": spec_json["width"], "height": spec_json["height"],
             "steps": steps}

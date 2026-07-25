@@ -304,8 +304,8 @@ def validate_brief(project_id: str) -> dict:
     contract = brief.get("creative_contract_json") or {}
     required = (
         "content_lane", "audience_context", "viewer_promise", "payoff",
-        "ending_aftertaste", "edit_mode", "visual_motif", "sound_strategy",
-        "success_criteria",
+        "ending_aftertaste", "edit_mode", "cut_technique", "visual_motif",
+        "sound_strategy", "success_criteria",
     )
     missing = [key for key in required if not contract.get(key)]
     if not brief.get("character_query"):
@@ -319,7 +319,8 @@ def validate_brief(project_id: str) -> dict:
     summary = (
         f"{brief.get('character_query') or '未定主体'} · "
         f"{contract.get('content_lane') or '未定内容线'} / "
-        f"{contract.get('edit_mode') or '未定形态'} · "
+        f"{contract.get('edit_mode') or '未定形态'} / "
+        f"{contract.get('cut_technique') or '未定剪辑手法'} · "
         f"承诺：{contract.get('viewer_promise') or '未定'} → "
         f"兑现：{contract.get('payoff') or '未定'} → "
         f"余味：{contract.get('ending_aftertaste') or '未定'}"

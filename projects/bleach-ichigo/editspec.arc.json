@@ -1,0 +1,1173 @@
+{
+  "id": "bleach-ichigo",
+  "fps": 60,
+  "width": 1080,
+  "height": 1350,
+  "duration_in_frames": 1320,
+  "shots": [
+    {
+      "id": "e329ae0ed1a2-11@0",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 18.685,
+      "start_frame": 0,
+      "duration_in_frames": 30,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "glow",
+          "intensity": 0.28,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "none",
+      "transition_intensity": 0.0,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "decel",
+      "reframe_x": -0.031,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-116@1",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 273.023,
+      "start_frame": 30,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.028,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-74@2",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 129.329,
+      "start_frame": 35,
+      "duration_in_frames": 6,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-138@3",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 363.989,
+      "start_frame": 41,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": -0.01,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "49948ecd3b29-9@4",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep060_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 8.3,
+      "start_frame": 46,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.222,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e329ae0ed1a2-149@5",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 387.387,
+      "start_frame": 51,
+      "duration_in_frames": 6,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.337,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "49948ecd3b29-30@6",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep060_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 45.087,
+      "start_frame": 57,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.19,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e329ae0ed1a2-181@7",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 463.897,
+      "start_frame": 62,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.3,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-88@8",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 148.615,
+      "start_frame": 122,
+      "duration_in_frames": 61,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e329ae0ed1a2-182@9",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 469.869,
+      "start_frame": 183,
+      "duration_in_frames": 89,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.047,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-91@10",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 152.753,
+      "start_frame": 272,
+      "duration_in_frames": 89,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.25,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.2,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "a079ea905e78-160@11",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep294_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 357.691,
+      "start_frame": 362,
+      "duration_in_frames": 91,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-109@12",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 201.068,
+      "start_frame": 452,
+      "duration_in_frames": 91,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.25,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.2,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-246@13",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 678.469,
+      "start_frame": 543,
+      "duration_in_frames": 88,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.299,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "9563141c4f96-427@14",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/tybw/bleach_tybw_ep031_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 1259.633,
+      "start_frame": 630,
+      "duration_in_frames": 61,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "a079ea905e78-170@15",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep294_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 379.079,
+      "start_frame": 692,
+      "duration_in_frames": 91,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-13@16",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 13.347,
+      "start_frame": 782,
+      "duration_in_frames": 89,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.061,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e329ae0ed1a2-213@17",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 544.01,
+      "start_frame": 871,
+      "duration_in_frames": 60,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panLeft",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.127,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-254@18",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 698.656,
+      "start_frame": 931,
+      "duration_in_frames": 59,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.295,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-81@19",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 138.472,
+      "start_frame": 990,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "e329ae0ed1a2-195@20",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep292_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 506.773,
+      "start_frame": 1021,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.029,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "0d19b5337e3d-78@21",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep293_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 134.034,
+      "start_frame": 1050,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "9563141c4f96-95@22",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/tybw/bleach_tybw_ep031_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 180.18,
+      "start_frame": 1080,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-10@23",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 9.092,
+      "start_frame": 1110,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.004,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "a079ea905e78-220@24",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep294_bd_1080p_30fps_hevc.mkv",
+      "source_in_sec": 537.103,
+      "start_frame": 1140,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-347@25",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 1003.044,
+      "start_frame": 1170,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.063,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "9563141c4f96-443@26",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/tybw/bleach_tybw_ep031_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 1327.409,
+      "start_frame": 1200,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-268@27",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 767.934,
+      "start_frame": 1231,
+      "duration_in_frames": 31,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipRight",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.031,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "9563141c4f96-423@28",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/tybw/bleach_tybw_ep031_web_1080p_24fps_avc.mkv",
+      "source_in_sec": 1246.871,
+      "start_frame": 1262,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "exit_transition": "whipLeft",
+      "exit_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.0,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "b54af5f691a7-307@29",
+      "src": "/Users/zhangxiaolong/Desktop/anime-material-library/sources/bleach/original/bleach_original_ep061_bd_1080p_24fps_hevc.mkv",
+      "source_in_sec": 893.351,
+      "start_frame": 1291,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "camera_from": 0.0,
+      "camera_to": 0.0,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "exit_transition": "none",
+      "exit_intensity": 0.0,
+      "ramp": "none",
+      "reframe_x": 0.072,
+      "fill_mode": "crop"
+    }
+  ],
+  "audio": [
+    {
+      "id": "bgm",
+      "src": "/Users/zhangxiaolong/Desktop/python-power/downloads/media/NYCK CAUTION - PRESSURE! (Instrumental) [1768533966].wav",
+      "start_frame": 23,
+      "trim_start_frames": 0,
+      "gain_db": 0.0
+    }
+  ],
+  "overlays": [
+    {
+      "text": "黑崎一护",
+      "sub": "BLEACH",
+      "start_frame": 0,
+      "duration_in_frames": 46,
+      "style": "hook",
+      "anchor": "center"
+    }
+  ]
+}

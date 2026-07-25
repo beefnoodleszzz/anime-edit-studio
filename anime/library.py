@@ -158,7 +158,7 @@ def _human(num: int) -> str:
 def clean(project_id: str | None = None, *, apply: bool = False) -> dict:
     """回收可再生磁盘占用。默认只报告(dry-run),--apply 才真正删除。
 
-    永不触碰:sources_root、engine.sqlite、library/keyframes、母版与平台版成片、来源记录。
+    永不触碰:sources_root、engine.sqlite、library/keyframes、母版成片、来源记录。
     """
     targets: list[tuple[str, Path]] = []
     tmp = Path(os.environ.get("TMPDIR", "/tmp"))
@@ -169,7 +169,7 @@ def clean(project_id: str | None = None, *, apply: bool = False) -> dict:
         d = config.CACHE / name
         if d.exists():
             targets.append(("render_cache", d))
-    # 项目中间件(保留 master.mp4 / platform_*.mp4 / final editspec)。
+    # 项目中间件(保留 master*.mp4 / legacy platform_*.mp4 / final editspec)。
     if project_id:
         pdir = config.PROJECTS / project_id
         for pattern in ("*.staged.json", "*.smooth.json"):
@@ -201,5 +201,5 @@ def clean(project_id: str | None = None, *, apply: bool = False) -> dict:
         "reclaimable_bytes": total,
         "reclaimable": _human(total),
         "categories": {k: {**v, "size": _human(v["bytes"])} for k, v in categories.items()},
-        "preserved": ["sources_root", "engine.sqlite", "library/keyframes", "outputs/master.mp4", "outputs/platform_*.mp4"],
+        "preserved": ["sources_root", "engine.sqlite", "library/keyframes", "outputs/master*.mp4"],
     }

@@ -1,0 +1,1748 @@
+{
+  "id": "kimetsu-tanjiro-showcase",
+  "fps": 60,
+  "width": 3072,
+  "height": 3840,
+  "duration_in_frames": 1292,
+  "shots": [
+    {
+      "id": "c640f6a1ea69-277@0",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/101730d5c21d3b13.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 0,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.133,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-381@1",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/883f865abb748516.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 5,
+      "duration_in_frames": 4,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.082,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-258@2",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/3371d2202160cfe4.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 9,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.077,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-163@3",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/e4393af304de73f9.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 14,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.109,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-265@4",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/180e9c61ee8e782e.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 19,
+      "duration_in_frames": 4,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": 0.114,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-476@5",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/fb7cb7dbb2ea19e6.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 23,
+      "duration_in_frames": 5,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.14,
+      "transition": "flash",
+      "transition_intensity": 0.7,
+      "ramp": "none",
+      "reframe_x": -0.145,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-206@6",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/f9aa59845184ed1d.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 28,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.063,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-255@7",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/36ba56599e7cb480.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 54,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.081,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-221@8",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/81ee0e37ebb4212e.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 82,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.405,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-352@9",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/0b5ecba8ed775b18.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 109,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.039,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-338@10",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/19038afbe197acdd.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 135,
+      "duration_in_frames": 24,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.013,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-157@11",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/48f5556839e2d27f.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 159,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.134,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-257@12",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/0499281fcb4cf289.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 187,
+      "duration_in_frames": 29,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.146,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-340@13",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/b2c88ec4b6ab8bed.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 216,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.244,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-370@14",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/f62668d635fd455b.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 242,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.075,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-278@15",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/e2303c506298b92e.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 270,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.156,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-92@16",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/662af4c0e2d1a598.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 298,
+      "duration_in_frames": 25,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.106,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-200@17",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/faa23fc3dc93a03b.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 323,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.054,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-116@18",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/1c773c0478b4294f.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 351,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.019,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-223@19",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/e09af2470ec1dcf1.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 378,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.053,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-464@20",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/364869a15aeb8e08.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 405,
+      "duration_in_frames": 81,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "panRight",
+      "camera_amount": 0.07,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.052,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-86@21",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/08d2c49485412253.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 486,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.506,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-227@22",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/efb932cbde5f5805.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 514,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.196,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-11@23",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/e94d23830534850f.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 541,
+      "duration_in_frames": 25,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.278,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-288@24",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/b52f8c60d880ad12.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 566,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.18,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-358@25",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/b3cdc8587e50a711.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 594,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.393,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-212@26",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/a9bf602440eb12e6.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 620,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.076,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-51@27",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/690bb542d475089f.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 648,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.188,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-217@28",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/2af1bc51787dd8d4.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 674,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.115,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-264@29",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/35b859658936d47a.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 701,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.324,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-238@30",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/2bc4f52976dfa3d0.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 729,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.193,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-12@31",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/2cf101ec1bb3b97a.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 755,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.106,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-300@32",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/4dea8763d1c0ae8e.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 782,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.032,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-262@33",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/3643599d38af1ceb.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 808,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.727,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-219@34",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/05c47725414249e9.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 836,
+      "duration_in_frames": 25,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.121,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-321@35",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/89cd7a8008c06935.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 861,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.127,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-61@36",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/0ca592366c1b23c2.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 889,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.198,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-489@37",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/f13a42aebbfc6bf5.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 917,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.01,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-191@38",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/ff8d25ba88c0890c.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 943,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.3,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-271@39",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/496e6f878caf16b7.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 971,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.128,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-152@40",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/06545effdcd32874.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 998,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.255,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-474@41",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/fd46ad9bfd87a77a.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1024,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.302,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "c640f6a1ea69-266@42",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/4c2668e8a67d7dfb.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1050,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.22,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-112@43",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/505cfbafe0d7f11f.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1077,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.096,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-10@44",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/ead6e9e75e6aec01.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1103,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.026,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-263@45",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/da2225a8b3ab1dc5.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1131,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.01,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-479@46",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/dbec091924c3cc6a.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1159,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.251,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "339ef4ba6040-211@47",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/8719ee7c24486439.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1186,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.014,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-211@48",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/9a7733441ef4e808.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1213,
+      "duration_in_frames": 25,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "flash",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.268,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "bd033c25032a-381@49",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/8094244870d3bb13.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1239,
+      "duration_in_frames": 28,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipLeft",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": -0.131,
+      "fill_mode": "crop"
+    },
+    {
+      "id": "70a1fac8c848-333@50",
+      "src": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/cache/rife/863e68fde0a60824.mov",
+      "source_in_sec": 0.0,
+      "start_frame": 1266,
+      "duration_in_frames": 26,
+      "speed": 1.0,
+      "transform": {
+        "scale": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "rotate": 0.0
+      },
+      "effects": [
+        {
+          "type": "rgbSplit",
+          "intensity": 0.4,
+          "params": {}
+        },
+        {
+          "type": "shake",
+          "intensity": 0.35,
+          "params": {}
+        }
+      ],
+      "lut": null,
+      "matte": null,
+      "camera_move": "pushIn",
+      "camera_amount": 0.1,
+      "transition": "whipRight",
+      "transition_intensity": 0.6,
+      "ramp": "none",
+      "reframe_x": 0.189,
+      "fill_mode": "crop"
+    }
+  ],
+  "audio": [
+    {
+      "id": "bgm",
+      "src": "/Users/zhangxiaolong/Desktop/IRISOUT.mp3",
+      "start_frame": 0,
+      "trim_start_frames": 259,
+      "gain_db": 0.0
+    }
+  ]
+}

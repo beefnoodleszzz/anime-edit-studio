@@ -251,6 +251,8 @@ capabilities:
 
   gui_automation:
     path: gui_fallback
+    probed: false
+    verified: false
     enabled: false            # 默认禁用，需显式开关且必须记录
     note: "MASTER PLAN §25：最后手段，禁止设计成核心能力"
 

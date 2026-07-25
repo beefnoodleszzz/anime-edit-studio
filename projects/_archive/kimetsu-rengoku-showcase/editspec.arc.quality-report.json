@@ -1,0 +1,552 @@
+{
+  "editspec": "/Users/zhangxiaolong/Desktop/anime-edit-studio/projects/kimetsu-rengoku-showcase/editspec.arc.json",
+  "duration_sec": 25.3,
+  "source_count": 6,
+  "shot_count": 83,
+  "continuity_score": 0.7713,
+  "visual_fingerprints": 0,
+  "hard_failures": [],
+  "warnings": [
+    {
+      "code": "subtitle_review",
+      "shot_id": "fbb8e960347c-32@0"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fbb8e960347c-32@0"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-170@1"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-170@1"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-455@2"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-455@2"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-101@3"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-301@4"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-301@4"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-330@5"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-127@6"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-127@6"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "e8040f8451e4-332@7"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-125@8"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-312@9"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "e8040f8451e4-196@10"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "e8040f8451e4-196@10"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-144@11"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-307@12"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-307@12"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-109@13"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-109@13"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-474@14"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-474@14"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-233@15"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-233@15"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fbb8e960347c-52@16"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fbb8e960347c-52@16"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-460@17"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-460@17"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-231@18"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-231@18"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-105@19"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-325@20"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-143@21"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-143@21"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-130@22"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-130@22"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-433@23"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-236@24"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-236@24"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "e8040f8451e4-324@25"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "e8040f8451e4-324@25"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-481@26"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-481@26"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fbb8e960347c-53@27"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fbb8e960347c-53@27"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-124@28"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-124@28"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-335@29"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "e8040f8451e4-319@30"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "e8040f8451e4-319@30"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-466@31"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-466@31"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-237@32"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-237@32"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-461@33"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-461@33"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-294@34"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-340@35"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-340@35"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-267@36"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-212@37"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-212@37"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-458@38"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-131@39"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-131@39"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-210@40"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-210@40"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-428@41"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-428@41"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-259@42"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-259@42"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-220@43"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-220@43"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-328@44"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-328@44"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-412@45"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-132@46"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-132@46"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-337@47"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-122@48"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-122@48"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-416@49"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-416@49"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-105@50"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-105@50"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-414@51"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-414@51"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-143@52"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-143@52"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-168@53"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-189@54"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-189@54"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-398@55"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-398@55"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-124@56"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-407@57"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-76@58"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-163@60"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-464@61"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-464@61"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-140@62"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-215@63"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "e8040f8451e4-130@64"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "e8040f8451e4-130@64"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-213@65"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-213@65"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-220@66"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-220@66"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-421@67"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-421@67"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-323@68"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-130@69"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fbb8e960347c-43@70"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-202@71"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-215@72"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-215@72"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "fe54b2a6e032-131@73"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "fe54b2a6e032-131@73"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-422@74"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-210@75"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-210@75"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-428@76"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-428@76"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-220@77"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-220@77"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-255@78"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "72d187a7caed-255@78"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "4059e92b3a41-214@79"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "4059e92b3a41-214@79"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-210@80"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "a63c7932a501-328@81"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "a63c7932a501-328@81"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "72d187a7caed-412@82"
+    }
+  ],
+  "pass": true
+}

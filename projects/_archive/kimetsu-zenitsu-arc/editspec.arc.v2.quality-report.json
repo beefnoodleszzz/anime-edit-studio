@@ -1,0 +1,104 @@
+{
+  "editspec": "/Users/zhangxiaolong/Desktop/anime-edit-studio/projects/kimetsu-zenitsu-arc/editspec.arc.v2.json",
+  "duration_sec": 24.0,
+  "source_count": 2,
+  "shot_count": 15,
+  "continuity_score": 0.7857,
+  "visual_fingerprints": 15,
+  "hard_failures": [],
+  "warnings": [
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-169@v2-0"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-103@v2-1"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-130@v2-2"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-164@v2-3"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-164@v2-3"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-178@v2-4"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-211@v2-5"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-211@v2-5"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-213@v2-6"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-213@v2-6"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-215@v2-7"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-274@v2-8"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-274@v2-8"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-278@v2-9"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-278@v2-9"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "6e44ae983e86-22@v2-10"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "6e44ae983e86-22@v2-10"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-293@v2-11"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-293@v2-11"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-295@v2-12"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-264@v2-13"
+    },
+    {
+      "code": "subtitle_review",
+      "shot_id": "89a293af79cf-257@v2-14"
+    },
+    {
+      "code": "watermark_review",
+      "shot_id": "89a293af79cf-257@v2-14"
+    }
+  ],
+  "pass": true
+}

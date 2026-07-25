@@ -97,10 +97,11 @@ MASTER PLAN §81 要求 "迁移必须 Incremental，禁止一次性推倒整个�
 | 0.7 | 建立 `AGENTS.md`：本组 4 份文档为最高规范；Resolve 只能经 ResolveAdapter；EditSpec 必过 validator；Recipe 必有 preview + ACCEPTANCE | 文件存在 |
 | 0.8 | 新建 `studio/` 骨架 + `pyproject.toml` entrypoint `aes = studio.cli:app` | `aes --help` 可运行 |
 | 0.9 | 清理探测残留：删除 Resolve 中的 `_aes_capability_probe` 工程；`probe_resolve_capability.py` 保留至 Phase 1 结束 | — |
-| 0.10 | 建立 KPI 基线：用旧系统最近一条片子实测 §18 的 6 项指标，作为「史诗级提升」的对照基准 | `docs/kpi_baseline.md` |
+| 0.10 | ~~采集旧系统 KPI 基线~~ | ❌ **已放弃**（2026-07-25 决策） |
 
-> **0.10 不能跳过。** 「出片质量和效率史诗级提升」若没有改造前的基线数字，
-> 就无法证明也无法证伪。基线必须在删旧代码之前采集。
+> **关于 0.10 的取消**：旧系统从未接入 Resolve，不具备真变速曲线、主体跟踪、
+> 专业调色与 Fairlight，与 v2 不构成同一量级的可比对象。
+> 因此 §18 的 KPI 改为**绝对目标值**，不做相对基线对比。
 
 ---
 
@@ -445,50 +446,65 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 
 ## 18. KPI —— 「史诗级提升」的定义（对齐 §44）
 
-「极致」如果不能被测量就是口号。以下 6 项在 Phase 0.10 采集旧系统基线，
-每个 Phase 结束时复测。**没有达到目标值的 Phase 不算完成。**
+「极致」如果不能被测量就是口号。以下为**绝对目标值**，不做旧系统对比
+（旧系统无 Resolve，不构成同一量级的可比对象）。
+每个 Phase 结束时复测，**没有达到目标值的 Phase 不算完成**。
 
 ### 效率类
 
-| 指标 | 定义 | 旧系统基线 | 目标 | 何时兑现 |
-|---|---|---|---|---|
-| **Human Effort / Finished Video** | 一条 25s 成片的总人工时间 | 待 0.10 采集 | **≤ 10 分钟** | Phase 7 |
-| **Time To First Preview** | 素材已入库后，从下指令到看到第一版 | 待采集 | **≤ 30 分钟** | Phase 6 |
-| **Manual Resolve Operations** | 用户手动操作 Resolve 的次数 | N/A（旧系统无 Resolve） | **0** | Phase 1 |
-| **Revision Count to Lock** | 达到 Lock Picture 需要几轮 | 待采集 | **≤ 2 轮** | Phase 7 |
+| 指标 | 定义 | 目标 | 何时兑现 |
+|---|---|---|---|
+| **Human Effort / Finished Video** | 一条 25s 成片的总人工时间 | **≤ 10 分钟** | Phase 7 |
+| **Time To First Preview** | 素材已入库后，从下指令到看到第一版 | **≤ 30 分钟** | Phase 6 |
+| **Manual Resolve Operations** | 用户手动操作 Resolve 的次数 | **0** | Phase 1 |
+| **Revision Count to Lock** | 达到 Lock Picture 需要几轮 | **≤ 2 轮** | Phase 7 |
+| **候选选择次数 / 片** | 用户需要做的 A/B/C 判断次数 | **≤ 15 次** | Phase 4 |
 
 ### 质量类
 
-| 指标 | 定义 | 旧系统基线 | 目标 | 何时兑现 |
-|---|---|---|---|---|
-| **Candidate Precision** | 用户接受的候选比例 | 待采集 | **≥ 50%** | Phase 4 |
-| **First Cut Survival Rate** | AI 第一版镜头最终保留比例 | 待采集 | **60–80%** | Phase 5 |
-| **Sequence Preservation** | 镜头顺序最终保留比例 | 待采集 | **≥ 70%** | Phase 5 |
-| **Timing Delta** | 用户最终改动的镜头时长比例 | 待采集 | **≤ 20%** | Phase 5 |
-| **Technical QA Pass Rate** | 首次渲染通过 13 项技术 QA 的比例 | 待采集 | **≥ 95%** | Phase 6 |
+| 指标 | 定义 | 目标 | 何时兑现 |
+|---|---|---|---|
+| **Candidate Precision** | 用户接受的候选比例 | **≥ 50%** | Phase 4 |
+| **First Cut Survival Rate** | AI 第一版镜头最终保留比例 | **60–80%** | Phase 5 |
+| **Sequence Preservation** | 镜头顺序最终保留比例 | **≥ 70%** | Phase 5 |
+| **Timing Delta** | 用户最终改动的镜头时长比例 | **≤ 20%** | Phase 5 |
+| **Technical QA Pass Rate** | 首次渲染通过 13 项技术 QA 的比例 | **≥ 95%** | Phase 6 |
 
 > **反作弊条款**（§44 原文要求）：
 > First Cut Survival Rate 不得通过"过度保守剪辑"刷高——
-> 若同期 Candidate Precision 或成片的 `retention_3s` 下降，该指标作废。
+> 若同期 Candidate Precision 下降或成片 `retention_3s` 走低，该指标作废。
 
-### 变现类（本仓特有，Layer 7）
+### 能力类 —— 旧系统根本做不到的事
+
+这一组不是"提升百分比"，而是**从 0 到 1**。全部依赖 Resolve Studio：
+
+| 能力 | 旧系统 | v2 目标 | 兑现 Phase |
+|---|---|---|---|
+| 竖屏主体感知重构图 | `reframe_x` 单轴手搓偏移 | `SmartReframe` 原生 | Phase 1 验证 |
+| 主体跟踪遮罩 | rembg 静态遮罩，无跟踪 | `CreateMagicMask` 原生跟踪 | Phase 1 验证 |
+| 速度曲线 | `speed` 平均倍率近似 | `SetSpeedRamp` 真三段变速 | Phase 1 验证 |
+| 变速插值 | RIFE 外挂 + 额外转码 | Resolve 原生光流可编程 | Phase 6 |
+| 调色 | 单条 LUT 文件 | ColorGroup + Version + 节点图 | Phase 6 |
+| 音频 | ffmpeg 音床后处理 | Fairlight 多轨 + 音量自动化 | Phase 6 |
+| 视觉特效 | Remotion CSS/SVG | Fusion 节点图 Recipe | Phase 6 |
+
+### 变现类（Layer 7）
 
 | 指标 | 定义 | 目标 |
 |---|---|---|
-| **出片吞吐** | 每周可交付成片数 | 相对基线 **≥ 3×** |
-| **retention_3s** | 发布后 3 秒留存 | 相对基线**不下降**，Phase 8 后应上升 |
-| **Hook 实验周转** | 一组 A/B 从生成到有结论的天数 | 缩短至基线的 1/2 |
+| **出片吞吐** | 每周可交付成片数 | **≥ 5 条/周**（Phase 7 后） |
+| **retention_3s** | 发布后 3 秒留存 | 建立采集，Phase 8 后进入偏好回流 |
+| **Hook 实验周转** | 一组 A/B 从生成到有结论 | **≤ 3 天** |
 
 ### 「史诗级」的验收口径
 
 同时满足以下三条，才算达成：
 
-1. **人工时间下降一个数量级**（Human Effort / Finished Video）
-2. **Resolve 手动操作 = 0**，且成片具备旧系统做不到的能力
-   （真变速曲线 / 主体跟踪 / 专业调色 / Fairlight）
-3. **出片吞吐 ≥ 3×，且留存指标不下降**
+1. **一条 25s 成片的人工时间 ≤ 10 分钟，Resolve 手动操作 = 0**
+2. **上表 7 项能力全部从"做不到"变为"原生支持且已 verified"**
+3. **每周吞吐 ≥ 5 条，且技术 QA 首过率 ≥ 95%**
 
-只提升质量不提升效率、或只提升效率而质量下滑，都不算。
+只提质量不提效率、或只提效率而质量下滑，都不算。
 
 ---
 

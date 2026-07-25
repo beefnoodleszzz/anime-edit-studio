@@ -91,14 +91,17 @@ def doctor_capabilities_cmd(json: bool = typer.Option(False, "--json")):
         out(summary, True)
         return
     labels = {
-        "verified": ("已验证（可用于 EditSpec）", "green"),
-        "probed_unverified": ("方法存在但未实测（禁止使用）", "yellow"),
-        "unprobed": ("未探测", "red"),
+        "verified": ("已验证 —— 可用于 EditSpec", "green"),
+        "unavailable": ("已实测判定不可用 —— 必须走 fallback", "red"),
+        "probed_unverified": ("方法存在但未实测 —— 暂禁使用", "yellow"),
+        "unprobed": ("未探测", "bright_black"),
     }
     for bucket, (label, color) in labels.items():
-        typer.secho(f"\n{label} ({len(summary[bucket])}):", fg=color, bold=True)
-        for name in summary[bucket]:
-            typer.echo(f"  - {name}")
+        names = summary[bucket]
+        typer.secho(f"\n{label} ({len(names)}):", fg=color, bold=True)
+        for name in names:
+            fb = summary["fallbacks"].get(name)
+            typer.echo(f"  - {name}" + (f"\n      ↳ fallback: {fb}" if fb else ""))
 
 
 @doctor_app.command("assets")

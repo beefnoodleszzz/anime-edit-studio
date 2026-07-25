@@ -45,16 +45,33 @@ def is_verified(name: str, caps: dict | None = None) -> bool:
         return False
 
 
+def is_unavailable(name: str, caps: dict | None = None) -> bool:
+    """已实测判定为不可用（区别于「尚未测」）。"""
+    try:
+        return get(name, caps).get("available") is False
+    except CapabilityError:
+        return False
+
+
 def require(name: str, caps: dict | None = None) -> dict:
     """能力未验证则拒绝执行，并给出 fallback 提示。
 
     这是 AGENTS.md R3「未 verified 的能力禁止生成对应指令」的强制点。
+    错误消息区分「已实测不可用」与「尚未验证」—— 二者的后续动作完全不同：
+    前者要改用 fallback 方案，后者只需补一次验证。
     """
     entry = get(name, caps)
     if entry.get("verified"):
         return entry
+
     fallback = entry.get("fallback")
-    hint = f"；可用 fallback: {fallback}" if fallback else "；无 fallback"
+    hint = f"；应改用 fallback: {fallback}" if fallback else "；且无 fallback"
+
+    if entry.get("available") is False:
+        raise CapabilityError(
+            f"能力 {name!r} 已实测判定为**不可用**"
+            f"（证据: {entry.get('evidence', '见 capabilities.yaml')}）{hint}"
+        )
     raise CapabilityError(
         f"能力 {name!r} 尚未验证（probed={entry.get('probed')}）"
         f"，禁止生成对应指令{hint}"
@@ -62,11 +79,17 @@ def require(name: str, caps: dict | None = None) -> dict:
 
 
 def summarize(caps: dict | None = None) -> dict:
+    """把能力分成四类。
+
+    「已实测不可用」必须与「尚未验证」分开 —— 前者需要换方案，后者只需补测试。
+    """
     caps = caps or load_capabilities()
-    verified, probed_unverified, unprobed = [], [], []
+    verified, unavailable, probed_unverified, unprobed = [], [], [], []
     for name, entry in (caps.get("capabilities") or {}).items():
         if entry.get("verified"):
             verified.append(name)
+        elif entry.get("available") is False:
+            unavailable.append(name)
         elif entry.get("probed"):
             probed_unverified.append(name)
         else:
@@ -75,7 +98,13 @@ def summarize(caps: dict | None = None) -> dict:
         "resolve_version_tested": caps.get("resolve_version_tested"),
         "edition": caps.get("edition"),
         "verified": sorted(verified),
+        "unavailable": sorted(unavailable),
         "probed_unverified": sorted(probed_unverified),
         "unprobed": sorted(unprobed),
+        "fallbacks": {
+            name: entry.get("fallback")
+            for name, entry in (caps.get("capabilities") or {}).items()
+            if entry.get("available") is False
+        },
         "pitfalls": [p["id"] for p in caps.get("pitfalls", [])],
     }

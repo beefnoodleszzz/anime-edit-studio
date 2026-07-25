@@ -1,0 +1,30 @@
+{
+  "retime_enums": {
+    "RetimeProcess": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "MotionEstimation": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  "speed_ramp_method_exists": false,
+  "speed_related_methods": [
+    "GetDuration"
+  ],
+  "smart_reframe": {
+    "returns": true,
+    "prop_diff": {},
+    "manual_zoom_writable": true
+  },
+  "magic_mask": {
+    "ok": false,
+    "num_nodes": 1,
+    "page": "color"
+  }
+}

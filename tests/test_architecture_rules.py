@@ -117,5 +117,33 @@ def test_r8_pitfalls_are_documented():
     from studio.core.capabilities import load_capabilities
 
     ids = {p["id"] for p in load_capabilities().get("pitfalls", [])}
-    expected = {f"P{n}" for n in range(1, 12)}
+    expected = {f"P{n}" for n in range(1, 15)}
     assert expected <= ids, f"缺失的坑位记录: {sorted(expected - ids)}"
+
+
+def test_unavailable_capabilities_are_never_verified():
+    """P13：判定为不可用的能力绝不能被标成 verified。
+
+    SmartReframe 返回 True 但不生效 —— 这类能力如果被误标 verified，
+    整条生成链都会产出无效指令且无人察觉。
+    """
+    from studio.core.capabilities import load_capabilities
+
+    for name, entry in (load_capabilities().get("capabilities") or {}).items():
+        if entry.get("available") is False:
+            assert not entry.get("verified"), (
+                f"{name} 已判定不可用（available: false），却被标记为 verified"
+            )
+            assert entry.get("fallback"), f"{name} 不可用但未声明 fallback"
+
+
+def test_negative_findings_cite_evidence():
+    """否定结论必须有证据文件，否则无法复核。"""
+    from studio.core.capabilities import load_capabilities
+
+    missing = [
+        name
+        for name, entry in (load_capabilities().get("capabilities") or {}).items()
+        if entry.get("available") is False and not entry.get("evidence")
+    ]
+    assert not missing, f"以下不可用判定缺少 evidence: {missing}"

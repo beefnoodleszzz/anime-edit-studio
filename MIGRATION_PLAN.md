@@ -45,15 +45,69 @@ AddMarker         -> True
 代码只负责 Import + 参数注入，不需要用脚本从零搭节点图。
 这是 6A 从"逐个用脚本重建"降级为"逐个手工调好后导出"的关键差别。
 
-**变化 3 —— 发现两个被低估的 Studio 原生能力，直接改写效率预期。**
+**变化 3 —— 曾以为发现了两个 Studio 原生大杀器，Phase 1 实测证明都不可用。**
 
-| API | 旧系统的做法 | 意义 |
+> ⚠️ 下面这段保留原始判断作为教训。Phase 0 只做了「方法是否存在」的探测，
+> 由此得出的乐观结论在 Phase 1.12–1.14 的实测中**全部被推翻**。
+> 详见下方「Phase 1 实测修正」。
+
+| API | 当时的期待 | 实测结果 |
 |---|---|---|
-| `SmartReframe` | `reframe_x` 单轴偏移手搓 | **横屏动漫 → 4:5 竖屏的主体感知自动重构图**。这是每条片子都要做的事，也是旧系统画质与人工的主要痛点。提到 **Phase 1 就验证**，不等 Phase 6 |
-| `CreateMagicMask` / `RegenerateMagicMask` | rembg 出**静态**遮罩，无跟踪 | 原生主体跟踪遮罩，直接实现 §5 的 `subject tracking` |
+| `SmartReframe` | 横屏→4:5 主体感知自动重构图 | ❌ 返回 True 但**渲染输出逐字节相同**（空转） |
+| `CreateMagicMask` | 原生主体跟踪遮罩 | ❌ 所有签名返回 False |
+| `SetSpeedRamp` | 真三段变速 | ❌ 属性值为 `None`，方法根本不存在 |
 
 另外还发现 `Stabilize`、`DetectSceneCuts`、`CreateSubtitlesFromAudio`、
-`ExportLUT`、`AssignToColorGroup` + `AddVersion`（ColorGroup 架构优于逐 clip 调色）。
+`ExportLUT`、`AssignToColorGroup` + `AddVersion`（ColorGroup 架构优于逐 clip 调色）——
+这些尚未实测，按同样标准在使用前必须逐一验证。
+
+### ✅ Phase 1 实测修正（2026-07-25）
+
+Phase 1.12–1.14 对三项关键能力做了实跑 + 渲染出帧验证，结论如下。
+
+| 能力 | 判定 | 依据 | 应对 |
+|---|---|---|---|
+| `SmartReframe` | ❌ 空转 | 返回 True，属性不变，**渲染首帧 md5 与基线相同**；同片段手动 `Pan=400` 则 md5 改变、YAVG 80.6→50.8（对照组证明检测有效） | Phase 3 自研主体检测产出 Pan/ZoomX，经已验证的 `transform` 通道写入 |
+| `CreateMagicMask` | ❌ 不可用 | `'F'/'B'/'BI'`/无参/整数全返回 False；切 Color 页后仍失败，节点数不变 | 同上，用自研主体检测 |
+| `SetSpeedRamp` | ❌ 方法不存在 | `item.SetSpeedRamp` 的值是 `None`，`callable()` 为 False；`Speed`/`SpeedPercent` 属性均不可写 | 变速走 **Fusion Recipe**（`TimeSpeed` 节点），`add_fusion_comp` 已 verified |
+
+**同时新验证通过 3 项**：
+
+| 能力 | 结论 |
+|---|---|
+| `render` | ✅ 完整渲染通路打通：`LoadRenderPreset` → `SetRenderSettings` → `AddRenderJob` → `StartRendering` → 轮询。实测 1 秒素材约 0.7–1.2s |
+| `retime_interpolation` | ✅ `RetimeProcess` / `MotionEstimation` 接受**整数** 0–3（传字符串一律被拒） |
+| `create_bin` | ✅ |
+
+### 由此产生的两条方法论铁律（已写入 pitfalls P12–P14）
+
+**P12 —— `hasattr` 对 Resolve 远程对象是假阳性。**
+远程对象对未知属性返回 `None` 而非抛 `AttributeError`，
+所以 `hasattr(item, 'SetSpeedRamp')` 恒为 True。
+Phase 0 正是因此把一个不存在的方法记成了「方法存在」。
+判定必须用 `callable(getattr(obj, name, None))`。
+
+**P13 —— 「返回 True 但不生效」是最危险的失败模式。**
+凡是影响画面的能力，`verified` 必须由**渲染出帧比对**支撑，不能只看返回值。
+且必须先跑对照组确认检测手段本身有效。
+（P14：对照帧不能取黑场 —— 第一版验证就栽在这里，误取 YAVG≈30 的近黑帧，
+连对照组都判为「无差异」。）
+
+能力矩阵因此从三态改为四态：
+`verified` / `unavailable`（实测判定不可用）/ `probed_unverified` / `unprobed`。
+两条测试守着这个不变量：不可用的能力不得被标 verified，且必须声明 fallback 与 evidence。
+
+### 对「史诗级提升」的影响
+
+竖屏重构图、主体跟踪、变速这三项**仍然可以做到**，但都要自己实现，
+不能白拿 Resolve 的原生能力：
+
+- 竖屏重构图 / 主体跟踪 → Phase 3 的自研主体检测 + `transform`（已验证可写）
+- 变速 → Phase 6A 的 Fusion Recipe（`add_fusion_comp` 已验证）
+
+代价是 Phase 3 与 Phase 6A 的工作量上升；
+好处是这三项都落在我们自己的 Recipe / 分析体系里，可控、可缓存、可复现，
+而不是黑箱调用一个连返回值都不可信的 API。
 
 **变化 4 —— 一个必须立刻承认的旧系统设计错误。**
 实测素材真实帧率是 **23.976**，而旧 EditSpec 硬编 60fps。
@@ -478,15 +532,16 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 
 这一组不是"提升百分比"，而是**从 0 到 1**。全部依赖 Resolve Studio：
 
-| 能力 | 旧系统 | v2 目标 | 兑现 Phase |
+| 能力 | 旧系统 | v2 实现路径（Phase 1 实测后修正） | 兑现 Phase |
 |---|---|---|---|
-| 竖屏主体感知重构图 | `reframe_x` 单轴手搓偏移 | `SmartReframe` 原生 | Phase 1 验证 |
-| 主体跟踪遮罩 | rembg 静态遮罩，无跟踪 | `CreateMagicMask` 原生跟踪 | Phase 1 验证 |
-| 速度曲线 | `speed` 平均倍率近似 | `SetSpeedRamp` 真三段变速 | Phase 1 验证 |
-| 变速插值 | RIFE 外挂 + 额外转码 | Resolve 原生光流可编程 | Phase 6 |
+| 竖屏主体感知重构图 | `reframe_x` 单轴手搓偏移 | 自研主体检测 → `transform`（`SmartReframe` 实测空转） | Phase 3 |
+| 主体跟踪 | rembg 静态遮罩，无跟踪 | 自研逐帧主体框 → 关键帧 Pan/Zoom（`CreateMagicMask` 不可用） | Phase 3 |
+| 速度曲线 | `speed` 平均倍率近似 | Fusion `TimeSpeed` Recipe（无逐片段变速 API） | Phase 6A |
+| 变速插值 | RIFE 外挂 + 额外转码 | ✅ `RetimeProcess`/`MotionEstimation` 已验证可编程 | Phase 6 |
 | 调色 | 单条 LUT 文件 | ColorGroup + Version + 节点图 | Phase 6 |
 | 音频 | ffmpeg 音床后处理 | Fairlight 多轨 + 音量自动化 | Phase 6 |
-| 视觉特效 | Remotion CSS/SVG | Fusion 节点图 Recipe | Phase 6 |
+| 视觉特效 | Remotion CSS/SVG | Fusion 节点图 Recipe | Phase 6A |
+| 渲染 | Remotion + ffmpeg concat | ✅ Resolve 渲染队列已验证 | Phase 1 ✅ |
 
 ### 变现类（Layer 7）
 

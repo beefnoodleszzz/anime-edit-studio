@@ -14,7 +14,7 @@ from studio.core.cache import JsonCache
 from studio.core.hashing import analysis_cache_key, file_sha256
 from studio.editing.music import MusicMap, analyze_music
 
-STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.1.0"
+STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.2.0"
 MODEL = "opencv+scenedetect+librosa"
 MODEL_VERSION = f"opencv-{cv2.__version__}"
 
@@ -50,6 +50,8 @@ class StyleFingerprint(BaseModel):
     shot_scale_sequence: list[float]
     motion_direction_sequence: list[str]
     camera_motion: list[str]
+    cut_timestamps: list[float] = Field(default_factory=list)
+    shot_durations: list[float] = Field(default_factory=list)
     speed_ramp_locations: list[dict] = Field(default_factory=list)
     visual_rhyme: list[dict] = Field(default_factory=list)
     motion_rhyme: list[dict] = Field(default_factory=list)
@@ -247,6 +249,8 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
         shot_scale_sequence=scales,
         motion_direction_sequence=directions,
         camera_motion=directions,
+        cut_timestamps=cut_times,
+        shot_durations=lengths,
         speed_ramp_locations=speed_ramps,
         visual_rhyme=visual_rhyme[:24],
         motion_rhyme=motion_rhyme[:24],

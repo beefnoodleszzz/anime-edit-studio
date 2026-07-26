@@ -16,6 +16,7 @@ import numpy as np
 
 from studio.core.hashing import stable_hash
 from studio.creative.director import DirectorPlan
+from studio.creative.reference import EditingStyleProfile
 from studio.editing.music import MusicMap
 from studio.editing.ranking import RankedCandidate
 from studio.editspec.schema import (
@@ -31,7 +32,7 @@ from studio.editspec.schema import (
     TimelinePlacement,
 )
 
-SEQUENCE_PLANNER_VERSION = "sequence-planner-1.2.0"
+SEQUENCE_PLANNER_VERSION = "sequence-planner-2.0.0"
 _ROLE = {
     "buildup": "build",
     "drop": "impact",
@@ -58,29 +59,183 @@ class _State:
     alternatives: list[list[str]]
 
 
-def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
-    values = []
-    for section in plan.structure:
-        duration = section.end - section.start
-        count = max(1, round(duration / section.average_shot_length))
-        weights = [
-            0.86 if index % 3 == 0 else 1.12 if index % 3 == 1 else 1.02
-            for index in range(count)
-        ]
-        scale = duration / sum(weights)
-        cursor = section.start
-        for index, weight in enumerate(weights):
-            end = section.end if index == count - 1 else cursor + weight * scale
-            values.append(
-                _Slot(
-                    role=canonical_role(section.role),
-                    start=cursor,
-                    duration=end - cursor,
-                    energy=section.energy,
-                )
+def _section_at(plan: DirectorPlan, sec: float):
+    return next(
+        (
+            section
+            for section in plan.structure
+            if section.start <= sec < section.end
+        ),
+        plan.structure[-1],
+    )
+
+
+def _pattern_cuts(
+    start: float,
+    end: float,
+    average: float,
+    profile: EditingStyleProfile,
+) -> list[float]:
+    """Generate varied fallback cuts from a portable duration pattern."""
+    duration = end - start
+    # The style owns global cadence; the Director's section value modulates it
+    # so energy structure survives when one style is reused across projects.
+    style_average = 1.0 / profile.target_cut_density
+    effective_average = (style_average * max(average, 1e-6)) ** 0.5
+    count = max(1, round(duration / effective_average))
+    pattern = [
+        profile.duration_pattern[index % len(profile.duration_pattern)]
+        for index in range(count)
+    ]
+    scale = duration / sum(pattern)
+    cursor = start
+    cuts = []
+    for value in pattern[:-1]:
+        cursor += value * scale
+        cuts.append(cursor)
+    return cuts
+
+
+def _snap_cuts_to_music(
+    cuts: list[float],
+    *,
+    plan: DirectorPlan,
+    music: MusicMap,
+    profile: EditingStyleProfile,
+) -> list[float]:
+    """Snap only the measured share of cuts; preserve the remaining cadence.
+
+    This avoids mechanical every-beat cutting while guaranteeing that the
+    requested reference affinity is measurable.
+    """
+    if not cuts or not music.beats or profile.beat_sync_target <= 0:
+        return cuts
+    impacts = [value for value in music.impact_points if 0 < value < plan.duration_sec]
+    candidates = []
+    for index, cut in enumerate(cuts):
+        beat = min(music.beats, key=lambda value: abs(value - cut))
+        impact = min(impacts, key=lambda value: abs(value - cut)) if impacts else None
+        if impact is not None and abs(impact - cut) <= abs(beat - cut):
+            anchor, priority = impact, profile.impact_snap_priority
+        else:
+            anchor, priority = beat, 1.0
+        candidates.append(
+            (
+                abs(anchor - cut) / max(priority, 1e-6),
+                index,
+                float(anchor),
             )
-            cursor = end
+        )
+    target = min(len(cuts), round(len(cuts) * profile.beat_sync_target))
+    selected = {
+        index: anchor
+        for _, index, anchor in sorted(candidates)[:target]
+    }
+    return [selected.get(index, cut) for index, cut in enumerate(cuts)]
+
+
+def _dedupe_boundaries(
+    boundaries: list[float],
+    *,
+    duration: float,
+    minimum: float,
+) -> list[float]:
+    output = [0.0]
+    for value in sorted(boundaries):
+        value = max(0.0, min(duration, round(value, 6)))
+        if value - output[-1] < minimum:
+            continue
+        if duration - value < minimum:
+            continue
+        output.append(value)
+    if duration - output[-1] < minimum and len(output) > 1:
+        output.pop()
+    output.append(duration)
+    return output
+
+
+def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
+    profile = plan.editing_style
+    if profile.normalized_cut_positions:
+        cuts = [
+            value * plan.duration_sec
+            for value in profile.normalized_cut_positions
+        ]
+    else:
+        cuts = [
+            value
+            for section in plan.structure
+            for value in _pattern_cuts(
+                section.start,
+                section.end,
+                section.average_shot_length,
+                profile,
+            )
+        ]
+    cuts = _snap_cuts_to_music(
+        cuts,
+        plan=plan,
+        music=music,
+        profile=profile,
+    )
+    # Narrative section boundaries are semantic anchors and must survive even
+    # when the reference has a different duration or music structure.
+    cuts.extend(section.end for section in plan.structure[:-1])
+    minimum = max(0.08, min(profile.min_shot_length * 0.72, 0.32))
+    boundaries = _dedupe_boundaries(
+        cuts,
+        duration=plan.duration_sec,
+        minimum=minimum,
+    )
+    values = []
+    for start, end in zip(boundaries, boundaries[1:]):
+        section = _section_at(plan, (start + end) / 2)
+        values.append(
+            _Slot(
+                role=canonical_role(section.role),
+                start=start,
+                duration=end - start,
+                energy=section.energy,
+            )
+        )
     return values
+
+
+def rhythm_metrics(
+    slots: list[_Slot],
+    music: MusicMap,
+    *,
+    tolerance_sec: float = 0.08,
+) -> dict[str, float | int]:
+    cuts = [slot.start for slot in slots[1:]]
+    synced = sum(
+        min(abs(cut - beat) for beat in music.beats) <= tolerance_sec
+        for cut in cuts
+    ) if music.beats else 0
+    durations = sorted(slot.duration for slot in slots)
+    middle = len(durations) // 2
+    median = (
+        durations[middle]
+        if len(durations) % 2
+        else (durations[middle - 1] + durations[middle]) / 2
+    )
+    return {
+        "shot_count": len(slots),
+        "cut_density": len(cuts) / max(sum(slot.duration for slot in slots), 1e-6),
+        "median_shot_length": median,
+        "beat_sync_ratio": synced / len(cuts) if cuts else 0.0,
+    }
+
+
+def planned_rhythm_metrics(
+    plan: DirectorPlan,
+    music: MusicMap,
+) -> dict[str, float | int]:
+    return rhythm_metrics(
+        _slots(plan, music),
+        music,
+        tolerance_sec=plan.editing_style.beat_tolerance_sec,
+    )
 
 
 def role_source_duration_requirements(
@@ -95,7 +250,11 @@ def role_source_duration_requirements(
     return requirements
 
 
-def _transition(previous: sqlite3.Row | None, current: sqlite3.Row) -> float:
+def _transition(
+    previous: sqlite3.Row | None,
+    current: sqlite3.Row,
+    style: EditingStyleProfile,
+) -> float:
     if previous is None:
         return 0.5
     score = 0.0
@@ -105,13 +264,12 @@ def _transition(previous: sqlite3.Row | None, current: sqlite3.Row) -> float:
     previous_scale = previous["shot_scale"] if previous["shot_scale"] is not None else 0.5
     current_scale = current["shot_scale"] if current["shot_scale"] is not None else 0.5
     scale_delta = abs(previous_scale - current_scale)
-    score += 0.25 * min(1.0, scale_delta * 2.2)
-    if previous["motion_dir"] == current["motion_dir"]:
-        score += 0.22
-    elif {previous["motion_dir"], current["motion_dir"]} <= {"left", "right"}:
-        score += 0.08
-    else:
-        score += 0.14
+    score += 0.25 * (
+        1.0 - min(1.0, abs(scale_delta - style.scale_contrast_target))
+    )
+    motion_changed = previous["motion_dir"] != current["motion_dir"]
+    desired_change = style.motion_change_ratio >= 0.5
+    score += 0.22 if motion_changed == desired_change else 0.08
     previous_energy = previous["visual_energy"] or 0.5
     current_energy = current["visual_energy"] or 0.5
     score += 0.18 * (1.0 - min(1.0, abs(previous_energy - current_energy)))
@@ -221,7 +379,7 @@ def plan_sequence(
                 value = (
                     state.score
                     + 0.5 * score_by_id[row["id"]]
-                    + 0.22 * _transition(prior, row)
+                    + 0.22 * _transition(prior, row, plan.editing_style)
                     + 0.18 * energy_fit
                     + 0.1 * _sequence_novelty(row, state.rows)
                 )
@@ -312,7 +470,9 @@ def plan_sequence(
         ),
         meta=SpecMeta(
             pipeline_version=SEQUENCE_PLANNER_VERSION,
-            model_versions={},
+            model_versions={
+                "editing_style_profile": plan.editing_style.version,
+            },
         ),
     )
     with conn:
@@ -336,5 +496,7 @@ __all__ = [
     "SEQUENCE_PLANNER_VERSION",
     "canonical_role",
     "plan_sequence",
+    "planned_rhythm_metrics",
+    "rhythm_metrics",
     "role_source_duration_requirements",
 ]

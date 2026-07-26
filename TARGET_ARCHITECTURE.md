@@ -438,6 +438,11 @@ impact_budget: { sfx_max: 9, flash_max: 3 }   # 防止"每个动作都机械加�
 - **批 2（需 Shot 维度补齐后才能算）**：`shot_scale_sequence`、`motion_direction_sequence`、`camera_motion`
 - **批 3（需 VLM/更复杂分析）**：`transition_types`、`speed_ramp_locations`、`visual_rhyme`、`motion_rhyme`
 
+`StyleFingerprint` 是测量结果，不直接作为 Planner 的长期配置。它必须先编译成
+带版本的 `EditingStyleProfile`，保存参考片归一化切点、镜头时长分布、鼓点贴合目标、
+景别/运动变化和效果密度。这样新增参考片只会新增风格档案，不会把某条样片的常量
+写进 Sequence Planner；同一风格也能跨音乐时长复用。
+
 ### 5.3 MusicMap（`beat.py` 扩展）
 
 现有 `beatmap.json` 保留为子集，新增：
@@ -486,7 +491,7 @@ Ranking (多信号)
 
 ### 6.2 Sequence Planner
 
-输入：DirectorPlan + StyleFingerprint + MusicMap + Candidates + Preference
+输入：DirectorPlan（含 EditingStyleProfile）+ MusicMap + Candidates + Preference
 输出：EditSpec v2 draft
 
 约束求解而非贪心（§23）：
@@ -495,6 +500,8 @@ Ranking (多信号)
   shot scale 变化节奏、energy 曲线贴合、visual phrase 完整性
 - LLM 只在**候选并列时**介入做语义判断（"这两个镜头视觉上是否连续"），
   不负责生成整条时间线
+- 切点先按风格的归一化节奏/时长 pattern 生成，再按目标比例吸附 beat/impact；
+  禁止机械地逐拍切，也禁止为单个参考片硬编码时间点
 
 ---
 
@@ -508,6 +515,10 @@ Ranking (多信号)
 ### Creative Critic（AI，`critic/creative/`）
 输入：Preview 视频 + DirectorPlan + StyleFingerprint + EditSpec
 输出结构化 issue 列表：
+
+Creative Critic 前增加确定性的 `RhythmQA`：比较实际 cut density、median shot length
+与 beat-sync ratio 是否达到 `EditingStyleProfile` 的目标。它不替代 Technical QA，
+而是阻止“技术上成功、节奏上失真”的首剪被误判为风格达标。
 
 ```jsonc
 [{ "kind": "weak_impact", "timeline_sec": [8.1, 9.0], "severity": "high",

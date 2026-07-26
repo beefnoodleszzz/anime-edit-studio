@@ -1,5 +1,6 @@
 """Creative Critic and natural-language revision share one issue contract."""
 
+from .rhythm import RhythmCheck, RhythmQAResult, evaluate_rhythm
 from .revision import (
     CreativeReview,
     RevisionIssue,
@@ -11,6 +12,9 @@ from .revision import (
 )
 
 __all__ = [
+    "RhythmCheck",
+    "RhythmQAResult",
+    "evaluate_rhythm",
     "CreativeReview",
     "RevisionIssue",
     "SuggestedFix",

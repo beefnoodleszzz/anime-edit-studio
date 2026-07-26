@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from studio.core.database import DEFAULT_V2_DB, connect
+from studio.critic.creative import evaluate_rhythm
 from studio.creative.director import DirectorBrief, generate_director_plan
 from studio.creative.preference import PreferenceModel, preference_signal
 from studio.creative.reference import analyze_reference
@@ -33,6 +34,8 @@ class FirstCutResult(BaseModel):
     project_id: str
     plan_path: str
     spec_path: str
+    style_profile_path: str
+    rhythm_qa_path: str
     candidate_group_ids: list[str]
     clip_count: int
     duration_sec: float
@@ -95,6 +98,11 @@ def create_first_cut(
             style,
             conn=conn,
             output_path=plan_path,
+        )
+        style_profile_path = root / "editing_style_profile.json"
+        _write_atomic(
+            style_profile_path,
+            plan.editing_style.model_dump_json(indent=2),
         )
         candidates_by_role = {}
         group_ids = []
@@ -282,10 +290,15 @@ def create_first_cut(
             )
         spec_path = root / "editspec.json"
         _write_atomic(spec_path, spec.model_dump_json(by_alias=True, indent=2))
+        rhythm_qa = evaluate_rhythm(spec, music, plan.editing_style)
+        rhythm_qa_path = root / "rhythm_qa.json"
+        _write_atomic(rhythm_qa_path, rhythm_qa.model_dump_json(indent=2))
         return FirstCutResult(
             project_id=project_id,
             plan_path=str(plan_path),
             spec_path=str(spec_path),
+            style_profile_path=str(style_profile_path),
+            rhythm_qa_path=str(rhythm_qa_path),
             candidate_group_ids=group_ids,
             clip_count=len(spec.clips),
             duration_sec=spec.duration_sec,

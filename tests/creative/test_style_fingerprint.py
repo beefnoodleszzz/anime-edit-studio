@@ -3,7 +3,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from studio.creative.reference import fingerprint as module
+from studio.creative.reference import (
+    StyleFingerprint,
+    compile_editing_style,
+    fingerprint as module,
+)
 from studio.editing.music.map import MusicMap, MusicSection, TimeRange
 
 
@@ -41,3 +45,38 @@ def test_style_fingerprint_extracts_editing_grammar(tmp_path: Path, monkeypatch)
     assert len(result.motion_direction_sequence) == 3
     assert result.music_structure[1]["type"] == "drop"
     assert "slow_motion_locations" in result.confidence
+
+
+def test_reference_compiles_to_versioned_portable_style():
+    fingerprint = StyleFingerprint(
+        duration_sec=10,
+        shot_count=5,
+        shot_length_distribution={"p10": .4, "p25": .5, "p75": 1.1, "p90": 1.5},
+        mean_shot_length=2,
+        median_shot_length=.6,
+        cut_density=1.4,
+        hard_cut_ratio=.9,
+        transition_types={"hard_cut": 4},
+        beat_sync_ratio=.65,
+        music_structure=[],
+        energy_curve=[],
+        brightness_curve=[],
+        color_progression=[],
+        impact_points=[],
+        silence_usage=0,
+        sound_effect_density=.3,
+        slow_motion_locations=[],
+        shot_scale_sequence=[.2, .7, .3],
+        motion_direction_sequence=["left", "right", "right"],
+        camera_motion=[],
+        cut_timestamps=[.5, 1.2, 3, 7],
+        shot_durations=[.5, .7, 1.8, 4, 3],
+        confidence={},
+    )
+    profile = compile_editing_style(fingerprint, name="Reference A")
+    assert profile.source == "reference"
+    assert profile.name == "Reference A"
+    assert profile.target_cut_density == 1.4
+    assert profile.beat_sync_target == .65
+    assert profile.normalized_cut_positions == [.05, .12, .3, .7]
+    assert profile.id.startswith("reference-")

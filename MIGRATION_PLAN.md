@@ -291,10 +291,13 @@ MASTER PLAN §81 要求 "迁移必须 Incremental，禁止一次性推倒整个�
 | 5.4 | `creative/director`（产 plan）与 `editing/sequence`（产 spec）严格分离 |
 | 5.5 | Sequence Planner：约束求解，纳入 continuity / motion direction / character continuity / visual phrase / shot length variation（§23） |
 | 5.6 | `impact_budget` 密度控制（§32 反机械化） |
+| 5.7 | StyleFingerprint → 版本化 EditingStyleProfile；支持多参考风格复用，不在 Planner 硬编码样片 |
+| 5.8 | RhythmQA：cut density / median shot length / beat-sync 三项确定性验收 |
 
 ### 验收（§62/§63）
 给定 reference.mp4，产出的 DirectorPlan 结构与参考片的段落/ASL/energy 曲线可量化对比，
-偏差在阈值内；用 `_archive/` 中的 4 份旧 beatmap 做 MusicMap 回归对照。
+偏差在阈值内；首剪输出 `editing_style_profile.json` 与 `rhythm_qa.json`；
+用 `_archive/` 中的 4 份旧 beatmap 做 MusicMap 回归对照。
 
 ### 本 Phase 删除
 `anime/beat.py` `reference.py` `director.py`、`decision_loop.py` 剩余部分（含 brief/gap/blueprint）

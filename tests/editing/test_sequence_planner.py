@@ -4,9 +4,14 @@ from studio.creative.director.plan import (
     DirectorSection,
     ImpactBudget,
 )
+from studio.creative.reference import EditingStyleProfile
 from studio.editing.music.map import MusicMap, MusicSection
 from studio.editing.ranking import RankedCandidate
-from studio.editing.sequence import plan_sequence, role_source_duration_requirements
+from studio.editing.sequence import (
+    plan_sequence,
+    planned_rhythm_metrics,
+    role_source_duration_requirements,
+)
 
 
 def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
@@ -181,3 +186,50 @@ def test_source_window_is_centered_on_scored_keyframe(tmp_path):
     )
     assert spec.clips[0].source.in_sec == 17.5
     assert spec.clips[0].source.out_sec == 19.5
+
+
+def test_editing_styles_create_distinct_reusable_rhythm_grammars():
+    music = MusicMap(
+        duration_sec=10, bpm=120,
+        beats=[value / 2 for value in range(20)], bars=[0],
+        downbeats=[0], onsets=[], beat_energy=[],
+        sections=[MusicSection(type="build", start=0, end=10, energy=.5)],
+        impact_points=[2, 6], risers=[], breaks=[], silences=[],
+        spectral_change_points=[],
+    )
+    base = dict(
+        project_id="styles", revision=1, duration_sec=10,
+        primary_characters=[], tone=[],
+        structure=[
+            DirectorSection(
+                role="buildup", start=0, end=10, energy=.5,
+                average_shot_length=1,
+            )
+        ],
+        visual_rules={"prefer": [], "avoid": []}, sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+    )
+    calm = DirectorPlan(
+        **base,
+        editing_style=EditingStyleProfile(
+            id="calm", name="Calm", source="curated",
+            target_cut_density=.5, median_shot_length=2,
+            min_shot_length=1, max_shot_length=3,
+            duration_pattern=[1, 1], beat_sync_target=.2,
+        ),
+    )
+    punchy = DirectorPlan(
+        **base,
+        editing_style=EditingStyleProfile(
+            id="punchy", name="Punchy", source="curated",
+            target_cut_density=2, median_shot_length=.5,
+            min_shot_length=.25, max_shot_length=1,
+            duration_pattern=[1, .5, 1.5, .5], beat_sync_target=.7,
+        ),
+    )
+    calm_metrics = planned_rhythm_metrics(calm, music)
+    punchy_metrics = planned_rhythm_metrics(punchy, music)
+    assert punchy_metrics["shot_count"] > calm_metrics["shot_count"]
+    assert punchy_metrics["median_shot_length"] < calm_metrics["median_shot_length"]
+    assert punchy_metrics["beat_sync_ratio"] >= .6

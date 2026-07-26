@@ -10,7 +10,12 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from studio.creative.reference import StyleFingerprint
+from studio.creative.reference import (
+    EditingStyleProfile,
+    StyleFingerprint,
+    compile_editing_style,
+    default_editing_style,
+)
 from studio.editing.music import MusicMap
 
 DIRECTOR_PLAN_VERSION = "1"
@@ -59,6 +64,7 @@ class DirectorPlan(BaseModel):
     visual_rules: dict[str, list[str]]
     sound_strategy: str
     impact_budget: ImpactBudget
+    editing_style: EditingStyleProfile = Field(default_factory=default_editing_style)
     generation: dict
 
 
@@ -137,6 +143,11 @@ def generate_director_plan(
 ) -> DirectorPlan:
     duration = min(brief.duration_sec, music.duration_sec)
     reference_asl = style.median_shot_length if style else 0.9
+    editing_style = (
+        compile_editing_style(style)
+        if style is not None
+        else default_editing_style()
+    )
     structure = []
     for section in music.sections:
         start, end = section.start, min(section.end, duration)
@@ -199,10 +210,13 @@ def generate_director_plan(
             flash_max=min(3, max(1, impact_count // 3)),
             shake_max=min(4, max(1, impact_count // 2)),
         ),
+        editing_style=editing_style,
         generation={
             "method": "deterministic_music_aligned",
             "music_map_version": music.version,
             "style_fingerprint_version": style.version if style else None,
+            "editing_style_profile_version": editing_style.version,
+            "editing_style_profile_id": editing_style.id,
             "llm_used": False,
             "fallback_arc_used": fallback_used,
         },

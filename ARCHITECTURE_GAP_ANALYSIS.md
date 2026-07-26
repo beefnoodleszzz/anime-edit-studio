@@ -360,11 +360,10 @@ Effect/Color Recipe 库必须在 Fusion 内从零重建并逐个视觉验收—�
 - A/B/C 候选 UI + 自然语言反馈通道
 - Shot 模型的 12 个缺失维度
 
-### 数据保留（代码删、数据留）
+### 数据归零（2026-07-26 用户决定）
 
-`library/engine.sqlite` 的素材/镜头/嵌入/审片决策/发布指标是真实积累，
-通过一次性 ETL 迁入新 schema；`library/proxies` `keyframes` `cache`、
-`kit/`、`refs/`、源片目录全部原地保留。
+旧项目、v1/v2 数据库与 `library/proxies`、`keyframes`、`cache` 已清空。
+仅永久源素材目录保留。新制作从空白 v2 schema 重新 ingest 与分析，不再执行旧库 ETL。
 
 ---
 

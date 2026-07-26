@@ -2,7 +2,6 @@ version: "2.0"
 
 database:
   path: "library/engine.v2.sqlite"
-  legacy_source: "library/engine.sqlite"
 
 library:
   sources_root: "/Users/zhangxiaolong/Desktop/anime-material-library/sources"

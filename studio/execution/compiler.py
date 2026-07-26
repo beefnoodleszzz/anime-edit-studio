@@ -35,14 +35,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from studio.core.hashing import stable_hash
 from studio.core.timecode import Timebase as CoreTimebase
 from studio.editspec.schema import Clip, EditSpec
 from studio.editspec.validator import validate
-from studio.execution.resolve import ResolveAdapter, ResolveOperationError
+from studio.execution.ffmpeg import prebake_audio, probe_media_json
+from studio.execution.recipes import RecipeRegistry
+from studio.execution.resolve import (
+    ResolveAdapter,
+    ResolveOperationError,
+    append_prebaked_audio,
+    apply_color_recipe,
+    apply_fusion_recipe,
+)
 
 log = logging.getLogger(__name__)
 
 STATE_FILENAME = ".resolve_build_state.json"
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _audio_duration(path: Path) -> float:
+    probe = probe_media_json(path)
+    duration = float((probe.get("format") or {}).get("duration") or 0)
+    if duration <= 0:
+        raise ResolveOperationError(f"无法取得音频时长: {path}")
+    return duration
 
 
 @dataclass
@@ -57,6 +75,8 @@ class BuildReport:
     clips_added: int = 0
     clips_removed: int = 0
     markers_written: int = 0
+    recipes_applied: int = 0
+    audio_written: int = 0
     #: 发生变化的时间线区间（秒）。渲染层据此只渲这些段，而非整条片子。
     changed_ranges: list[tuple[float, float]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -77,6 +97,8 @@ class BuildReport:
             "clips_added": self.clips_added,
             "clips_removed": self.clips_removed,
             "markers_written": self.markers_written,
+            "recipes_applied": self.recipes_applied,
+            "audio_written": self.audio_written,
             "changed_ranges": [[round(a, 3), round(b, 3)] for a, b in self.changed_ranges],
             "changed_duration_sec": round(self.changed_duration_sec, 3),
             "warnings": self.warnings,
@@ -116,12 +138,30 @@ def clip_fingerprint(clip: Clip) -> str:
         "retime": clip.retime.type,
         "framing": clip.framing.model_dump(),
         "camera": clip.camera.model_dump(),
+        "transition": clip.transition.model_dump(by_alias=True),
+        "effects": [item.model_dump() for item in clip.effects],
+        "color": clip.color.model_dump() if clip.color else None,
+        "audio": clip.audio.model_dump(),
     }
     import hashlib
 
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
+
+
+def spec_execution_fingerprint(spec: EditSpec) -> str:
+    """Fingerprint non-clip fields that alter Resolve output."""
+    return stable_hash(
+        {
+            "timebase": spec.timebase.model_dump(),
+            "canvas": spec.canvas.model_dump(),
+            "tracks": [track.model_dump() for track in spec.tracks],
+            "audio": [layer.model_dump() for layer in spec.audio],
+            "markers": [marker.model_dump() for marker in spec.markers],
+            "captions": [caption.model_dump() for caption in spec.captions],
+        }
+    )[:16]
 
 
 class ResolveCompiler:
@@ -136,11 +176,15 @@ class ResolveCompiler:
         adapter: ResolveAdapter,
         resolve_asset: Callable[[str], Path | None],
         *,
+        resolve_shot: Callable[[str], object | None] | None = None,
+        recipe_registry: RecipeRegistry | None = None,
         state_dir: Path | None = None,
     ):
         self.rv = adapter
         self.resolve_asset = resolve_asset
-        self.state_dir = state_dir
+        self.resolve_shot = resolve_shot
+        self.recipe_registry = recipe_registry or RecipeRegistry.load()
+        self.state_dir = state_dir.resolve() if state_dir is not None else None
 
     # ---------- 公共入口 ----------
 
@@ -183,13 +227,20 @@ class ResolveCompiler:
         report.clips_total = len(spec.clips)
 
         current = {c.id: clip_fingerprint(c) for c in spec.clips}
+        spec_changed = (
+            previous.get("__spec__") != spec_execution_fingerprint(spec)
+        )
         changed = [c for c in spec.clips if previous.get(c.id) != current[c.id]]
+        if spec_changed:
+            changed = list(spec.clips)
         added = [c for c in changed if c.id not in previous]
 
         report.clips_changed = len(changed)
         report.clips_added = len(added)
         report.clips_unchanged = len(spec.clips) - len(changed)
-        report.clips_removed = sum(1 for cid in previous if cid not in current)
+        report.clips_removed = sum(
+            1 for cid in previous if cid != "__spec__" and cid not in current
+        )
         report.changed_ranges = merge_ranges(
             [(c.timeline.in_sec, c.timeline.out_sec) for c in changed]
         )
@@ -228,13 +279,21 @@ class ResolveCompiler:
         written = self._append_clips(spec, ordered, media)
 
         report.clips_written = len(written)
+        self._apply_clip_properties(spec, written, media, report)
+        self._apply_recipes(written, report)
+        report.audio_written = self._append_audio(spec, written)
         report.markers_written = self._write_markers(spec, written)
 
     # ---------- 内部 ----------
 
     def _validate(self, spec: EditSpec) -> None:
         """R2：执行前必须校验通过。"""
-        result = validate(spec, resolve_asset=self.resolve_asset)
+        result = validate(
+            spec,
+            resolve_asset=self.resolve_asset,
+            resolve_shot=self.resolve_shot,
+            recipe_registry=self.recipe_registry,
+        )
         for warning in result.warnings:
             log.warning("%s", warning)
         result.raise_if_failed()
@@ -302,6 +361,7 @@ class ResolveCompiler:
                     "track_index": self._track_index(spec, clip.timeline.track),
                     "media_fps": info.fps,        # 源时基（如 23.976）
                     "timeline_fps": tl_fps,       # 交付时基
+                    "media_type": 1,              # video only；音频必须由 EditSpec 明示
                 }
             )
 
@@ -320,9 +380,204 @@ class ResolveCompiler:
         tl_fps = self._timebase(spec)
         for marker in spec.markers:
             self.rv.add_timeline_marker(
-                tl_fps.to_frames(marker.sec), marker.kind, marker.note
+                tl_fps.to_frames(marker.sec),
+                marker.kind,
+                marker.note,
+                duration_frames=max(1, tl_fps.to_frames(marker.duration_sec)),
             )
         return count
+
+    def _apply_clip_properties(
+        self,
+        spec: EditSpec,
+        written: list[tuple[Clip, object]],
+        media: dict,
+        report: BuildReport,
+    ) -> None:
+        """Apply only static transform semantics proven by capability ``transform``."""
+        for clip, item in written:
+            info = media[clip.asset_id]
+            source_aspect = info.width / max(info.height, 1)
+            target_aspect = spec.canvas.width / spec.canvas.height
+            cover_zoom = (
+                source_aspect / target_aspect
+                if source_aspect >= target_aspect
+                else target_aspect / source_aspect
+            )
+            if clip.framing.mode == "fit":
+                zoom = clip.framing.scale
+            else:
+                zoom = cover_zoom * clip.framing.scale
+            properties: dict[str, float | int | str] = {
+                "ZoomX": zoom,
+                "ZoomY": zoom,
+                "ZoomGang": True,
+                "Pan": clip.framing.offset_x * spec.canvas.width,
+                "Tilt": clip.framing.offset_y * spec.canvas.height,
+            }
+            results = self.rv.set_properties(item, properties)
+            failed = sorted(key for key, value in results.items() if not value)
+            if failed:
+                report.warnings.append(
+                    f"{clip.id}: transform 属性未生效: {', '.join(failed)}"
+                )
+
+    def _apply_recipes(
+        self,
+        written: list[tuple[Clip, object]],
+        report: BuildReport,
+    ) -> None:
+        """Apply only recipes already admitted by validator/R4."""
+        self.rv.clear_color_groups()
+        color_groups: dict[str, list[object]] = {}
+        for clip, item in written:
+            for ref in clip.effects:
+                apply_fusion_recipe(
+                    self.rv,
+                    self.recipe_registry,
+                    item=item,
+                    ref=ref,
+                )
+                report.recipes_applied += 1
+            if clip.color is not None:
+                color_groups.setdefault(clip.color.recipe, []).append(item)
+        for recipe_id, items in color_groups.items():
+            apply_color_recipe(
+                self.rv,
+                self.recipe_registry,
+                recipe_id=recipe_id,
+                items=items,
+            )
+            report.recipes_applied += 1
+
+    def _append_audio(
+        self,
+        spec: EditSpec,
+        written: list[tuple[Clip, object]],
+    ) -> int:
+        """Place music and pre-baked SFX; Fairlight automation is never assumed."""
+        audio_tracks = [track.id for track in spec.tracks if track.kind == "audio"]
+        cue_rows: list[dict] = []
+        for layer in spec.audio:
+            source_path = (
+                Path(layer.path).expanduser().resolve()
+                if layer.path
+                else self.resolve_asset(layer.asset_id or "")
+            )
+            if source_path is None:
+                raise ResolveOperationError(f"无法解析 audio layer {layer.id}")
+            duration = layer.duration_sec
+            if duration is None:
+                raise ResolveOperationError(
+                    f"audio layer {layer.id} 必须给 duration_sec 才能确定性放置"
+                )
+            path = self._prebaked_audio(
+                source_path,
+                source_in_sec=layer.source_in_sec,
+                duration_sec=duration,
+                gain_db=layer.gain_db,
+            )
+            cue_rows.append(
+                {
+                    "timeline_in": layer.timeline_in_sec,
+                    "path": path,
+                    "duration": duration,
+                    "track_index": audio_tracks.index(layer.track) + 1,
+                }
+            )
+        sfx_track = len(audio_tracks) + 1
+        sfx_rows: list[dict] = []
+        for clip, _item in written:
+            for cue in clip.audio.sfx:
+                recipe = self.recipe_registry.get(cue.recipe)
+                if recipe is None:
+                    raise ResolveOperationError(f"Sound Recipe 未注册: {cue.recipe}")
+                path = self.recipe_registry.artifact_path(cue.recipe)
+                duration = _audio_duration(path)
+                recipe_gain = float(
+                    self.recipe_registry.resolved_params(cue.recipe, {}).get(
+                        "gain_db", 0.0
+                    )
+                )
+                path = self._prebaked_audio(
+                    path,
+                    source_in_sec=0.0,
+                    duration_sec=duration,
+                    gain_db=recipe_gain + cue.gain_db,
+                )
+                sfx_rows.append(
+                    {
+                        "timeline_in": clip.timeline.in_sec + cue.at_sec,
+                        "path": path,
+                        "duration": duration,
+                    }
+                )
+        # Interval partitioning: overlapping SFX get separate tracks, non-overlapping
+        # events reuse the lowest lane. This prevents silent AppendToTimeline failures.
+        lane_ends: list[float] = []
+        for row in sorted(sfx_rows, key=lambda value: value["timeline_in"]):
+            start = row["timeline_in"]
+            lane = next(
+                (index for index, end in enumerate(lane_ends) if end <= start + 1e-9),
+                len(lane_ends),
+            )
+            if lane == len(lane_ends):
+                lane_ends.append(0.0)
+            lane_ends[lane] = start + row["duration"]
+            row["track_index"] = sfx_track + lane
+            cue_rows.append(row)
+        if not cue_rows:
+            return 0
+        self.rv.ensure_audio_tracks(max(row["track_index"] for row in cue_rows))
+        paths = sorted({row["path"] for row in cue_rows})
+        self.rv.import_media(paths, bin_name="aes-audio")
+        tl_fps = self._timebase(spec)
+        requests = [
+            {
+                "media_path": row["path"],
+                "source_in_sec": 0.0,
+                "source_out_sec": row["duration"],
+                "timeline_in_sec": row["timeline_in"],
+                "track_index": row["track_index"],
+                "media_fps": tl_fps,
+                "timeline_fps": tl_fps,
+            }
+            for row in sorted(
+                cue_rows, key=lambda value: (value["track_index"], value["timeline_in"])
+            )
+        ]
+        return len(append_prebaked_audio(self.rv, requests))
+
+    def _prebaked_audio(
+        self,
+        source: Path,
+        *,
+        source_in_sec: float,
+        duration_sec: float,
+        gain_db: float,
+    ) -> Path:
+        cache_root = (
+            self.state_dir / "audio-cache"
+            if self.state_dir is not None
+            else REPO / "library" / "cache" / "execution-audio"
+        )
+        key = stable_hash(
+            {
+                "source": str(source.resolve()),
+                "mtime_ns": source.stat().st_mtime_ns,
+                "source_in_sec": source_in_sec,
+                "duration_sec": duration_sec,
+                "gain_db": gain_db,
+                "pipeline": "audio-prebake-1",
+            }
+        )[:24]
+        return prebake_audio(
+            source,
+            cache_root / f"{key}.wav",
+            source_in_sec=source_in_sec,
+            duration_sec=duration_sec,
+            gain_db=gain_db,
+        )
 
     # ---------- 构建状态（增量更新的依据） ----------
 
@@ -341,7 +596,10 @@ class ResolveCompiler:
                 {
                     "spec_id": spec.id,
                     "revision": spec.revision,
-                    "fingerprints": {c.id: clip_fingerprint(c) for c in spec.clips},
+                    "fingerprints": {
+                        "__spec__": spec_execution_fingerprint(spec),
+                        **{c.id: clip_fingerprint(c) for c in spec.clips},
+                    },
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -362,4 +620,10 @@ class ResolveCompiler:
         return data.get("fingerprints")
 
 
-__all__ = ["ResolveCompiler", "BuildReport", "clip_fingerprint", "merge_ranges"]
+__all__ = [
+    "ResolveCompiler",
+    "BuildReport",
+    "clip_fingerprint",
+    "merge_ranges",
+    "spec_execution_fingerprint",
+]

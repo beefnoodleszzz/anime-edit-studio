@@ -1,0 +1,163 @@
+{
+  "probe": "phase2_professional_execution_risks",
+  "resolve_version": "21.0.3.7",
+  "project": "_aes_phase2_risk_probe",
+  "source": {
+    "path": "/Users/zhangxiaolong/Desktop/anime-edit-studio/library/proxies/06629b7b8f18.mp4",
+    "moment_sec": 30.0
+  },
+  "baseline": {
+    "sha256": "90d06ee13f6e9ba9996e58a71fcbfe6bfcd5fbd4942d758cefbd428a1ebb9338",
+    "stats": {
+      "YAVG": 32.7641,
+      "UAVG": 128.18,
+      "VAVG": 128.191
+    },
+    "frame": "/Users/zhangxiaolong/Desktop/anime-edit-studio/docs/probes/phase2_risk_out/phase2_base.png"
+  },
+  "color_recipe": {
+    "add_group": true,
+    "assign_first": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "assign_second": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "group_members": 2,
+    "add_version": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "refresh_luts": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "group_graph_nodes": 1,
+    "custom_lut_path": "/Users/zhangxiaolong/Desktop/anime-edit-studio/docs/probes/phase2_risk_out/phase2_inverse.cube",
+    "builtin_lut": "Olympus/Olympus OM-Log400_to_BT.709_v1.0.cube",
+    "set_group_lut": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "render": {
+      "sha256": "3eb400821cca7e2c8cb30474d38708734ec371e364a7a9ec58eeec82e42ede8a",
+      "stats": {
+        "YAVG": 34.9365,
+        "UAVG": 128.242,
+        "VAVG": 128.297
+      },
+      "frame": "/Users/zhangxiaolong/Desktop/anime-edit-studio/docs/probes/phase2_risk_out/phase2_color.png"
+    },
+    "changes_output": true,
+    "verified": true
+  },
+  "fairlight": {
+    "add_track": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "track_count_before": 1,
+    "track_count_after": 2,
+    "timeline_audio_methods": [
+      "CreateSubtitlesFromAudio"
+    ],
+    "audio_item_count": 2,
+    "audio_item_methods": [
+      "GetSourceAudioChannelMapping"
+    ],
+    "audio_properties": {},
+    "property_attempts": {
+      "Volume": {
+        "before": null,
+        "set": false,
+        "after": null
+      },
+      "AudioVolume": {
+        "before": null,
+        "set": false,
+        "after": null
+      },
+      "Gain": {
+        "before": null,
+        "set": false,
+        "after": null
+      },
+      "Pan": {
+        "before": null,
+        "set": false,
+        "after": null
+      }
+    },
+    "automation_callable": false,
+    "track_management_verified": true,
+    "automation_verified": false
+  },
+  "transition": {
+    "timeline_methods": [],
+    "item_methods": [],
+    "native_api_found": false,
+    "fusion_clip": {
+      "callable": true,
+      "result": "<BlackmagicFusion.PyRemoteObject object at 0x1036c83d0>",
+      "error": null
+    },
+    "fusion_fallback_created": true,
+    "verified": false
+  },
+  "fusion_recipe": {
+    "add_comp": true,
+    "tools_before": [
+      "ActiveTool",
+      "AddTool",
+      "AddToolAction",
+      "ChooseTool",
+      "DisableSelectedTools",
+      "FindTool",
+      "FindToolByID",
+      "GetToolList",
+      "SetActiveTool"
+    ],
+    "tool_ids_before": [
+      "1",
+      "2"
+    ],
+    "add_brightness": true,
+    "gain_readback": 0.25,
+    "connect_input": true,
+    "connect_output": true,
+    "render": {
+      "sha256": "97814e5c55a8fa9bbfa91640fd7d4953c516030037a70dd5988074c718f6da43",
+      "stats": {
+        "YAVG": 20.1427,
+        "UAVG": 128.069,
+        "VAVG": 128.082
+      },
+      "frame": "/Users/zhangxiaolong/Desktop/anime-edit-studio/docs/probes/phase2_risk_out/phase2_fusion.png"
+    },
+    "changes_output": true,
+    "export": {
+      "callable": true,
+      "result": true,
+      "error": null
+    },
+    "export_exists": true,
+    "delete": {
+      "callable": true,
+      "result": false,
+      "error": null
+    },
+    "import_result": true,
+    "comp_count_after_import": 1,
+    "parameter_injection": true,
+    "roundtrip_verified": true,
+    "visual_output_verified": true
+  }
+}

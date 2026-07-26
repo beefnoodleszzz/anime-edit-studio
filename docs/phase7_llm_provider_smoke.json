@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-25",
+  "provider": "claude-cli",
+  "model": "sonnet",
+  "schema_enforced": true,
+  "tools_enabled": false,
+  "output": {
+    "ready": true,
+    "boundary": "structured-json-only"
+  },
+  "duration_ms": 5363,
+  "cost_usd": 0.0048330000000000005,
+  "request_id": "def31e12-878e-4da2-9c3d-f52d26d47744"
+}

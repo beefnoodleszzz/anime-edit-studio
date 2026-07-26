@@ -21,6 +21,7 @@ from typing import Callable
 
 from studio.core.timecode import Timebase as CoreTimebase
 from studio.editspec.schema import EditSpec
+from studio.execution.recipes import RecipeRegistry
 
 # 1 帧的容差基准；比这更细的重叠属于浮点噪声，不算错误
 _EPS_FRAMES = 0.5
@@ -106,6 +107,7 @@ def check_structure(spec: EditSpec) -> list[Issue]:
         )
 
     known_tracks = {t.id for t in spec.tracks}
+    track_kinds = {t.id: t.kind for t in spec.tracks}
     for clip in spec.clips:
         if clip.timeline.track not in known_tracks:
             issues.append(
@@ -116,6 +118,38 @@ def check_structure(spec: EditSpec) -> list[Issue]:
                     clip.id,
                 )
             )
+        elif track_kinds[clip.timeline.track] != "video":
+            issues.append(
+                Issue(
+                    "TRACK_KIND_MISMATCH",
+                    Severity.ERROR,
+                    f"视频 clip 被放到 {track_kinds[clip.timeline.track]} 轨 "
+                    f"{clip.timeline.track!r}",
+                    clip.id,
+                )
+            )
+        for cue in clip.audio.sfx:
+            if cue.at_sec > clip.timeline.duration_sec:
+                issues.append(
+                    Issue(
+                        "SFX_OUTSIDE_CLIP",
+                        Severity.ERROR,
+                        f"SFX {cue.recipe!r} 位于 {cue.at_sec:.3f}s，"
+                        f"超过 clip 时长 {clip.timeline.duration_sec:.3f}s",
+                        clip.id,
+                    )
+                )
+        for point in clip.audio.volume_automation:
+            if point.sec > clip.timeline.duration_sec:
+                issues.append(
+                    Issue(
+                        "AUTOMATION_OUTSIDE_CLIP",
+                        Severity.ERROR,
+                        f"音量点 {point.sec:.3f}s 超过 clip 时长 "
+                        f"{clip.timeline.duration_sec:.3f}s",
+                        clip.id,
+                    )
+                )
     for layer in spec.audio:
         if layer.track not in known_tracks:
             issues.append(
@@ -123,6 +157,51 @@ def check_structure(spec: EditSpec) -> list[Issue]:
                     "UNKNOWN_TRACK",
                     Severity.ERROR,
                     f"音频层 {layer.id} 引用了未声明的轨道 {layer.track!r}",
+                )
+            )
+        elif track_kinds[layer.track] != "audio":
+            issues.append(
+                Issue(
+                    "TRACK_KIND_MISMATCH",
+                    Severity.ERROR,
+                    f"音频层 {layer.id} 被放到非 audio 轨 {layer.track!r}",
+                )
+            )
+
+    for caption in spec.captions:
+        if caption.track not in known_tracks:
+            issues.append(
+                Issue(
+                    "UNKNOWN_TRACK",
+                    Severity.ERROR,
+                    f"字幕 {caption.id} 引用了未声明的轨道 {caption.track!r}",
+                )
+            )
+        elif track_kinds[caption.track] != "subtitle":
+            issues.append(
+                Issue(
+                    "TRACK_KIND_MISMATCH",
+                    Severity.ERROR,
+                    f"字幕 {caption.id} 被放到非 subtitle 轨 {caption.track!r}",
+                )
+            )
+
+    clip_ids = {clip.id for clip in spec.clips}
+    for marker in spec.markers:
+        if marker.clip_id and marker.clip_id not in clip_ids:
+            issues.append(
+                Issue(
+                    "MARKER_CLIP_NOT_FOUND",
+                    Severity.ERROR,
+                    f"marker 引用了不存在的 clip {marker.clip_id!r}",
+                )
+            )
+        if marker.sec > spec.duration_sec:
+            issues.append(
+                Issue(
+                    "MARKER_OUTSIDE_TIMELINE",
+                    Severity.ERROR,
+                    f"marker {marker.sec:.3f}s 超过成片时长 {spec.duration_sec:.3f}s",
                 )
             )
 
@@ -168,6 +247,7 @@ def _check_timeline_continuity(spec: EditSpec) -> list[Issue]:
 def check_media(
     spec: EditSpec,
     resolve_asset: Callable[[str], Path | None] | None = None,
+    resolve_shot: Callable[[str], object | None] | None = None,
 ) -> list[Issue]:
     """asset_id 必须能解析到实际存在的文件。
 
@@ -219,6 +299,67 @@ def check_media(
                     clip.id,
                 )
             )
+        if clip.shot_id and resolve_shot is not None:
+            try:
+                shot = resolve_shot(clip.shot_id)
+            except Exception as exc:  # noqa: BLE001
+                shot = None
+                issues.append(
+                    Issue(
+                        "SHOT_LOOKUP_FAILED",
+                        Severity.ERROR,
+                        f"解析 shot {clip.shot_id} 时出错: {exc}",
+                        clip.id,
+                    )
+                )
+            if shot is None:
+                issues.append(
+                    Issue(
+                        "SHOT_NOT_FOUND",
+                        Severity.ERROR,
+                        f"shot {clip.shot_id} 不存在",
+                        clip.id,
+                    )
+                )
+    for layer in spec.audio:
+        if layer.path:
+            path = Path(layer.path).expanduser()
+            if not path.is_file():
+                issues.append(
+                    Issue(
+                        "MEDIA_MISSING",
+                        Severity.ERROR,
+                        f"audio layer {layer.id} 的文件不存在: {path}",
+                    )
+                )
+        elif layer.asset_id:
+            try:
+                path = resolve_asset(layer.asset_id)
+            except Exception as exc:  # noqa: BLE001
+                path = None
+                issues.append(
+                    Issue(
+                        "ASSET_LOOKUP_FAILED",
+                        Severity.ERROR,
+                        f"解析 audio asset {layer.asset_id} 时出错: {exc}",
+                    )
+                )
+            if path is None:
+                issues.append(
+                    Issue(
+                        "ASSET_NOT_FOUND",
+                        Severity.ERROR,
+                        f"audio asset {layer.asset_id} 无法解析到媒体文件",
+                    )
+                )
+            elif not path.exists():
+                issues.append(
+                    Issue(
+                        "MEDIA_MISSING",
+                        Severity.ERROR,
+                        f"audio asset {layer.asset_id} 的文件不存在: {path}",
+                    )
+                )
     return issues
 
 
@@ -232,7 +373,12 @@ _FEATURE_CAPABILITY: dict[str, str] = {
     "effects": "add_fusion_comp",
     "color": "color_recipe",
     "transition": "transition",
-    "sfx": "fairlight_automation",
+    "sfx": "sound_recipe_prebake",
+    "camera_move": "camera_move_recipe",
+    "constant_retime": "timespeed_recipe",
+    "audio_automation": "fairlight_automation",
+    "captions": "fusion_title_generator",
+    "retime_interpolation": "retime_interpolation_mapping",
 }
 
 
@@ -259,16 +405,57 @@ def check_capabilities(spec: EditSpec, is_verified: Callable[[str], bool]) -> li
             need("magic_mask_track", clip.id, "framing.mode=magic_mask_track")
         if clip.retime.type == "speed_ramp":
             need("speed_ramp", clip.id, "retime.type=speed_ramp")
+        elif abs(clip.retime.speed - 1.0) > 1e-9:
+            need("constant_retime", clip.id, f"retime.speed={clip.retime.speed}")
+        if clip.retime.interpolation != "nearest":
+            need(
+                "retime_interpolation",
+                clip.id,
+                f"retime.interpolation={clip.retime.interpolation}",
+            )
+        if clip.camera.move != "none":
+            need("camera_move", clip.id, f"camera.move={clip.camera.move}")
         if clip.effects:
             need("effects", clip.id, f"effects({len(clip.effects)} 个 recipe)")
         if clip.color is not None:
             need("color", clip.id, f"color recipe {clip.color.recipe!r}")
         if clip.audio.sfx:
             need("sfx", clip.id, f"audio.sfx({len(clip.audio.sfx)} 条)")
+        if clip.audio.source_gain_db is not None or clip.audio.volume_automation:
+            need("audio_automation", clip.id, "audio gain/automation")
         for end_name, end in (("in", clip.transition.in_), ("out", clip.transition.out)):
             if end.recipe not in ("hard_cut", "none"):
                 need("transition", clip.id, f"transition.{end_name}={end.recipe!r}")
+    if spec.captions:
+        need("captions", "spec", f"captions({len(spec.captions)} 条)")
 
+    return issues
+
+
+# ─────────────────────────── Recipe ───────────────────────────
+
+def check_recipes(spec: EditSpec, registry: RecipeRegistry) -> list[Issue]:
+    issues: list[Issue] = []
+
+    def check(recipe_id: str, params: dict, kind: str, clip_id: str | None) -> None:
+        for problem in registry.validate(recipe_id, params, expected_kind=kind):
+            issues.append(
+                Issue(problem.code, Severity.ERROR, problem.message, clip_id)
+            )
+
+    for clip in spec.clips:
+        for ref in clip.effects:
+            check(ref.recipe, ref.params, "effect", clip.id)
+        if clip.color:
+            check(clip.color.recipe, clip.color.params, "color", clip.id)
+        for cue in clip.audio.sfx:
+            check(cue.recipe, {}, "sound", clip.id)
+        for end in (clip.transition.in_, clip.transition.out):
+            if end.recipe not in ("hard_cut", "none"):
+                check(end.recipe, end.params, "transition", clip.id)
+    for caption in spec.captions:
+        if caption.style:
+            check(caption.style.recipe, caption.style.params, "title", None)
     return issues
 
 
@@ -278,15 +465,20 @@ def validate(
     spec: EditSpec,
     *,
     resolve_asset: Callable[[str], Path | None] | None = None,
+    resolve_shot: Callable[[str], object | None] | None = None,
     is_verified: Callable[[str], bool] | None = None,
+    recipe_registry: RecipeRegistry | None = None,
 ) -> ValidationResult:
     """完整校验。返回全部问题，不在首个错误处停止。"""
     if is_verified is None:
         from studio.core.capabilities import is_verified as default_is_verified
 
         is_verified = default_is_verified
+    if recipe_registry is None:
+        recipe_registry = RecipeRegistry.load()
 
     issues = check_structure(spec)
-    issues += check_media(spec, resolve_asset)
+    issues += check_media(spec, resolve_asset, resolve_shot)
+    issues += check_recipes(spec, recipe_registry)
     issues += check_capabilities(spec, is_verified)
     return ValidationResult(issues)

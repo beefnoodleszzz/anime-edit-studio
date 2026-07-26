@@ -236,3 +236,18 @@ class TestFingerprint:
         b.decision.reasoning = "完全不同的解释"
         b.decision.confidence = 0.99
         assert clip_fingerprint(a) == clip_fingerprint(b)
+
+    def test_recipe_and_audio_changes_trigger_rebuild(self):
+        from studio.editspec.schema import RecipeRef, SfxCue
+
+        a = Clip(
+            id="c", asset_id="x",
+            source=SourceRange(in_sec=0, out_sec=1),
+            timeline=TimelinePlacement(in_sec=0, duration_sec=1),
+        )
+        effect = a.model_copy(deep=True)
+        effect.effects = [RecipeRef(recipe="white_flash_v1")]
+        assert clip_fingerprint(a) != clip_fingerprint(effect)
+        sound = a.model_copy(deep=True)
+        sound.audio.sfx = [SfxCue(recipe="impact_low_v1")]
+        assert clip_fingerprint(a) != clip_fingerprint(sound)

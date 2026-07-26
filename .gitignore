@@ -17,5 +17,17 @@ review-web/dist/
 review-web/tsconfig.tsbuildinfo
 library/*.db
 library/engine.sqlite*
+library/*.sqlite
+library/*.sqlite-*
 projects/*/outputs/
+projects/*/renders/
+projects/*/uploads/
+projects/*/previews/
+projects/*/audio-cache/
+projects/**/*.mov
+projects/**/*.mp4
+projects/**/*.wav
+output/
+.playwright-cli/
+.playwright-mcp/
 .DS_Store

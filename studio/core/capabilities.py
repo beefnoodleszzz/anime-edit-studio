@@ -27,7 +27,7 @@ def load_capabilities(path: Path | None = None) -> dict:
     target = path or CAPABILITIES_PATH
     if not target.exists():
         raise FileNotFoundError(f"能力矩阵缺失: {target}")
-    return yaml.safe_load(target.read_text())
+    return yaml.safe_load(target.read_text(encoding="utf-8"))
 
 
 def get(name: str, caps: dict | None = None) -> dict:

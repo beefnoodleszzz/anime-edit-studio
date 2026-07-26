@@ -1,0 +1,7 @@
+id: sword_whoosh_v1
+version: 1.0.0
+kind: sound
+engine: deterministic_wav
+capability: audio_track_management
+parameters:
+  gain_db: {type: float, min: -24.0, max: 3.0, default: -6.0}

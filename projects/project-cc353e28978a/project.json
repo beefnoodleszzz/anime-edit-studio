@@ -1,0 +1,14 @@
+{
+  "title": "Tanjiro Product E2E",
+  "intent": "以炭治郎为唯一主角，制作燃向但干净克制的25秒角色短片",
+  "duration_sec": 25.0,
+  "platform": "douyin",
+  "primary_characters": [
+    "kamado_tanjirou"
+  ],
+  "tone": [
+    "intense",
+    "clean"
+  ],
+  "project_id": "project-cc353e28978a"
+}

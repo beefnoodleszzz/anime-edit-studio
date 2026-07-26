@@ -8,7 +8,7 @@
 #
 # 探测来源：probe_resolve_capability.py，2026-07-25
 
-version: "0.1"
+version: "0.2"
 resolve_version_tested: "21.0.3.7"
 edition: studio
 script_python: "3.11"          # venv；系统 3.14 与 fusionscript 不兼容
@@ -105,12 +105,14 @@ capabilities:
     path: fusion_api
     api: "TimelineItem.AddFusionComp / ImportFusionComp / LoadFusionCompByName / ExportFusionComp"
     probed: true
-    verified: true          # AddFusionComp 实测返回 comp 对象
+    verified: true
+    evidence: "docs/probes/phase2_risk_probe.json"
     note: |
-      Recipe 注入路径已确认可行，且 ExportFusionComp 存在——
-      意味着 recipe 可以在 Fusion GUI 里手工做好后导出 .comp，
-      代码只负责 Import + 参数注入，不需要用脚本从零搭节点图。
-      这实质性降低了 Recipe 库的建设成本。
+      Phase 2.0 已验证完整技术闭环：AddTool、参数写入与读回、
+      MediaIn → BrightnessContrast → MediaOut 连接、ExportFusionComp、
+      ImportFusionComp 全部成功，且渲染帧相对对照发生变化。
+      这证明「GUI 制作 → Export .comp → 代码 Import + 注参」可作为 Recipe 路径。
+      具体 TimeSpeed 与转场 Recipe 仍须各自验收，不能由本结论自动推导为 verified。
 
   render:
     path: native_api
@@ -141,6 +143,14 @@ capabilities:
       ★ 必须传整数枚举，传字符串（'OpticalFlow' 等）返回 False。
       0–3 四档均被接受，具体档位含义待 Phase 6 逐档渲染比对确定。
 
+  retime_interpolation_mapping:
+    path: native_api
+    api: "SetProperty('RetimeProcess'/'MotionEstimation', int)"
+    probed: true
+    verified: false
+    priority: high
+    note: "整数 0–3 可写已确认，但各档视觉语义尚未用渲染对照映射；未映射前不得由 nearest/frame_blend/optical_flow 枚举生成整数。"
+
 # ─────────────────────────────────────────────────────────────
 # 方法已确认存在，待 Phase 1/6 实测（这些是本次探测最大的收获）
 # ─────────────────────────────────────────────────────────────
@@ -167,6 +177,22 @@ capabilities:
       片段上与变速相关的方法只有 GetDuration。
       结论：**Resolve 21.0.3 没有逐片段变速的脚本接口**。
       变速必须走 Fusion Recipe 路线（add_fusion_comp 已 verified）。
+
+  timespeed_recipe:
+    path: fusion_api
+    api: "Fusion TimeSpeed / TimeStretcher Recipe"
+    probed: false
+    verified: false
+    priority: high
+    note: "常速与曲线变速均须具体 Recipe 样张和人工验收；AddFusionComp 技术通路通过不等于 TimeSpeed Recipe 通过。"
+
+  camera_move_recipe:
+    path: fusion_api
+    api: "Fusion Transform keyframes Recipe"
+    probed: false
+    verified: false
+    priority: high
+    note: "push/pan 动画须由已验收 Recipe 执行；静态 SetProperty(transform) 不可冒充动画。"
 
   subject_tracking:
     path: unsupported
@@ -222,12 +248,14 @@ capabilities:
     path: native_api
     api: "SetLUT / SetCDL / GetNodeGraph / CopyGrades / AssignToColorGroup / AddVersion"
     probed: true
-    verified: false
+    verified: true
     priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
     note: |
-      ColorGroup + Version 是比逐 clip 调色更好的架构：
-      一个 Color Recipe = 一个 ColorGroup，clip 加入 group 即继承调色，
-      改 recipe 只需改 group。这比 EditSpec 里每个 clip 存一份 grade 干净得多。
+      Phase 2.0 实测：创建 ColorGroup、两个 clip 入组、AddVersion 均成功；
+      在 group post-clip graph 设置 Resolve 已登记的 LUT 后，渲染帧哈希与统计改变。
+      因此 Color Recipe 架构冻结为「一个 Recipe 对应一个 ColorGroup」。
+      注意 Graph.SetLUT 只接受 Resolve LUT 注册表中的路径；任意外部绝对路径会返回 False。
 
   export_lut:
     path: native_api
@@ -260,30 +288,54 @@ capabilities:
     note: "Hook 文案层（旧 TextOverlay）的落地路径"
 
 # ─────────────────────────────────────────────────────────────
-# 未探测 / 未知
+# Phase 2.0 专业能力预探测
 # ─────────────────────────────────────────────────────────────
 
   transition:
-    path: unverified
-    probed: false
+    path: fusion_recipe
+    probed: true
     verified: false
     fallback: hard_cut
     priority: high
-    note: "TimelineItem 上未见直接的 transition API，需研究 Timeline 层或 Fusion 转场方案"
+    evidence: "docs/probes/phase2_risk_probe.json"
+    note: |
+      Timeline / TimelineItem 均无原生 transition API。
+      CreateFusionClip([相邻 clips]) 可成功创建 Fusion 容器，证明 fallback 入口存在；
+      但尚未完成有重叠语义和渲染对照的正式转场 Recipe，因此保持 unverified。
 
   fairlight_automation:
-    path: unverified
-    probed: false
+    path: unsupported
+    probed: true
     verified: false
-    fallback: "ffmpeg 音频床（旧 sound.py 路径）"
-    priority: medium
+    available: false
+    fallback: "execution/audio 确定性预烘焙音量包络与 Sound Recipe WAV，再导入已验证的 Resolve 音轨完成最终混音"
+    priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
+    note: |
+      Resolve 21.0.3.7 的公开脚本对象没有音量/增益/自动化/关键帧方法。
+      对音频 TimelineItem 写 Volume / AudioVolume / Gain / Pan 全部返回 False，
+      GetProperty 也无对应字段。GUI Automation 默认禁用，不能作为主链。
+
+  sound_recipe_prebake:
+    path: deterministic_fallback
+    api: "FFmpeg PCM24 pre-bake + MediaPool.AppendToTimeline(mediaType=2)"
+    probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/sound_recipe_prebake_acceptance.json"
+    note: |
+      Phase 6 真机实测四条 Sound Recipe 预烘焙后分别进入 Resolve 四条音轨，
+      H.264 Master 渲染保留 48 kHz stereo 音轨。默认增益叠加时 true peak
+      -11.7 dBFS；公开 API 不承担任何 Fairlight automation。
 
   audio_track_management:
     path: native_api
     api: "Timeline.AddTrack('audio', ...)"
     probed: true
-    verified: false
+    verified: true
     priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
+    note: "Phase 2.0 实测 AddTrack('audio', 'stereo') 成功，音轨数从 1 增至 2。"
 
   gui_automation:
     path: gui_fallback
@@ -393,3 +445,28 @@ pitfalls:
     issue: "视觉比对若取到黑场，任何变化都不可见"
     impact: "第一版 SmartReframe 验证误取近全黑帧（YAVG≈30），连对照组都判为无差异"
     fix: "比对前先扫描素材挑亮度适中的时间点（40 < YAVG < 200）"
+
+  - id: P15
+    issue: "Color Graph.SetLUT 不接受任意外部绝对路径"
+    impact: "调用返回 False，若只假设文件存在会导致 Color Recipe 静默不生效"
+    fix: "Recipe LUT 必须安装/登记进 Resolve LUT 注册表；SetLUT 后检查返回值并渲染对照"
+
+  - id: P16
+    issue: "Resolve 21.0.3.7 公共脚本 API 无 Fairlight 音量自动化"
+    impact: "可建音轨但无法脚本写 clip/track 音量关键帧，Sound Recipe 主链不能依赖 Fairlight Automation"
+    fix: "在 execution/audio 中确定性预烘焙包络与 WAV，再导入 Resolve 音轨；禁止用 GUI Automation 冒充主链"
+
+  - id: P17
+    issue: "Timeline 与 TimelineItem 无原生 Transition API"
+    impact: "EditSpec transition 不能编译为原生时间线调用"
+    fix: "使用 Fusion transition Recipe；完成重叠语义与渲染对照前 capability 保持 unverified，默认 hard_cut"
+
+  - id: P18
+    issue: "Render TargetDir 使用相对路径时 SetRenderSettings 可成功，但 AddRenderJob 返回失败"
+    impact: "时间线已完整构建却无法创建渲染任务，错误直到 AddRenderJob 才暴露"
+    fix: "ResolveAdapter.render 在接触 API 前统一 expanduser().resolve()，永远传绝对输出目录"
+
+  - id: P19
+    issue: "AppendToTimeline 省略 mediaType 会把视频的原片音频一并放入时间线"
+    impact: "设计音乐虽已写入，成片仍混入角色对白/原声；音乐增益调整看似不生效"
+    fix: "视频 clip 强制 mediaType=1；音乐、SFX 与允许的源音频全部作为显式 AudioLayer 用 mediaType=2 放置"

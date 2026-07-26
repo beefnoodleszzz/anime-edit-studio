@@ -16,6 +16,7 @@ Phase 1 的成功标准之一是「重跑幂等」，这里是实现点。
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,6 +47,13 @@ class MediaInfo:
     @property
     def duration_sec(self) -> float:
         return float(self.fps.to_seconds(self.duration_frames))
+
+
+@dataclass(frozen=True)
+class RenderResult:
+    job_id: str
+    output: Path
+    status: dict
 
 
 class ResolveAdapter:
@@ -114,20 +122,32 @@ class ResolveAdapter:
         self._set_settings(
             {
                 "timelineFrameRate": self._fps_setting(timebase),
+                "timelinePlaybackFrameRate": self._fps_setting(timebase),
                 "timelineResolutionWidth": str(width),
                 "timelineResolutionHeight": str(height),
                 "timelineOutputResolutionWidth": str(width),
                 "timelineOutputResolutionHeight": str(height),
             }
         )
+        actual_fps = float(project.GetSetting("timelineFrameRate") or 0)
+        if abs(actual_fps - timebase.fps_float) > 0.002:
+            raise ResolveOperationError(
+                f"Resolve 时间线时基未生效: 请求 {timebase.fps_float:.6f}，"
+                f"实际 {actual_fps:g}"
+            )
         log.info("project ready: %s (%dx%d @ %s)", name, width, height, timebase)
         return project
 
     @staticmethod
     def _fps_setting(tb: Timebase) -> str:
-        """Resolve 的 timelineFrameRate 要字符串；NTSC 用名义值 + 单独的 DF 开关。"""
-        if tb.is_ntsc:
-            return f"{tb.nominal_fps:d}"
+        """Resolve accepts the displayed NTSC rate, never the nominal timecode fps."""
+        ntsc = {
+            (24000, 1001): "23.976",
+            (30000, 1001): "29.97",
+            (60000, 1001): "59.94",
+        }
+        if (tb.num, tb.den) in ntsc:
+            return ntsc[(tb.num, tb.den)]
         return f"{tb.fps_float:g}"
 
     def _set_settings(self, settings: dict[str, str]) -> None:
@@ -321,6 +341,11 @@ class ResolveAdapter:
                     "endFrame": end_f,                          # P8：开区间，不减 1
                     "trackIndex": r.get("track_index", 1),
                     "recordFrame": timeline_origin + tl_fps.to_frames(r["timeline_in_sec"]),
+                    **(
+                        {"mediaType": int(r["media_type"])}
+                        if r.get("media_type") is not None
+                        else {}
+                    ),
                 }
             )
 
@@ -342,8 +367,17 @@ class ResolveAdapter:
             )
         return items
 
+    def append_audio(self, requests: list[dict]) -> list:
+        """Place pre-baked audio-only media using the same P8/P9/P11 rules."""
+        return self.append_clips(
+            [{**request, "media_type": 2} for request in requests]
+        )
+
     def timeline_items(self, track_index: int = 1) -> list:
         return self.timeline.GetItemListInTrack("video", track_index) or []
+
+    def audio_items(self, track_index: int = 1) -> list:
+        return self.timeline.GetItemListInTrack("audio", track_index) or []
 
     def clear_video_track(self, track_index: int = 1) -> None:
         items = self.timeline_items(track_index)
@@ -406,13 +440,341 @@ class ResolveAdapter:
     def source_out_seconds(item) -> float:
         return float(item.GetSourceEndTime())
 
-    def add_timeline_marker(self, frame: int, kind: str, note: str, *, color: str = "Yellow") -> bool:
-        return bool(self.timeline.AddMarker(frame, color, kind, note, 1))
+    def add_timeline_marker(
+        self,
+        frame: int,
+        kind: str,
+        note: str,
+        *,
+        duration_frames: int = 1,
+        color: str = "Yellow",
+    ) -> bool:
+        return bool(
+            self.timeline.AddMarker(
+                frame, color, kind, note, max(1, duration_frames)
+            )
+        )
 
     # ---------- 属性 ----------
 
     def set_properties(self, item, props: dict[str, float | int | str]) -> dict[str, bool]:
         return {key: bool(item.SetProperty(key, value)) for key, value in props.items()}
 
+    def replace_fusion_comp(
+        self,
+        item,
+        artifact: Path,
+        *,
+        comp_name: str,
+        parameters: dict[str, float | int | bool] | None = None,
+    ):
+        """Import a versioned Fusion comp and verify every injected input."""
+        if not artifact.is_file():
+            raise ResolveOperationError(f"Fusion Recipe 产物不存在: {artifact}")
+        names = item.GetFusionCompNameList() or []
+        if comp_name in names and not item.DeleteFusionCompByName(comp_name):
+            raise ResolveOperationError(f"无法替换已有 Fusion comp: {comp_name}")
+        comp = item.ImportFusionComp(str(artifact))
+        if not comp:
+            raise ResolveOperationError(f"ImportFusionComp 失败: {artifact}")
+        tools = comp.GetToolList(False) or {}
+        for address, value in (parameters or {}).items():
+            tool_name, separator, input_name = address.partition(".")
+            if not separator:
+                raise ValueError(f"Fusion 参数地址必须是 Tool.Input: {address}")
+            tool = tools.get(tool_name)
+            if tool is None:
+                tool = next(
+                    (
+                        candidate
+                        for candidate in tools.values()
+                        if (candidate.GetAttrs() or {}).get("TOOLS_Name") == tool_name
+                    ),
+                    None,
+                )
+            if tool is None:
+                raise ResolveOperationError(f"Fusion Recipe 找不到工具: {tool_name}")
+            tool.SetInput(input_name, value)
+            if tool.GetInput(input_name) != value:
+                raise ResolveOperationError(f"Fusion 参数回读不一致: {address}")
+        return comp
 
-__all__ = ["ResolveAdapter", "ResolveOperationError", "ResolveUnavailable", "MediaInfo"]
+    def build_fusion_comp(
+        self,
+        item,
+        artifact: Path,
+        *,
+        comp_name: str,
+        nodes: list[dict],
+    ):
+        """Build/export a linear Fusion graph used to author Recipe artifacts."""
+        for existing in item.GetFusionCompNameList() or []:
+            if existing == comp_name and not item.DeleteFusionCompByName(existing):
+                raise ResolveOperationError(f"无法删除旧 Recipe comp: {comp_name}")
+        comp = item.AddFusionComp()
+        if not comp:
+            raise ResolveOperationError("AddFusionComp 失败")
+        tools = comp.GetToolList(False) or {}
+        media_in = next(
+            (
+                tool for tool in tools.values()
+                if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaIn"
+            ),
+            None,
+        )
+        media_out = next(
+            (
+                tool for tool in tools.values()
+                if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaOut"
+            ),
+            None,
+        )
+        if media_in is None or media_out is None:
+            raise ResolveOperationError("Fusion comp 缺 MediaIn/MediaOut")
+        previous = media_in
+        for node in nodes:
+            tool = comp.AddTool(node["tool"])
+            if not tool:
+                raise ResolveOperationError(f"Fusion AddTool 失败: {node['tool']}")
+            if node.get("name"):
+                tool.SetAttrs({"TOOLS_Name": node["name"]})
+            for key, value in node.get("inputs", {}).items():
+                tool.SetInput(key, value)
+                if tool.GetInput(key) != value:
+                    raise ResolveOperationError(f"Fusion 输入回读不一致: {key}")
+            for key, expression in node.get("expressions", {}).items():
+                input_object = getattr(tool, key, None)
+                if input_object is None:
+                    raise ResolveOperationError(
+                        f"Fusion 表达式写入失败: {node['tool']}.{key}"
+                    )
+                input_object.SetExpression(expression)
+                if input_object.GetExpression() != expression:
+                    raise ResolveOperationError(
+                        f"Fusion 表达式回读不一致: {node['tool']}.{key}"
+                    )
+            if not tool.ConnectInput(node.get("input", "Input"), previous):
+                raise ResolveOperationError(f"Fusion 节点连接失败: {node['tool']}")
+            previous = tool
+        if not media_out.ConnectInput("Input", previous):
+            raise ResolveOperationError("Fusion MediaOut 连接失败")
+        names = item.GetFusionCompNameList() or []
+        current_name = names[-1] if names else None
+        if current_name and current_name != comp_name:
+            if not item.RenameFusionCompByName(current_name, comp_name):
+                raise ResolveOperationError(f"Fusion comp 重命名失败: {comp_name}")
+            names = item.GetFusionCompNameList() or []
+        try:
+            index = names.index(comp_name) + 1
+        except ValueError as exc:
+            raise ResolveOperationError(f"找不到新建 Fusion comp: {comp_name}") from exc
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        if not item.ExportFusionComp(str(artifact), index):
+            raise ResolveOperationError(f"ExportFusionComp 失败: {artifact}")
+        if not artifact.is_file() or artifact.stat().st_size == 0:
+            raise ResolveOperationError(f"Fusion artifact 未落盘: {artifact}")
+        return comp
+
+    def build_rgb_split_comp(
+        self,
+        item,
+        artifact: Path,
+        *,
+        comp_name: str,
+        offset: float = 0.008,
+    ):
+        """Author a real three-branch RGB spatial split and export it."""
+        for existing in item.GetFusionCompNameList() or []:
+            item.DeleteFusionCompByName(existing)
+        comp = item.AddFusionComp()
+        tools = comp.GetToolList(False) or {}
+        media_in = next(
+            tool for tool in tools.values()
+            if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaIn"
+        )
+        media_out = next(
+            tool for tool in tools.values()
+            if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaOut"
+        )
+        channels = []
+        for name, delta, mapping in (
+            ("Red", -offset, (0, 4, 4)),
+            ("Green", 0.0, (4, 1, 4)),
+            ("Blue", offset, (4, 4, 2)),
+        ):
+            transform = comp.AddTool("Transform")
+            transform.SetAttrs({"TOOLS_Name": f"{name}Offset"})
+            transform.Center.SetExpression(
+                f"Point(0.5 + ({delta}) * max(0, 1 - abs(time - 10) / 10), 0.5)"
+            )
+            transform.ConnectInput("Input", media_in)
+            channel = comp.AddTool("ChannelBoolean")
+            channel.SetAttrs({"TOOLS_Name": f"{name}Only"})
+            channel.SetInput("ToRed", mapping[0])
+            channel.SetInput("ToGreen", mapping[1])
+            channel.SetInput("ToBlue", mapping[2])
+            channel.ConnectInput("Background", transform)
+            channel.ConnectInput("Foreground", transform)
+            channels.append(channel)
+        merged = channels[0]
+        for index, channel in enumerate(channels[1:], start=1):
+            merge = comp.AddTool("Merge")
+            merge.SetAttrs({"TOOLS_Name": f"AddChannel{index}"})
+            merge.SetInput("ApplyMode", "Add")
+            merge.ConnectInput("Background", merged)
+            merge.ConnectInput("Foreground", channel)
+            merged = merge
+        media_out.ConnectInput("Input", merged)
+        names = item.GetFusionCompNameList() or []
+        current_name = names[-1]
+        item.RenameFusionCompByName(current_name, comp_name)
+        names = item.GetFusionCompNameList() or []
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        if not item.ExportFusionComp(str(artifact), names.index(comp_name) + 1):
+            raise ResolveOperationError(f"RGB split ExportFusionComp 失败: {artifact}")
+        return comp
+
+    def apply_group_lut(
+        self,
+        items: list,
+        *,
+        group_name: str,
+        lut_path: Path,
+        registered_path: str | None = None,
+    ):
+        """Apply one ColorGroup post-clip LUT with read/write failures surfaced."""
+        if not lut_path.is_file():
+            raise ResolveOperationError(f"Color Recipe LUT 不存在: {lut_path}")
+        group = self.project.AddColorGroup(group_name)
+        if not group:
+            raise ResolveOperationError(f"无法创建/获取 ColorGroup: {group_name}")
+        for item in items:
+            if not item.AssignToColorGroup(group):
+                raise ResolveOperationError(f"片段加入 ColorGroup 失败: {group_name}")
+        graph = group.GetPostClipNodeGraph()
+        lut_id = registered_path or str(lut_path)
+        if not graph or not graph.SetLUT(1, lut_id):
+            raise ResolveOperationError(f"ColorGroup SetLUT 失败: {lut_id}")
+        if not graph.GetLUT(1):
+            raise ResolveOperationError(f"ColorGroup LUT 回读为空: {lut_id}")
+        return group
+
+    def apply_group_grade(
+        self,
+        items: list,
+        *,
+        group_name: str,
+        drx_path: Path,
+    ):
+        """Apply an accepted DRX to one ColorGroup post-clip graph."""
+        if not drx_path.is_file():
+            raise ResolveOperationError(f"Color Recipe DRX 不存在: {drx_path}")
+        group = self.project.AddColorGroup(group_name)
+        if not group:
+            raise ResolveOperationError(f"无法创建/获取 ColorGroup: {group_name}")
+        for item in items:
+            if not item.AssignToColorGroup(group):
+                raise ResolveOperationError(f"片段加入 ColorGroup 失败: {group_name}")
+        graph = group.GetPostClipNodeGraph()
+        if not graph or not graph.ApplyGradeFromDRX(str(drx_path), 0):
+            raise ResolveOperationError(f"ColorGroup ApplyGradeFromDRX 失败: {drx_path}")
+        return group
+
+    def refresh_lut_list(self) -> None:
+        if not self.project.RefreshLUTList():
+            raise ResolveOperationError("Resolve RefreshLUTList 失败")
+
+    def clear_color_groups(self) -> None:
+        for group in self.project.GetColorGroupsList() or []:
+            if not self.project.DeleteColorGroup(group):
+                raise ResolveOperationError(f"ColorGroup 删除失败: {group.GetName()}")
+
+    def export_current_grade_drx(self, item, output: Path, *, label: str) -> Path:
+        """Grab the current graded clip and export a portable DRX evidence artifact."""
+        self._resolve.OpenPage("color")
+        if self.timeline.GetCurrentVideoItem() is None:
+            raise ResolveOperationError("Color 页当前没有可抓取的 video item")
+        still = self.timeline.GrabStill()
+        if not still:
+            raise ResolveOperationError("Color 页 GrabStill 失败")
+        gallery = self.project.GetGallery()
+        album = gallery.GetCurrentStillAlbum()
+        if not album.SetLabel(still, label):
+            raise ResolveOperationError("Gallery still 标签写入失败")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if not album.ExportStills([still], str(output.parent), output.stem, "drx"):
+            raise ResolveOperationError(f"DRX 导出失败: {output}")
+        candidates = sorted(
+            output.parent.glob(f"{output.stem}*.drx"),
+            key=lambda path: path.stat().st_mtime_ns,
+            reverse=True,
+        )
+        if not candidates:
+            raise ResolveOperationError(f"DRX 导出后未找到产物: {output}")
+        if candidates[0] != output:
+            candidates[0].replace(output)
+        return output
+
+    # ---------- 渲染 ----------
+
+    def render(
+        self,
+        *,
+        output_dir: Path,
+        name: str,
+        preset: str,
+        mark_in: int | None = None,
+        mark_out: int | None = None,
+        timeout_sec: float = 1800,
+    ) -> RenderResult:
+        output_dir = output_dir.expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if not self.project.LoadRenderPreset(preset):
+            raise ResolveOperationError(f"Resolve render preset 加载失败: {preset}")
+        settings: dict[str, object] = {
+            "TargetDir": str(output_dir),
+            "CustomName": name,
+            "SelectAllFrames": mark_in is None,
+        }
+        if (mark_in is None) != (mark_out is None):
+            raise ValueError("mark_in 与 mark_out 必须同时提供")
+        if mark_in is not None and mark_out is not None:
+            if mark_out < mark_in:
+                raise ValueError("mark_out 必须 >= mark_in")
+            settings.update({"MarkIn": mark_in, "MarkOut": mark_out})
+        if not self.project.SetRenderSettings(settings):
+            raise ResolveOperationError(f"渲染设置被 Resolve 拒绝: {settings}")
+        self.project.DeleteAllRenderJobs()
+        job_id = self.project.AddRenderJob()
+        if not job_id:
+            raise ResolveOperationError("AddRenderJob 失败")
+        if not self.project.StartRendering(job_id):
+            raise ResolveOperationError(f"StartRendering 失败: {job_id}")
+        started = time.monotonic()
+        while self.project.IsRenderingInProgress():
+            if time.monotonic() - started > timeout_sec:
+                self.project.StopRendering()
+                raise ResolveOperationError(f"渲染超时 ({timeout_sec}s): {job_id}")
+            time.sleep(0.25)
+        status = self.project.GetRenderJobStatus(job_id) or {}
+        if float(status.get("CompletionPercentage") or 0) < 100:
+            raise ResolveOperationError(f"渲染未完成: {status}")
+        outputs = sorted(
+            output_dir.glob(f"{name}.*"),
+            key=lambda path: path.stat().st_mtime_ns,
+            reverse=True,
+        )
+        if not outputs:
+            raise ResolveOperationError(
+                f"Resolve 报告完成但找不到输出: {output_dir / (name + '.*')}"
+            )
+        return RenderResult(str(job_id), outputs[0], status)
+
+
+__all__ = [
+    "MediaInfo",
+    "RenderResult",
+    "ResolveAdapter",
+    "ResolveOperationError",
+    "ResolveUnavailable",
+]

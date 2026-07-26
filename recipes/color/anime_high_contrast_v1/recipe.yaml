@@ -1,0 +1,6 @@
+id: anime_high_contrast_v1
+version: 1.0.0
+kind: color
+engine: resolve_colorgroup
+capability: color_recipe
+parameters: {}

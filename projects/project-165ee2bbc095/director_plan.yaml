@@ -1,0 +1,59 @@
+version: '1'
+project_id: project-165ee2bbc095
+revision: 9
+duration_sec: 26.933333
+primary_characters:
+- kamado_tanjirou
+tone:
+- intense
+- clean
+- push_pull
+- front_facing
+structure:
+- role: opening
+  start: 0.0
+  end: 3.031597278911565
+  energy: 0.35
+  average_shot_length: 0.725
+- role: buildup
+  start: 3.031597278911565
+  end: 8.27374149659864
+  energy: 0.58
+  average_shot_length: 0.525
+- role: pre_drop
+  start: 8.27374149659864
+  end: 9.47374149659864
+  energy: 0.42
+  average_shot_length: 0.625
+- role: impact
+  start: 9.47374149659864
+  end: 16.47640807659864
+  energy: 0.95
+  average_shot_length: 0.4
+- role: release
+  start: 16.47640807659864
+  end: 22.62399972
+  energy: 0.68
+  average_shot_length: 0.45
+- role: ending
+  start: 22.62399972
+  end: 26.933333
+  energy: 0.38
+  average_shot_length: 0.75
+visual_rules:
+  prefer: []
+  avoid:
+  - static_dialogue
+  - subtitles
+  - bad_composition
+sound_strategy: 保留叙事原音；build 渐进，impact 点释放音乐与重点音效
+impact_budget:
+  sfx_max: 11
+  flash_max: 3
+  shake_max: 4
+generation:
+  method: deterministic_music_aligned
+  music_map_version: music-map-1.0.0
+  style_fingerprint_version: style-fingerprint-1.1.0
+  llm_used: false
+  fallback_arc_used: true

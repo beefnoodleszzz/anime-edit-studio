@@ -61,7 +61,7 @@
 ┌───────────────────────▼────────────────────────────────┐
 │  Layer 5  Execution Engine                             │
 │  ResolveCompiler → ResolveAdapter → Resolve/Fusion     │
-│  RemotionCompiler(preview) / FFmpeg(tool) / External AI│
+│  Resolve Preview/Master / FFmpeg(tool) / External AI   │
 └───────────────────────┬────────────────────────────────┘
                         │
 ┌───────────────────────▼────────────────────────────────┐
@@ -304,7 +304,7 @@ Execution 层据此做 **选择性 Resolve 更新**（只重建受影响的 clip
 
 ## 4. Execution Engine：Resolve 集成设计
 
-### 4.1 模块划分（`anime/execution/resolve/`）
+### 4.1 模块划分（`studio/execution/resolve/`）
 
 | 文件 | 职责 |
 |---|---|
@@ -351,18 +351,18 @@ EditSpec ──> ResolveCompiler ──> 一系列 ResolveAdapter 调用（有�
 每个能力从 `false` → `true` 必须由一次真实调用 + 一条测试证明。
 沿用旧 `extreme.capabilities()` 的"显式声明 ready/unavailable/fallback、绝不假称已执行"原则。
 
-### 4.4 实测确认的关键能力（改写了架构预期）
+### 4.4 实测确认的关键能力（Phase 1 后修正）
 
 | 能力 | API | 对架构的影响 |
 |---|---|---|
-| **主体感知竖屏重构图** | `TimelineItem.SmartReframe` | ★ 横屏动漫 → 4:5 是每条片子的必经步骤。EditSpec 的 `framing.mode = portrait_subject_track` 由此获得**原生实现**，而非手搓偏移量 |
-| **主体跟踪遮罩** | `CreateMagicMask` / `RegenerateMagicMask` | ★ §5 的 `subject tracking` 从"做不到"变为原生支持；rembg 静态遮罩路线废弃 |
-| **三段变速** | `SetSpeedRamp` + `RetimeProcess` / `MotionEstimation` | EditSpec 的 `retime.speed_ramp` 可真正落地；Resolve 原生光流若达标，RIFE 外挂在多数场景可省 |
-| **Fusion Recipe 注入** | `ImportFusionComp` / `ExportFusionComp` / `LoadFusionCompByName` | Recipe 工作流确定为：**Fusion GUI 手工调好 → Export `.comp` → 代码 Import + 注参**。不用脚本搭节点图 |
-| **调色分组** | `AssignToColorGroup` / `AddVersion` / `CopyGrades` / `ExportLUT` | Color Recipe = 一个 ColorGroup。clip 入组即继承，改 recipe 只改 group，比逐 clip 存 grade 干净得多 |
+| **主体感知竖屏重构图** | `TimelineItem.SmartReframe` | ❌ 实测返回 `True` 但属性与渲染输出均不变。Phase 3 改为自研主体检测，输出 Pan/Zoom 参数，经已验证的 `transform` 通道写入 |
+| **主体跟踪遮罩** | `CreateMagicMask` / `RegenerateMagicMask` | ❌ 所有实测签名均返回 `False`。Phase 3 改为自研逐帧主体检测，不依赖 Resolve Magic Mask |
+| **三段变速** | `SetSpeedRamp` | ❌ Resolve 21.0.3 中属性值为 `None`，不可调用。速度曲线改走 Fusion `TimeSpeed` Recipe；`RetimeProcess` / `MotionEstimation` 目前只验证为可写整数属性 |
+| **Fusion Comp 创建** | `AddFusionComp` | ✅ 已验证能返回 comp 对象。`ImportFusionComp` / `ExportFusionComp` / 参数注入的完整 Recipe 闭环仍须 Phase 2.0 实测 |
+| **调色分组候选路径** | `AssignToColorGroup` / `AddVersion` / `CopyGrades` / `ExportLUT` | ⚠️ 方法已发现但尚未验证。Color Recipe 是否采用 ColorGroup，等待 Phase 2.0 渲染对照后冻结 |
 | **26 个可写变换属性** | `SetProperty` | Zoom/Pan/Tilt/Crop/Opacity/CompositeMode/ResizeFilter 全可编程 |
 | **标记携带自定义数据** | `AddMarker(..., customData)` | **把 EditSpec `clip_id` 写进时间线标记**，实现 IR ↔ Resolve 双向定位，是选择性更新（§54）的实现基础 |
-| 附带发现 | `Stabilize` / `DetectSceneCuts` / `CreateSubtitlesFromAudio` | 可分别替代/校验旧系统的稳定、PySceneDetect、whisper |
+| 附带发现 | `Stabilize` / `DetectSceneCuts` / `CreateSubtitlesFromAudio` | ⚠️ 仅发现方法，未验证；在输出效果通过对照测试前不得进入生成链 |
 
 ### 4.5 实测踩到的坑（已写入 capabilities.yaml `pitfalls`）
 
@@ -584,7 +584,7 @@ create_resolve_project  sync_timeline  apply_effect_recipe  apply_color_recipe
 render_preview  run_technical_qa  run_creative_critic  apply_revision
 ```
 
-**Agent 层**（`anime/agents/`）：Provider 抽象（Claude / GPT / Codex / 本地模型），
+**Agent 层**（`studio/agents/`）：Provider 抽象（Claude / GPT / Codex / 本地模型），
 统一结构化输出（JSON schema 强约束），可通过 `config/models.yaml` 切换。
 系统资产是 Tools + 数据，不是某个 LLM。
 
@@ -607,9 +607,9 @@ render_preview  run_technical_qa  run_creative_critic  apply_revision
 | A8 | 新增 Layer 7 Growth | 直接服务变现目标，是本仓相对 MASTER PLAN 的增量资产 |
 | A9 | Creative Critic 与用户反馈共用 Revision 结构 | 一套 diff 应用逻辑服务两个来源 |
 | A10 | Technical QA 单独把关 DELIVERED | §76 分离；创意判断不得阻塞或放行技术交付 |
-| A11 | 竖屏重构图走 `SmartReframe` 而非手搓偏移 | 实测确认原生支持；旧 `reframe_x` 单轴方案废弃 |
-| A12 | 主体跟踪走 `CreateMagicMask` 而非 rembg | 原生跟踪 vs 静态遮罩，不是一个量级 |
-| A13 | Fusion Recipe 用 GUI 手工调好后 `ExportFusionComp`，代码只 Import+注参 | 脚本搭节点图成本高且难验收；导出/导入路径已实测存在 |
-| A14 | Color Recipe = 一个 ColorGroup（非逐 clip 存 grade） | `AssignToColorGroup` + `AddVersion` 让 recipe 可整体替换 |
+| A11 | 竖屏重构图走自研主体检测 → `transform` | `SmartReframe` 实测空转；Pan/Zoom 写入已验证且可控、可缓存、可复现 |
+| A12 | 主体跟踪走自研逐帧主体检测 | `CreateMagicMask` 实测不可用；不得把未生效的 Resolve 黑箱能力放入主链 |
+| A13 | Fusion Recipe 候选路径为 GUI 制作后 Export，代码 Import+注参 | `AddFusionComp` 已验证；Export/Import/注参闭环须通过 Phase 2.0 后才能定案 |
+| A14 | Color Recipe 优先验证 ColorGroup 架构 | `AssignToColorGroup` + `AddVersion` 理论上适合整体替换，但尚未 verified，Phase 2.0 结论优先 |
 | A15 | 用 marker 的 customData 存 EditSpec `clip_id` | IR ↔ Resolve 双向定位，是选择性更新的实现基础 |
-| A16 | Resolve 原生光流优先于 RIFE 外挂 | `RetimeProcess`/`MotionEstimation` 可编程；少一个外部依赖与一轮转码 |
+| A16 | Resolve 原生光流作为首选候选，RIFE 保留为按需工具 | `RetimeProcess`/`MotionEstimation` 已验证可写整数值；具体档位语义和视觉质量仍须逐档渲染验收 |

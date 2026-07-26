@@ -12,6 +12,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from studio.editspec.schema import (
     Canvas,
+    Caption,
     Clip,
     EditSpec,
     Framing,
@@ -97,6 +98,26 @@ class TestSchema:
         # clips_on_track 按时间排序，与声明顺序无关
         assert [c.id for c in spec.clips_on_track("V1")] == ["c1", "c2"]
 
+    def test_caption_is_structured_and_range_checked(self):
+        spec = make_spec(
+            [make_clip("c1", 0, 2)],
+            tracks=[
+                Track(id="V1", kind="video"),
+                Track(id="S1", kind="subtitle"),
+            ],
+            captions=[Caption(id="cap1", text="觉醒", start_sec=0.2, end_sec=1.0)],
+        )
+        assert spec.captions[0].text == "觉醒"
+        with pytest.raises(PydanticValidationError):
+            Caption(id="bad", text="x", start_sec=1, end_sec=1)
+
+    def test_duplicate_top_level_ids_rejected(self):
+        with pytest.raises(PydanticValidationError, match="track id"):
+            make_spec(
+                [make_clip("c1", 0, 1)],
+                tracks=[Track(id="V1", kind="video"), Track(id="V1", kind="video")],
+            )
+
 
 class TestStructureValidation:
     def test_valid_spec_passes(self):
@@ -152,6 +173,24 @@ class TestStructureValidation:
         result = validate(spec, is_verified=ALL_VERIFIED)
         assert result.ok
 
+    def test_track_kind_mismatch_rejected(self):
+        spec = make_spec(
+            [make_clip("c1", 0, 1)],
+            tracks=[Track(id="V1", kind="audio")],
+        )
+        result = validate(spec, is_verified=ALL_VERIFIED)
+        assert any(i.code == "TRACK_KIND_MISMATCH" for i in result.errors)
+
+    def test_marker_must_reference_existing_clip(self):
+        from studio.editspec.schema import Marker
+
+        spec = make_spec(
+            [make_clip("c1", 0, 1)],
+            markers=[Marker(sec=0.5, clip_id="missing")],
+        )
+        result = validate(spec, is_verified=ALL_VERIFIED)
+        assert any(i.code == "MARKER_CLIP_NOT_FOUND" for i in result.errors)
+
 
 class TestMediaValidation:
     def test_missing_asset_rejected(self):
@@ -174,6 +213,19 @@ class TestMediaValidation:
         spec = make_spec([make_clip("c1", 0.0, 1.0)])
         result = validate(spec, resolve_asset=lambda _: media, is_verified=ALL_VERIFIED)
         assert result.ok
+
+    def test_missing_shot_rejected(self, tmp_path):
+        media = tmp_path / "a.mov"
+        media.write_bytes(b"x")
+        item = make_clip("c1", 0, 1)
+        item.shot_id = "missing"
+        result = validate(
+            make_spec([item]),
+            resolve_asset=lambda _: media,
+            resolve_shot=lambda _: None,
+            is_verified=ALL_VERIFIED,
+        )
+        assert any(i.code == "SHOT_NOT_FOUND" for i in result.errors)
 
     def test_no_resolver_warns_but_passes(self):
         spec = make_spec([make_clip("c1", 0.0, 1.0)])

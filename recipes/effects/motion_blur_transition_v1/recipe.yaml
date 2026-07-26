@@ -1,0 +1,8 @@
+id: motion_blur_transition_v1
+version: 1.0.0
+kind: transition
+engine: resolve_fusion
+capability: fusion_transition
+parameters:
+  length: {type: float, min: 0.0, max: 0.5, default: 0.24}
+  angle: {type: float, min: -180.0, max: 180.0, default: 0.0}

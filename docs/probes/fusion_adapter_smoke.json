@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-25",
+  "resolve": "21.0.3.7 Studio",
+  "project": "_aes_phase2_risk_probe",
+  "timeline": "phase2-risk",
+  "artifact": "docs/probes/phase2_risk_out/phase2_recipe.comp",
+  "operation": "ResolveAdapter.replace_fusion_comp",
+  "composition_count_before": 1,
+  "composition_count_after": 1,
+  "tools": ["BrightnessContrast1", "MediaIn1", "MediaOut1"],
+  "parameter": "BrightnessContrast1.Gain",
+  "written": 0.5,
+  "read_back": 0.5,
+  "passed": true
+}

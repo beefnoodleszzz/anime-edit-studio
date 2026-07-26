@@ -5,14 +5,22 @@ AGENTS.md R1：本包是全仓**唯一**允许 import DaVinciResolveScript 的�
 """
 from studio.execution.resolve.adapter import (  # noqa: F401
     MediaInfo,
+    RenderResult,
     ResolveAdapter,
     ResolveOperationError,
 )
 from studio.execution.resolve.connection import ResolveUnavailable  # noqa: F401
+from studio.execution.resolve.color import apply_color_recipe
+from studio.execution.resolve.fairlight import append_prebaked_audio
+from studio.execution.resolve.fusion import apply_fusion_recipe
 
 __all__ = [
     "MediaInfo",
+    "RenderResult",
     "ResolveAdapter",
     "ResolveOperationError",
     "ResolveUnavailable",
+    "append_prebaked_audio",
+    "apply_color_recipe",
+    "apply_fusion_recipe",
 ]

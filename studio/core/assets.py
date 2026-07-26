@@ -7,6 +7,7 @@ compiler / validator 均无需改动。
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from typing import Protocol
 
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -67,4 +68,62 @@ class FilesystemResolver:
         return sorted(ids)
 
 
-__all__ = ["AssetResolver", "FilesystemResolver", "PROXY_DIR"]
+class DatabaseResolver:
+    """Resolve asset ids through the v2 SQLite catalog.
+
+    Preview prefers ``proxy_path``; master prefers ``path``.  No path is stored
+    in EditSpec itself.
+    """
+
+    def __init__(self, database: Path, *, prefer_proxy: bool = True):
+        self.database = database
+        self.prefer_proxy = prefer_proxy
+        self._cache: dict[str, Path | None] = {}
+
+    def __call__(self, asset_id: str) -> Path | None:
+        if asset_id in self._cache:
+            return self._cache[asset_id]
+        if not self.database.exists():
+            return None
+        conn = sqlite3.connect(self.database)
+        try:
+            row = conn.execute(
+                "SELECT path,proxy_path FROM assets WHERE id=?", (asset_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            result = None
+        else:
+            candidates = (row[1], row[0]) if self.prefer_proxy else (row[0], row[1])
+            result = next((Path(value) for value in candidates if value), None)
+        self._cache[asset_id] = result
+        return result
+
+
+class DatabaseShotResolver:
+    def __init__(self, database: Path):
+        self.database = database
+
+    def __call__(self, shot_id: str) -> dict | None:
+        if not self.database.exists():
+            return None
+        conn = sqlite3.connect(self.database)
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT id,asset_id,start_sec,end_sec FROM shots WHERE id=?",
+                (shot_id,),
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+
+__all__ = [
+    "AssetResolver",
+    "DatabaseResolver",
+    "DatabaseShotResolver",
+    "FilesystemResolver",
+    "PROXY_DIR",
+]

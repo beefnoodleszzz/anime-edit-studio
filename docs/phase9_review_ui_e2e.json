@@ -1,0 +1,63 @@
+{
+  "date": "2026-07-25",
+  "project_id": "project-cc353e28978a",
+  "entrypoint": "Review HTTP API",
+  "cli_required_by_user": false,
+  "intent": "以炭治郎为唯一主角，制作燃向但干净克制的25秒角色短片",
+  "duration_sec": 25.0,
+  "workflow": [
+    "CREATED",
+    "INGESTING",
+    "ANALYZED",
+    "DIRECTING",
+    "CANDIDATES_READY",
+    "USER_SELECTION",
+    "EDIT_PLANNING",
+    "RESOLVE_BUILD",
+    "PREVIEW_RENDER",
+    "USER_REVIEW"
+  ],
+  "candidate_groups": 6,
+  "candidate_selections": {
+    "human": 0,
+    "ai_delegated": 6,
+    "unique_shots": 6,
+    "selection_completion": 1.0,
+    "candidate_precision": null,
+    "note": "AI delegation is intentionally not counted as human acceptance."
+  },
+  "first_cut": {
+    "spec_revision": 2,
+    "clips": 31,
+    "roles": [
+      "opening",
+      "build",
+      "pre_drop",
+      "impact",
+      "release",
+      "ending"
+    ],
+    "assets": 12,
+    "all_assets_from_kimetsu": true,
+    "recipes_applied": 0
+  },
+  "resolve": {
+    "version": "21.0.3.7",
+    "clips_written": 31,
+    "markers_written": 31,
+    "audio_tracks_written": 1,
+    "manual_operations": 0,
+    "render_id": "render-9d03ccea13d6de110f89",
+    "render_status": "complete",
+    "render_time_ms": 3203,
+    "preview_range_request": 206
+  },
+  "time_to_first_preview_sec": 79.951,
+  "target_time_to_first_preview_sec": 1800,
+  "passed": true,
+  "final_acceptance_pending": [
+    "Recipe owner decisions",
+    "creative owner confirmation",
+    "Recipe-enabled Master and 13-item final QA"
+  ]
+}

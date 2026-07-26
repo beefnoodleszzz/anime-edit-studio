@@ -1,0 +1,21 @@
+{
+  "source": "library/engine.sqlite",
+  "target": "library/engine.v2.sqlite",
+  "verified_at": "2026-07-25",
+  "ok": true,
+  "counts": {
+    "assets": {"source": 40, "target": 40},
+    "shots": {"source": 15901, "target": 15901},
+    "review_decisions": {"source": 0, "target": 0},
+    "creative_briefs": {"source": 5, "target": 5},
+    "preference_models": {"source": 0, "target": 0},
+    "project_assets": {"source": 27, "target": 27},
+    "growth_experiments": {"source": 0, "target": 0},
+    "growth_variants": {"source": 0, "target": 0},
+    "shot_outcomes": {"source": 0, "target": 0},
+    "source_records": {"source": 39, "target": 39}
+  },
+  "embeddings": {"source": 15901, "target": 15901},
+  "characters_imported_from_aliases": 14,
+  "source_database_modified": false
+}

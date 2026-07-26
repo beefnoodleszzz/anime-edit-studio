@@ -1,0 +1,12 @@
+version: "1"
+density:
+  max_events_per_10_sec: 6
+  min_gap_sec: 0.32
+actions:
+  sword_draw: [sword_whoosh_v1]
+  sword_swing: [sword_whoosh_v1]
+  punch: [impact_low_v1, sub_impact_v1]
+  impact: [impact_low_v1]
+  drop: [sub_impact_v1]
+  build: [riser_v1]
+  fast_transition: [sword_whoosh_v1]

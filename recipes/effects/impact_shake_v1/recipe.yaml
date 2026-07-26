@@ -1,0 +1,8 @@
+id: impact_shake_v1
+version: 1.0.0
+kind: effect
+engine: resolve_fusion
+capability: fusion_recipe
+parameters:
+  amplitude: {type: float, min: 0.0, max: 0.05, default: 0.018}
+  decay_frames: {type: int, min: 4, max: 48, default: 18}

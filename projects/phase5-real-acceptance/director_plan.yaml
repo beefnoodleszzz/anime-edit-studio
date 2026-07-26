@@ -1,0 +1,54 @@
+version: '1'
+project_id: phase5-real-acceptance
+revision: 3
+duration_sec: 25.0
+primary_characters: []
+tone:
+- 燃向
+structure:
+- role: opening
+  start: 0.0
+  end: 10.983038548752834
+  energy: 0.7168385169468187
+  average_shot_length: 0.5995532595343067
+- role: buildup
+  start: 10.983038548752834
+  end: 11.77251700680272
+  energy: 0.6319390663158758
+  average_shot_length: 0.6144106633947217
+- role: impact
+  start: 11.77251700680272
+  end: 12.60843537414966
+  energy: 0.7635020567034195
+  average_shot_length: 0.5913871400769015
+- role: release
+  start: 12.60843537414966
+  end: 17.484625850340137
+  energy: 0.6136523530615792
+  average_shot_length: 0.6176108382142236
+- role: buildup
+  start: 17.484625850340137
+  end: 22.755555555555556
+  energy: 0.674144584668269
+  average_shot_length: 0.6070246976830529
+- role: pre_drop
+  start: 22.755555555555556
+  end: 25.0
+  energy: 0.07276423015275349
+  average_shot_length: 0.7122662597232681
+visual_rules:
+  prefer: []
+  avoid:
+  - static_dialogue
+  - subtitles
+  - bad_composition
+sound_strategy: 保留叙事原音；build 渐进，impact 点释放音乐与重点音效
+impact_budget:
+  sfx_max: 10
+  flash_max: 3
+  shake_max: 4
+generation:
+  method: deterministic_music_aligned
+  music_map_version: music-map-1.0.0
+  style_fingerprint_version: style-fingerprint-1.1.0
+  llm_used: false

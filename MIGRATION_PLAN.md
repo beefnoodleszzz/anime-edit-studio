@@ -211,26 +211,30 @@ MASTER PLAN §81 要求 "迁移必须 Incremental，禁止一次性推倒整个�
 
 ---
 
-## 3. Phase 2 — EditSpec 完整化 + 数据地基（1–2 周）
+## 3. ✅ Phase 2 — EditSpec 完整化 + 数据地基（2026-07-25 完成）
 
 | # | 任务 |
 |---|---|
-| 2.1 | EditSpec 完整 schema（framing / camera / retime / transition / effects / color / audio / decision / markers / captions） |
-| 2.2 | `editspec/validator` 完整：时间轴自洽、asset 可达、recipe 已注册、capability 可执行、无亚帧漂移 |
-| 2.3 | `editspec/diff`：diff 生成 + patch 应用 |
-| 2.4 | `editspec/migrations`：**只服务 v2.x 内部演进**，不含 v1→v2（v1 已弃） |
-| 2.5 | 新 SQLite schema（含 §57 全部实体 + Shot 的 §11 全部字段） |
-| 2.6 | **ETL：旧库 → 新库**（assets / shots / embedding / review_decisions / creative_briefs / preference_models / growth_* / shot_outcomes / source_records） |
-| 2.7 | `studio/core/state.py` Workflow State Machine + `workflow_states` 表 |
+| 2.1 | ✅ EditSpec 完整 schema（framing / camera / retime / transition / effects / color / audio / decision / markers / captions） |
+| 2.2 | ✅ `editspec/validator`：时间轴、track kind、asset/shot、recipe 参数与验收物、capability 门禁 |
+| 2.3 | ✅ `editspec/diff`：稳定 clip id；add/remove/replace/patch/shift；locked clip 保护 |
+| 2.4 | ✅ `editspec/migrations`：只允许 v2.x forward migration，显式拒绝 v1 |
+| 2.5 | ✅ `library/engine.v2.sqlite`：§57 全部实体 + Shot 新字段 + 精确 fps 有理数 |
+| 2.6 | ✅ v1 → v2 事务 ETL；逐表与 embedding 计数一致，证据见 `docs/phase2_etl_report.json` |
+| 2.7 | ✅ `studio/core/state.py`：合法转换、重试、失败诊断、Revision 回环、持久化 |
 
 ### Phase 2 验收
-- ETL 后，新库中素材数、镜头数、嵌入数与旧库一致
-- 手写一份含 effects/color/audio 的完整 EditSpec，validator 全绿，ResolveCompiler 能报出
+- ✅ ETL：40 assets、15,901 shots、15,901 embeddings 与旧库逐项一致
+- ✅ 手写含 effects/color/audio/transition/caption 的完整 EditSpec 在已验收 Recipe 注入下全绿
+- ✅ ResolveCompiler 在接触 Resolve 前一次报告所有未注册/未 verified Recipe
   "哪些 recipe 尚未 verified 因此拒绝执行"
 
 ### 本 Phase 删除
 `anime/editspec.py`、`anime/db.py`、`anime/config.py`、`anime/cache.py`、
 `anime/relink.py`、`anime/fps.py`、`scripts/`（全部 5 个）、`config.toml`
+
+✅ 已删除；旧实现只存在于 `v1-final` tag。`config/app.yaml` 与
+`config/models.yaml` 已建立。
 
 ---
 
@@ -450,12 +454,12 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 
 | ID | 风险 | 等级 | 触发信号 | 缓解 |
 |---|---|---|---|---|
-| ~~R1~~ | ~~Resolve 脚本 API 不支持关键帧变速~~ | 🟡 ↓ | — | **已探测**：`SetSpeedRamp` 方法存在，`RetimeProcess`/`MotionEstimation` 可写。降级为"待 Phase 1.14 验证生效性" |
-| R2 | **Fusion Recipe 库建设拖延导致长期无成片**（完全改造下无兜底） | 🔴 | Phase 6A 超期 | 6A 从 Phase 2 起穿插；**`ExportFusionComp` 已确认存在 → 手工做好导出而非脚本搭图，成本已下降**；必要时 checkout `v1-final` 应急 |
+| R1 | Resolve 脚本 API 不支持逐片段关键帧变速 | 🔴 已触发 | `SetSpeedRamp` 不可调用 | Phase 6A 用 Fusion `TimeSpeed` Recipe；Phase 2.0 先验证 Export/Import/注参/渲染闭环 |
+| R2 | **Fusion Recipe 库建设拖延导致长期无成片**（v2 无运行时兜底） | 🔴 | Phase 6A 超期 | 6A 从 Phase 2 起穿插；先用 Phase 2.0 验证 Recipe 技术闭环；`v1-final` 只供应急出片，不得复制代码回 v2 |
 | R3 | 产量空窗期过长影响账号运营 | 🟠 ↓ | 连续数周无新片 | **用户已接受**；`v1-final` tag 为应急手段 |
 | R4 | Resolve 必须前台运行 | 🟠 | 已确认 | 接受；启动等待 + `pgrep -x Resolve` 健康检查；渲染串行排队 |
 | ~~R5~~ | ~~Python 版本与 fusionscript 绑定~~ | ✅ | — | **已解决**：venv 3.11.15 实测可用；`connection.py` 加版本校验 |
-| R11 | `SmartReframe` / `CreateMagicMask` 实际效果不达预期 | 🟠 新增 | Phase 1.12/1.13 | 若失败，竖屏重构图与主体跟踪退回旧方案，"史诗级提升"的幅度需下调预期。**必须在 Phase 1 就知道** |
+| R11 | `SmartReframe` / `CreateMagicMask` 不可用 | 🔴 已触发 | Phase 1.12/1.13 已证伪 | Phase 3 自研主体检测与逐帧跟踪，结果经已验证的 `transform` 通道写入 |
 | R12 | 素材 23.976fps 与 4:5/60fps 交付的帧率换算 | 🟠 新增 | 亚帧漂移 | EditSpec 秒制为权威；`timecode.py` 单一实现 + 边界测试；Resolve 时间线帧率显式设定 |
 | R13 | Resolve 转场无直接 TimelineItem API | 🟡 新增 | Phase 6B.4 | 探测中未见；需研究 Timeline 层方案或用 Fusion 转场 comp 替代 |
 | R6 | ETL 数据丢失 | 🟠 | 新库计数不符 | Phase 0.4 已备份；ETL 后逐表计数比对 |
@@ -565,24 +569,10 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 
 ## 17. 下一步
 
-架构分析完成，决策已锁定，Phase 0.6 硬门槛已通过。
+截至 2026-07-25，Phase 3–9 的确定性实现、自动化测试、Resolve 技术 E2E
+和六页面 Review UI 已落地。当前不得绕过的最后门槛：
 
-**剩余的 Phase 0 任务（0.1–0.5、0.7–0.10）可以开始执行。**
-这些都是清场与地基工作，不写业务逻辑，风险低且可回退：
-
-| # | 动作 | 是否改动你的仓库 |
-|---|---|---|
-| 0.1 | 提交/stash 工作区 14 个已改文件 | ✏️ git |
-| 0.2 | 打 tag `v1-final` | ✏️ git |
-| 0.3 | 建 `v2` 分支 | ✏️ git |
-| 0.4 | 备份 `library/engine.sqlite` | ✏️ 新增文件 |
-| 0.5 | 旧 editspec/beatmap 移入 `projects/_archive/` | ✏️ 移动文件 |
-| 0.7 | 建 `AGENTS.md` | ✏️ 新增文件 |
-| 0.8 | 建 `studio/` 骨架 + entrypoint | ✏️ 新增文件 |
-| 0.9 | 删 Resolve 中的 `_aes_capability_probe` 工程 | ✏️ Resolve |
-| 0.10 | 采集 KPI 基线 → `docs/kpi_baseline.md` | ✏️ 新增文件 |
-
-0.10 需要你提供数据（最近一条片子花了多久、审了多少候选、改了几轮），
-其余我可以直接做。
-
-之后进入 Phase 1，第一个里程碑是 §2 的成功标准 + 1.12–1.14 三项能力实测。
+1. 所有者集中观看 21 个 Recipe 的 `preview.mp4`，逐项给出通过/拒绝和备注。
+2. 只有人工通过项才可把 `config/recipes.yaml` 的 `verified` 转为 true；拒绝项继续迭代。
+3. 使用单一主题素材从 Review UI 跑一次产品级 25 秒 E2E，确认创意质量而不只是 13 项技术 QA。
+4. 完成后按 `docs/V2_COMPLETION_AUDIT.md` 再做一次逐项证据审计。

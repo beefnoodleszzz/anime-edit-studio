@@ -28,6 +28,25 @@
 | `v2_control.png` | **对照组**：手动 `Pan=400` | `98b0ad25a361` | 50.84 |
 | `v2_smartreframe.png` | 调用 `SmartReframe()` 之后 | `d65691a396d3` | 80.62 |
 
+## Phase 2.0 专业执行风险预探测
+
+探测脚本：`probe_phase2_risks.py`
+结构化证据：`phase2_risk_probe.json`
+
+Resolve 21.0.3.7 Studio 真机结论：
+
+| 能力 | 结论 | 输出证据 |
+|---|---|---|
+| Color Recipe / ColorGroup | ✅ verified | 两个 clip 入组；group post-clip LUT 生效；渲染帧哈希改变 |
+| Audio Track Management | ✅ verified | stereo 轨创建成功，轨道数 1 → 2 |
+| Fairlight Automation | ❌ unavailable | 无 automation/volume/gain 方法；四种属性写入全部返回 False |
+| Native Transition | ❌ 不存在 | Timeline / TimelineItem 均无 transition 方法 |
+| Fusion transition fallback | ⚠️ 入口存在、效果未验收 | `CreateFusionClip` 成功；正式 transition Recipe 仍保持 unverified |
+| Fusion Recipe 技术闭环 | ✅ verified | AddTool、注参、连接、Export、Import 成功；渲染帧改变 |
+
+方法仍遵守 P12–P14：方法存在与返回成功都不是视觉能力的充分证据；
+Color 与 Fusion 的正结论均包含渲染输出对照。
+
 三张图讲了一个完整的故事：
 
 1. 对照组与基线**不同** → 检测手段有效

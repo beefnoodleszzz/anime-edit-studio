@@ -117,7 +117,7 @@ def test_r8_pitfalls_are_documented():
     from studio.core.capabilities import load_capabilities
 
     ids = {p["id"] for p in load_capabilities().get("pitfalls", [])}
-    expected = {f"P{n}" for n in range(1, 15)}
+    expected = {f"P{n}" for n in range(1, 18)}
     assert expected <= ids, f"缺失的坑位记录: {sorted(expected - ids)}"
 
 
@@ -147,3 +147,16 @@ def test_negative_findings_cite_evidence():
         if entry.get("available") is False and not entry.get("evidence")
     ]
     assert not missing, f"以下不可用判定缺少 evidence: {missing}"
+
+
+def test_phase2_risk_probe_conclusions_are_locked():
+    """Phase 2.0：schema 不得建立在已证伪的执行能力上。"""
+    from studio.core.capabilities import load_capabilities
+
+    entries = load_capabilities()["capabilities"]
+    assert entries["color_recipe"]["verified"] is True
+    assert entries["audio_track_management"]["verified"] is True
+    assert entries["fairlight_automation"]["available"] is False
+    assert entries["fairlight_automation"]["verified"] is False
+    assert entries["transition"]["path"] == "fusion_recipe"
+    assert entries["transition"]["verified"] is False

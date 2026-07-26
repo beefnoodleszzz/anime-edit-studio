@@ -1,0 +1,155 @@
+{
+  "resolve_version": "21.0.3.7",
+  "recipes_total": 21,
+  "all_artifacts_complete": true,
+  "human_acceptance": "pending",
+  "recipes": [
+    {
+      "id": "anime_glow_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "186ea65d76fcd9a6b9215d6bf3264709b33734b066db0361df672a068757069e"
+    },
+    {
+      "id": "camera_punch_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "67e08b5d9cd141ce00e1a1aed414868fe7a155c79806b35f879ae25c7aad93ce"
+    },
+    {
+      "id": "eye_focus_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "0c67fbc2315046f1185de2b0863ab801437b84c65436e5a5744de479c0cc4dfb"
+    },
+    {
+      "id": "impact_shake_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "2f4731586996eed33851f5e0107e92ef21eee5b252a1da7345edae7846132e10"
+    },
+    {
+      "id": "motion_blur_transition_v1",
+      "kind": "transition",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "3ad8834a10ea32e59bf999cc882259b0ef872fdcd6e9af88d9d4be05cfefa3b7"
+    },
+    {
+      "id": "rgb_split_impact_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "faf8fffd09323dd1422098bae5dafb64c9a5214026dcf661d6eb22410a9634c8"
+    },
+    {
+      "id": "speed_flash_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "50eb9e8de40277d639bfc2476a63d9bfb32d8b96a320762f57131fdc992ff5ce"
+    },
+    {
+      "id": "speed_ramp_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "2a07a69de135612d85dbd5a7b58db2d793560c778e37cd27d54aa9d33d77e114"
+    },
+    {
+      "id": "white_flash_v1",
+      "kind": "effect",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "1d45f0d1807eeb0a217feff20694139611800347c2eb3fefd752264bf8ce046e"
+    },
+    {
+      "id": "anime_clean_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "30ef9b6fe24e4095de026b7fec93dd5c75d3a3c77b99fcaec7544286f1c5ed8c"
+    },
+    {
+      "id": "anime_cold_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "631b075e6af22c113db1e783703f21783d8d5ebe20c378ea8e0d0e9238d3731a"
+    },
+    {
+      "id": "anime_fire_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "a0ca47aacd841694dadd246eb132fc4679797af85208a41794c0d675d4f33c3e"
+    },
+    {
+      "id": "anime_high_contrast_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "302eb842384bf61a78a3fb2c67fe4d0c2f4339338a9c1cb5d84ae5b21319284e"
+    },
+    {
+      "id": "anime_night_blue_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "f106d27fd9ec50c49c95ce94463deaba88c040ce3806bb32f50226360d0face2"
+    },
+    {
+      "id": "cinematic_strong_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "3adcb8570b771cb1820981ed909a96ce628d5b6c56b7e8216af7bc5b85da5e22"
+    },
+    {
+      "id": "red_impact_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "0f9fa4265abd92854edecc63d410b00dd8b33b04ea886914807306c721ceb47f"
+    },
+    {
+      "id": "signature_teal_orange_v1",
+      "kind": "color",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "4b3e950df610555ef9f3ebb5f8a5975bfd9e253e6b822a9f939ea5e390049ea5"
+    },
+    {
+      "id": "impact_low_v1",
+      "kind": "sound",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "f2f12b0127ba314422ec02e837c127a7030434312581191e13f13c77359bd915"
+    },
+    {
+      "id": "riser_v1",
+      "kind": "sound",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "3b3f7eec2b4529916164caf422dcdd5142d7b7b3d1cda029f291a50f5ad0ee51"
+    },
+    {
+      "id": "sub_impact_v1",
+      "kind": "sound",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "e86c4150afb54ba2bee33cf161ad15943acefa5f20f9c1feb25d6276136989d6"
+    },
+    {
+      "id": "sword_whoosh_v1",
+      "kind": "sound",
+      "verified": false,
+      "artifacts_complete": true,
+      "preview_sha256": "9ac00ff5fa39a1df946b12ae100abdca153a2ed22c8df81c92b442c0c5e1567a"
+    }
+  ]
+}

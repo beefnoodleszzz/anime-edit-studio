@@ -10,9 +10,9 @@ A3  **Recipe 而非实现**。效果/调色/音效只写 recipe_id + 参数，�
 A4  **决策元数据随行**。confidence / reasoning / alternatives 支撑 Critic 与偏好学习。
 A5  **可 Diff**。clip.id 稳定，修订以 patch 表达，不重建整条时间线。
 
-Phase 1 只启用最小子集：source / timeline / track。
-framing / retime / effects / color / audio 字段已定义但被 validator 拦截，
-直到对应 capability 在 resolve_capabilities.yaml 中转为 verified（AGENTS.md R3）。
+Phase 2 已补齐 framing / camera / retime / transition / effects / color /
+audio / markers / captions。字段可表达不等于可执行：Recipe 与 capability
+仍必须分别通过 registry 和 resolve_capabilities.yaml 门禁。
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ class TimelinePlacement(_Base):
         return self.in_sec + self.duration_sec
 
 
-# ---------- 以下为 Phase 1 之后才启用的表达能力 ----------
+# ---------- Phase 2 完整表达能力 ----------
 
 class Framing(_Base):
     mode: Literal["fit", "crop", "smart_reframe", "magic_mask_track", "manual"] = "crop"
@@ -148,6 +148,13 @@ class ClipAudio(_Base):
     sfx: list[SfxCue] = Field(default_factory=list)
     source_gain_db: float | None = None
     volume_automation: list[VolumePoint] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _automation_is_ordered(self):
+        points = [point.sec for point in self.volume_automation]
+        if points != sorted(points) or len(points) != len(set(points)):
+            raise ValueError("volume_automation 必须按 sec 严格递增且不能重复")
+        return self
 
 
 class Decision(_Base):
@@ -218,9 +225,29 @@ class AudioLayer(_Base):
 
 class Marker(_Base):
     sec: float = Field(..., ge=0)
+    duration_sec: float = Field(0.0, ge=0)
     kind: str = "note"
     note: str = ""
     clip_id: str | None = Field(None, description="写入 Resolve marker customData，实现 IR↔Resolve 双向定位")
+
+
+class Caption(_Base):
+    id: str
+    text: str = Field(..., min_length=1)
+    start_sec: float = Field(..., ge=0)
+    end_sec: float = Field(..., gt=0)
+    track: str = "S1"
+    style: RecipeRef | None = Field(
+        None, description="字幕视觉只引用 Fusion title recipe，不携带实现"
+    )
+    speaker: str | None = None
+    decision: Decision = Field(default_factory=Decision)
+
+    @model_validator(mode="after")
+    def _caption_range(self):
+        if self.end_sec <= self.start_sec:
+            raise ValueError("caption.end_sec 必须大于 start_sec")
+        return self
 
 
 class SpecMeta(_Base):
@@ -254,8 +281,20 @@ class EditSpec(_Base):
     clips: list[Clip] = Field(default_factory=list)
     audio: list[AudioLayer] = Field(default_factory=list)
     markers: list[Marker] = Field(default_factory=list)
+    captions: list[Caption] = Field(default_factory=list)
 
     meta: SpecMeta = Field(default_factory=SpecMeta)
+
+    @model_validator(mode="after")
+    def _top_level_ids_are_unique(self):
+        for label, values in (
+            ("track", [item.id for item in self.tracks]),
+            ("audio", [item.id for item in self.audio]),
+            ("caption", [item.id for item in self.captions]),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"{label} id 必须唯一")
+        return self
 
     # ---------- 派生量（不存储，永远从 clips 算，杜绝不一致） ----------
 

@@ -1,0 +1,59 @@
+{
+  "date": "2026-07-25",
+  "pipeline": "music-map-1.0.0",
+  "method": {
+    "cases": "MIGRATION_PLAN Phase 5 要求的 4 份可读取 _archive beatmap",
+    "duration_tolerance_sec": 0.15,
+    "beat_sync_window_sec": 0.08,
+    "note": "BPM 不是单独验收门；不同 tempo estimator 可在近邻候选间选择。以时长和对真实 onset 的 beat-grid 对齐率共同回归。"
+  },
+  "cases": [
+    {
+      "name": "aizen-kyoka-sugetsu",
+      "old_bpm": 129.2,
+      "new_bpm": 129.19921875,
+      "duration_delta_sec": 0.000408,
+      "old_beat_sync": 0.8281,
+      "new_beat_sync": 0.8226,
+      "sections": 7,
+      "impact_points": 24,
+      "passed": true
+    },
+    {
+      "name": "bleach-ichigo",
+      "old_bpm": 123.05,
+      "new_bpm": 117.45383522727273,
+      "duration_delta_sec": 0.000039,
+      "old_beat_sync": 0.5382,
+      "new_beat_sync": 0.5714,
+      "sections": 8,
+      "impact_points": 67,
+      "passed": true,
+      "note": "局部 tempo 候选为 117.454/123.047；新 grid 对真实 onset 的 80ms 对齐率更高。"
+    },
+    {
+      "name": "kimetsu-zenitsu-arc",
+      "old_bpm": 123.05,
+      "new_bpm": 117.45383522727273,
+      "duration_delta_sec": 0.000039,
+      "old_beat_sync": 0.5382,
+      "new_beat_sync": 0.5714,
+      "sections": 8,
+      "impact_points": 67,
+      "passed": true,
+      "note": "与 bleach-ichigo 使用同一音频；保留为迁移计划指定的独立回归 case。"
+    },
+    {
+      "name": "ref_a",
+      "old_bpm": 129.2,
+      "new_bpm": 129.19921875,
+      "duration_delta_sec": 0.000243,
+      "old_beat_sync": 0.6981,
+      "new_beat_sync": 0.7551,
+      "sections": 6,
+      "impact_points": 19,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

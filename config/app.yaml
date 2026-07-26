@@ -1,0 +1,27 @@
+version: "2.0"
+
+database:
+  path: "library/engine.v2.sqlite"
+  legacy_source: "library/engine.sqlite"
+
+library:
+  sources_root: "/Users/zhangxiaolong/Desktop/anime-material-library/sources"
+  proxies: "library/proxies"
+  keyframes: "library/keyframes"
+  cache: "library/cache"
+
+delivery:
+  canvas:
+    width: 3072
+    height: 3840
+    aspect: "4:5"
+  fps:
+    num: 60
+    den: 1
+
+execution:
+  backend: "resolve"
+  gui_automation_enabled: false
+  render_presets:
+    preview: "H.264 Master"
+    master: "H.265 Master"

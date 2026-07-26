@@ -1,0 +1,35 @@
+{
+  "build": {
+    "project": "phase5-real-acceptance",
+    "timeline": "main",
+    "mode": "update",
+    "clips_total": 40,
+    "clips_written": 40,
+    "clips_unchanged": 38,
+    "clips_changed": 2,
+    "clips_added": 0,
+    "clips_removed": 0,
+    "markers_written": 40,
+    "recipes_applied": 0,
+    "audio_written": 1,
+    "changed_ranges": [
+      [
+        7.847,
+        8.53
+      ],
+      [
+        24.237,
+        25.0
+      ]
+    ],
+    "changed_duration_sec": 1.447,
+    "warnings": []
+  },
+  "render_id": "render-66712e4676e6ba1d6943",
+  "output": "/Users/zhangxiaolong/Desktop/anime-edit-studio/projects/phase6-real-acceptance/phase5-real-acceptance-r6-resolve-execution-2.1.0-preview.mov",
+  "status": {
+    "JobStatus": "完成",
+    "CompletionPercentage": 100,
+    "TimeTakenToRenderInMs": 2646
+  }
+}

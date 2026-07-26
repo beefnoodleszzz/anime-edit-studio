@@ -1,0 +1,45 @@
+{
+  "review": {
+    "summary": "用户反馈定位到两处：第8秒处画面能量不足需要增强冲击力；结尾镜头需要替换。",
+    "issues": [
+      {
+        "kind": "intensity_too_low",
+        "timeline_start_sec": 7.846770874275636,
+        "timeline_end_sec": 8.530159939531368,
+        "severity": "medium",
+        "reason": "用户反馈'第8秒不够炸'，对应clip-d240661dfee80027（时间线7.85-8.53秒覆盖第8秒），需要提升该镜头的视觉冲击强度。",
+        "confidence": 0.75,
+        "suggested_fix": {
+          "op": "adjust_intensity",
+          "clip_id": "clip-d240661dfee80027",
+          "requirements": {
+            "scale": 1.6
+          }
+        }
+      },
+      {
+        "kind": "replace_ending_shot",
+        "timeline_start_sec": 24.23688888888889,
+        "timeline_end_sec": 25.0,
+        "severity": "medium",
+        "reason": "用户反馈'结尾那个镜头换掉'，对应时间线上最后一个clip-0bbf2756fe543b98（pre_drop角色，24.24-25.0秒），需要替换为其他镜头。具体替换要求（人物/动作）用户未说明，故以角色和基础能量作为约束。",
+        "confidence": 0.55,
+        "suggested_fix": {
+          "op": "replace_clip",
+          "clip_id": "clip-0bbf2756fe543b98",
+          "requirements": {
+            "role": "pre_drop",
+            "min_visual_energy": 0.6
+          }
+        }
+      }
+    ]
+  },
+  "call": {
+    "provider": "claude-cli",
+    "model": "sonnet",
+    "duration_ms": 18086,
+    "cost_usd": 0.0742351,
+    "request_id": "f83bf4fe-040a-4188-8a4b-722d91fe1200"
+  }
+}

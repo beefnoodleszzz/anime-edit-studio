@@ -1,0 +1,8 @@
+id: rgb_split_impact_v1
+version: 1.0.0
+kind: effect
+engine: resolve_fusion
+capability: fusion_recipe
+parameters:
+  offset: {type: float, min: 0.0, max: 0.04, default: 0.018}
+  half_width_frames: {type: int, min: 2, max: 24, default: 10}

@@ -1,0 +1,135 @@
+{
+  "phase": "6B",
+  "resolve_version": "21.0.3.7",
+  "project": "phase5-real-acceptance",
+  "spec_revision": 5,
+  "clips": 40,
+  "duration_sec": 25.0,
+  "master": {
+    "id": "render-281a1d5aefa56a48ca9a",
+    "project_id": "phase5-real-acceptance",
+    "spec_version": 5,
+    "backend": "resolve",
+    "preset": "H.265 Master",
+    "output_path": "/Users/zhangxiaolong/Desktop/anime-edit-studio/projects/phase6-real-acceptance/phase5-real-acceptance-r5-resolve-execution-2.1.0-master.mov",
+    "duration_sec": 25.0,
+    "status": "complete",
+    "started_at": "2026-07-25T04:30:43.332Z",
+    "finished_at": "2026-07-25T04:30:46.541Z",
+    "error_json": null
+  },
+  "technical_qa": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "file_exists",
+        "passed": true,
+        "measured": true,
+        "expected": true,
+        "detail": ""
+      },
+      {
+        "name": "duration",
+        "passed": true,
+        "measured": 25.066667,
+        "expected": 25.0,
+        "detail": ""
+      },
+      {
+        "name": "resolution",
+        "passed": true,
+        "measured": [
+          1080,
+          1350
+        ],
+        "expected": [
+          1080,
+          1350
+        ],
+        "detail": ""
+      },
+      {
+        "name": "fps",
+        "passed": true,
+        "measured": "24000/1001",
+        "expected": "24000/1001",
+        "detail": ""
+      },
+      {
+        "name": "codec",
+        "passed": true,
+        "measured": "hevc",
+        "expected": [
+          "h264",
+          "hevc",
+          "prores"
+        ],
+        "detail": ""
+      },
+      {
+        "name": "audio_track",
+        "passed": true,
+        "measured": true,
+        "expected": true,
+        "detail": ""
+      },
+      {
+        "name": "aspect_ratio",
+        "passed": true,
+        "measured": "1080:1350",
+        "expected": "1080:1350",
+        "detail": ""
+      },
+      {
+        "name": "black_frames",
+        "passed": true,
+        "measured": 0,
+        "expected": "<= 0.35s",
+        "detail": ""
+      },
+      {
+        "name": "freeze_frames",
+        "passed": true,
+        "measured": 0.5005000000000024,
+        "expected": "<= 0.75s",
+        "detail": ""
+      },
+      {
+        "name": "missing_frames",
+        "passed": true,
+        "measured": 599,
+        "expected": "601 ±2",
+        "detail": ""
+      },
+      {
+        "name": "corruption",
+        "passed": true,
+        "measured": {
+          "returncode": 0,
+          "markers": []
+        },
+        "expected": {
+          "returncode": 0,
+          "markers": []
+        },
+        "detail": ""
+      },
+      {
+        "name": "loudness",
+        "passed": true,
+        "measured": -14.0,
+        "expected": "-14.0 ± 1.5 LUFS",
+        "detail": ""
+      },
+      {
+        "name": "unexpected_silence",
+        "passed": true,
+        "measured": 0.008476707482994783,
+        "expected": "<= 1.0s",
+        "detail": "intentional ranges: [(23.336054421768708, 24.938231292517006)]"
+      }
+    ]
+  },
+  "visual_acceptance": "pending_human",
+  "recipe_human_acceptance": "pending_human"
+}

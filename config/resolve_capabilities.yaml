@@ -8,7 +8,7 @@
 #
 # 探测来源：probe_resolve_capability.py，2026-07-25
 
-version: "0.1"
+version: "0.2"
 resolve_version_tested: "21.0.3.7"
 edition: studio
 script_python: "3.11"          # venv；系统 3.14 与 fusionscript 不兼容
@@ -46,7 +46,7 @@ capabilities:
     path: native_api
     api: "MediaPool.AddSubFolder"
     probed: true
-    verified: false          # 方法存在，尚未实测
+    verified: true           # Phase 1：ensure_bin('source') 实测通过
 
   create_timeline:
     path: native_api
@@ -105,18 +105,27 @@ capabilities:
     path: fusion_api
     api: "TimelineItem.AddFusionComp / ImportFusionComp / LoadFusionCompByName / ExportFusionComp"
     probed: true
-    verified: true          # AddFusionComp 实测返回 comp 对象
+    verified: true
+    evidence: "docs/probes/phase2_risk_probe.json"
     note: |
-      Recipe 注入路径已确认可行，且 ExportFusionComp 存在——
-      意味着 recipe 可以在 Fusion GUI 里手工做好后导出 .comp，
-      代码只负责 Import + 参数注入，不需要用脚本从零搭节点图。
-      这实质性降低了 Recipe 库的建设成本。
+      Phase 2.0 已验证完整技术闭环：AddTool、参数写入与读回、
+      MediaIn → BrightnessContrast → MediaOut 连接、ExportFusionComp、
+      ImportFusionComp 全部成功，且渲染帧相对对照发生变化。
+      这证明「GUI 制作 → Export .comp → 代码 Import + 注参」可作为 Recipe 路径。
+      具体 TimeSpeed 与转场 Recipe 仍须各自验收，不能由本结论自动推导为 verified。
 
   render:
     path: native_api
-    api: "AddRenderJob / StartRendering / GetRenderJobStatus / SetRenderSettings / IsRenderingInProgress"
+    api: "LoadRenderPreset / SetRenderSettings / AddRenderJob / StartRendering / IsRenderingInProgress / GetRenderJobStatus"
     probed: true
-    verified: false
+    verified: true          # Phase 1.14 实测：多次渲染成功，约 0.7–1.2s / 1 秒素材
+    usage: |
+      project.LoadRenderPreset("H.264 Master")
+      project.SetRenderSettings({"TargetDir": ..., "CustomName": ..., "SelectAllFrames": True})
+      job = project.AddRenderJob(); project.StartRendering(job)
+      轮询 IsRenderingInProgress()，再读 GetRenderJobStatus(job)
+      状态形如 {'JobStatus': '完成', 'CompletionPercentage': 100, 'TimeTakenToRenderInMs': 1192}
+    note: "H.264 Master 预设产出 .mov（非 .mp4），按 CustomName.* 匹配产物"
     builtin_presets_relevant:
       - "TikTok - 1080p"
       - "H.264 Master"
@@ -125,55 +134,112 @@ capabilities:
       - "YouTube - 1080p"
       - "YouTube - 2160p"
 
+  retime_interpolation:
+    path: native_api
+    api: "SetProperty('RetimeProcess', int) / SetProperty('MotionEstimation', int)"
+    probed: true
+    verified: true          # Phase 1.14 实测：接受整数 0–3，字符串一律被拒
+    note: |
+      ★ 必须传整数枚举，传字符串（'OpticalFlow' 等）返回 False。
+      0–3 四档均被接受，具体档位含义待 Phase 6 逐档渲染比对确定。
+
+  retime_interpolation_mapping:
+    path: native_api
+    api: "SetProperty('RetimeProcess'/'MotionEstimation', int)"
+    probed: true
+    verified: false
+    priority: high
+    note: "整数 0–3 可写已确认，但各档视觉语义尚未用渲染对照映射；未映射前不得由 nearest/frame_blend/optical_flow 枚举生成整数。"
+
 # ─────────────────────────────────────────────────────────────
 # 方法已确认存在，待 Phase 1/6 实测（这些是本次探测最大的收获）
 # ─────────────────────────────────────────────────────────────
 
+  # ─── 以下三项经 Phase 1.12–1.14 实测判定为不可用 ───
+  # 教训：hasattr / 方法存在 完全不能作为可用性依据，必须实跑并验证输出。
+
   speed_ramp:
-    path: native_api
+    path: unsupported
     api: "TimelineItem.SetSpeedRamp"
     probed: true
     verified: false
-    fallback: "分段常速 + RetimeProcess=optical_flow"
+    available: false
+    fallback: "Fusion comp 内做变速（TimeSpeed / TimeStretcher 节点），经 ImportFusionComp 注入"
     priority: high
-    note: "R1 风险大幅下降：原假设 API 不支持关键帧变速，实测方法存在"
+    evidence: probe_key_capabilities2.py
+    note: |
+      ★ hasattr 假阳性 ★
+      dir(item) 中存在 SetSpeedRamp，但 item.SetSpeedRamp 的值是 None，
+      callable() 为 False —— 方法在 21.0.3 中并不存在。
+      Resolve 的远程对象对未知属性返回 None 而非抛 AttributeError，
+      因此 hasattr 恒为 True。
+      同时探测：Speed / SpeedPercent / PlaybackSpeed 属性均不可写，
+      片段上与变速相关的方法只有 GetDuration。
+      结论：**Resolve 21.0.3 没有逐片段变速的脚本接口**。
+      变速必须走 Fusion Recipe 路线（add_fusion_comp 已 verified）。
 
-  retime_quality:
-    path: native_api
-    api: "SetProperty('RetimeProcess'), SetProperty('MotionEstimation')"
+  timespeed_recipe:
+    path: fusion_api
+    api: "Fusion TimeSpeed / TimeStretcher Recipe"
     probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/fusion_motion_acceptance.json"
+    note: |
+      Resolve 21.0.3.7 实渲通过：96 帧输入与输出时长一致，入口/冲击/出口
+      三个采样点均相对基线发生变化。速度参数作为相对权重积分后归一化，
+      保证 SourceTime 首尾严格落在可用源帧内（见 P20）。
+
+  camera_move_recipe:
+    path: fusion_api
+    api: "Fusion Transform keyframes Recipe"
+    probed: false
     verified: false
     priority: high
-    note: |
-      Resolve 原生光流变速可控。若质量达标，旧系统的 RIFE 外挂在
-      大部分场景可以直接省掉——这是效率与画质双赢点，Phase 6 必须验证。
+    note: "push/pan 动画须由已验收 Recipe 执行；静态 SetProperty(transform) 不可冒充动画。"
 
   subject_tracking:
-    path: native_api
+    path: unsupported
     api: "TimelineItem.CreateMagicMask / RegenerateMagicMask"
     probed: true
     verified: false
-    fallback: "静态 reframe（不做主体跟踪）"
+    available: false
+    fallback: "自研主体检测（Phase 3）+ 手动 Pan/ZoomX（transform 已 verified）"
     priority: high
     edition_required: studio
+    evidence: probe_key_capabilities.py, probe_key_capabilities2.py
     note: |
-      Studio 独有。旧系统用 rembg 出静态遮罩，无跟踪。
-      Magic Mask 是 §5 'subject tracking' 的原生实现。
+      所有签名（'F' / 'B' / 'BI' / 无参 / 整数）一律返回 False，
+      切到 Color 页并定位时间码后重试仍为 False，节点数不变（保持 1）。
+      判定为脚本接口不可用。
 
   portrait_reframe:
-    path: native_api
+    path: unsupported
     api: "TimelineItem.SmartReframe"
     probed: true
     verified: false
-    fallback: "手动 Pan/ZoomX（旧系统的 reframe_x 等价物）"
+    available: false
+    fallback: "自研主体感知 + SetProperty('Pan'/'ZoomX')，后者已 verified"
     priority: critical
     edition_required: studio
+    evidence: probe_smartreframe_visual.py, smartreframe_visual.json
     note: |
-      ★ 本次探测最重要的发现 ★
-      横屏动漫源 → 4:5 竖屏交付是本项目每一条片子都要做的事，
-      旧系统靠 reframe_x 单轴偏移手搓。SmartReframe 是 Resolve Studio
-      的主体感知自动重构图。若可用，直接消灭一整类人工与一整类质量问题。
-      Phase 1 就应验证，不要等到 Phase 6。
+      ★ 最重要的否定结论，且是「返回 True 但空转」这一类最危险的失败 ★
+
+      SmartReframe() 返回 True，但：
+        - GetProperty 的 Pan/ZoomX/Tilt 全部不变
+        - 渲染输出与基线**逐字节相同**（首帧 md5 一致）
+
+      判定方法的可信度已由对照组建立：
+      同一片段手动 SetProperty('Pan', 400) 后重渲，md5 改变、YAVG 从 80.6 变为 50.8。
+      即检测手段有效，SmartReframe 确实没有产生任何效果。
+
+      （第一版探测曾误取 780s 之外的黑场画面，导致对照组也"无差异"。
+        黑场上任何重构图都不可见 —— 视觉验证必须先确认画面有内容。）
+
+      影响：横屏→4:5 的主体感知重构图无法依赖 Resolve 原生能力，
+      改为在 Phase 3 用自研主体检测产出 Pan/ZoomX 参数，
+      再经已验证的 transform 通道写入。可控性反而更好，但工作量增加。
 
   stabilize:
     path: native_api
@@ -186,12 +252,14 @@ capabilities:
     path: native_api
     api: "SetLUT / SetCDL / GetNodeGraph / CopyGrades / AssignToColorGroup / AddVersion"
     probed: true
-    verified: false
+    verified: true
     priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
     note: |
-      ColorGroup + Version 是比逐 clip 调色更好的架构：
-      一个 Color Recipe = 一个 ColorGroup，clip 加入 group 即继承调色，
-      改 recipe 只需改 group。这比 EditSpec 里每个 clip 存一份 grade 干净得多。
+      Phase 2.0 实测：创建 ColorGroup、两个 clip 入组、AddVersion 均成功；
+      在 group post-clip graph 设置 Resolve 已登记的 LUT 后，渲染帧哈希与统计改变。
+      因此 Color Recipe 架构冻结为「一个 Recipe 对应一个 ColorGroup」。
+      注意 Graph.SetLUT 只接受 Resolve LUT 注册表中的路径；任意外部绝对路径会返回 False。
 
   export_lut:
     path: native_api
@@ -224,33 +292,73 @@ capabilities:
     note: "Hook 文案层（旧 TextOverlay）的落地路径"
 
 # ─────────────────────────────────────────────────────────────
-# 未探测 / 未知
+# Phase 2.0 专业能力预探测
 # ─────────────────────────────────────────────────────────────
 
   transition:
-    path: unverified
-    probed: false
-    verified: false
+    path: fusion_recipe
+    probed: true
+    verified: true
     fallback: hard_cut
     priority: high
-    note: "TimelineItem 上未见直接的 transition API，需研究 Timeline 层或 Fusion 转场方案"
+    evidence: "docs/probes/fusion_motion_acceptance.json"
+    note: |
+      Timeline / TimelineItem 均无原生 transition API。
+      自动链采用双侧 Fusion bridge：前镜出口与后镜入口由同一 Whip/Blur Recipe
+      协调，不合并 TimelineItem，因此 clip_id、总时长和连续多切点能力均保留。
+      96 帧 A/B 实渲验证：切点两侧发生变化、远端身份保持、总帧数不变。
+
+  motion_phrase_compositor:
+    path: fusion_api
+    api: "one-comp TimeStretcher + Transform + DirectionalBlur choreography"
+    probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/motion_phrase_acceptance.json"
+    note: |
+      将 MotionPhrase 的 hold/accelerate/whip/carry/settle/reverse 编译到每个
+      TimelineItem 的单个 Fusion comp，解决 Resolve 多 comp 仅为版本、不可串联的问题。
+      Resolve 21.0.3.7 实渲：6 秒 144 帧完整；动态范围 2.11、hold 21.7%，
+      跨切点运动连续性由基线 0.00 提升至 0.90。
 
   fairlight_automation:
-    path: unverified
-    probed: false
+    path: unsupported
+    probed: true
     verified: false
-    fallback: "ffmpeg 音频床（旧 sound.py 路径）"
-    priority: medium
+    available: false
+    fallback: "execution/audio 确定性预烘焙音量包络与 Sound Recipe WAV，再导入已验证的 Resolve 音轨完成最终混音"
+    priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
+    note: |
+      Resolve 21.0.3.7 的公开脚本对象没有音量/增益/自动化/关键帧方法。
+      对音频 TimelineItem 写 Volume / AudioVolume / Gain / Pan 全部返回 False，
+      GetProperty 也无对应字段。GUI Automation 默认禁用，不能作为主链。
+
+  sound_recipe_prebake:
+    path: deterministic_fallback
+    api: "FFmpeg PCM24 pre-bake + MediaPool.AppendToTimeline(mediaType=2)"
+    probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/sound_recipe_prebake_acceptance.json"
+    note: |
+      Phase 6 真机实测四条 Sound Recipe 预烘焙后分别进入 Resolve 四条音轨，
+      H.264 Master 渲染保留 48 kHz stereo 音轨。默认增益叠加时 true peak
+      -11.7 dBFS；公开 API 不承担任何 Fairlight automation。
 
   audio_track_management:
     path: native_api
     api: "Timeline.AddTrack('audio', ...)"
     probed: true
-    verified: false
+    verified: true
     priority: high
+    evidence: "docs/probes/phase2_risk_probe.json"
+    note: "Phase 2.0 实测 AddTrack('audio', 'stereo') 成功，音轨数从 1 增至 2。"
 
   gui_automation:
     path: gui_fallback
+    probed: false
+    verified: false
     enabled: false            # 默认禁用，需显式开关且必须记录
     note: "MASTER PLAN §25：最后手段，禁止设计成核心能力"
 
@@ -284,3 +392,109 @@ pitfalls:
     issue: "Resolve 必须前台运行，无真正 headless"
     impact: "批量自动化受限"
     fix: "启动等待 + 健康检查；渲染任务串行排队"
+
+  # ── 以下为 Phase 1 实测新增（2026-07-25），每一条都曾导致片段静默错位 ──
+
+  - id: P6
+    issue: "源素材自带的章节标记会被时间线片段继承，且 Resolve 拒绝在已有标记的帧上再加标记"
+    impact: |
+      蓝光/WEB 片源常在第 0 帧就有 "Chapter N"。
+      在第 0 帧写 clip_id 标记会静默失败，导致增量更新无法定位该片段。
+    fix: "mark_clip 向后扫描第一个空闲帧；查找时只认 aes: 前缀的 customData"
+
+  - id: P7
+    issue: "GetSourceStartFrame() 含媒体起始时间码；GetLeftOffset() 在跨帧率时被套格重映射"
+    impact: |
+      实测 29.97 素材放进 24fps 时间线，请求源帧 720 后 GetLeftOffset() 返回 576。
+      用任一帧号反推源入点都会错。
+    fix: "统一用 GetSourceStartTime() / GetSourceEndTime()，它们直接返回秒，跨帧率语义稳定"
+
+  - id: P8
+    issue: "AppendToTimeline 的 endFrame 是开区间"
+    impact: "按闭区间处理会让每个片段少一帧"
+    fix: "endFrame = startFrame + 帧数，不减 1。实测 240→288 得 48 帧"
+
+  - id: P9
+    issue: "时间线起始帧默认是 86400（01:00:00:00），不是 0"
+    impact: |
+      recordFrame 若不加这个偏移，第二个及以后的片段会被静默丢弃 ——
+      AppendToTimeline 对失败项返回 None 而不抛异常。
+    fix: "recordFrame = timeline.GetStartFrame() + 目标帧；并显式检查返回值中的 None"
+
+  - id: P10
+    issue: "AppendToTimeline 只能在时间线末端追加，无法填补轨道中间的空洞"
+    impact: |
+      ★ 架构级约束 ★
+      「删掉变化的片段再插回原位」这条增量更新路线走不通，该位置返回 None。
+    fix: |
+      时间线总是全量重建（按时间线位置升序放置）；
+      增量下沉到渲染层 —— compiler 报告 changed_ranges，只渲变化区间。
+      在 Resolve 里搭时间线是廉价的，渲染才是昂贵的。
+
+  - id: P11
+    issue: "源帧数按「入点 floor + 出点 ceil」计算会让片段多出一帧"
+    impact: "实测 29.97 素材取 2.0s 得 61 源帧，套格到 24fps 后是 49 帧而非 48"
+    fix: "按时长取帧：n = duration_frames(in, duration)，end = start + n"
+
+  - id: P12
+    issue: "hasattr / dir() 对 Resolve 远程对象是假阳性"
+    impact: |
+      ★ 方法论级教训 ★
+      远程对象对未知属性返回 None 而非抛 AttributeError，
+      因此 hasattr(item, 'SetSpeedRamp') 恒为 True，即便该方法根本不存在。
+      Phase 0 的能力探测正是因此误把 SetSpeedRamp 记为「方法存在」。
+    fix: |
+      判定可用性必须三步走：
+        1. callable(getattr(obj, name, None)) —— 而非 hasattr
+        2. 实际调用并检查返回值
+        3. 验证**输出确实改变**（渲染出帧比对）
+      能力矩阵中 probed / verified / available 三个字段分别对应这三步。
+
+  - id: P13
+    issue: "「返回 True 但不生效」是 Resolve API 最危险的失败模式"
+    impact: |
+      SmartReframe() 返回 True，属性不变，渲染输出逐字节相同。
+      只看返回值会得出完全错误的结论，并把它写进能力矩阵传播下去。
+    fix: |
+      凡是影响画面的能力，verified 必须由**渲染出帧比对**支撑，不能只看返回值。
+      且必须先跑对照组（一个已知会改变画面的操作）确认检测手段有效。
+
+  - id: P14
+    issue: "视觉比对若取到黑场，任何变化都不可见"
+    impact: "第一版 SmartReframe 验证误取近全黑帧（YAVG≈30），连对照组都判为无差异"
+    fix: "比对前先扫描素材挑亮度适中的时间点（40 < YAVG < 200）"
+
+  - id: P15
+    issue: "Color Graph.SetLUT 不接受任意外部绝对路径"
+    impact: "调用返回 False，若只假设文件存在会导致 Color Recipe 静默不生效"
+    fix: "Recipe LUT 必须安装/登记进 Resolve LUT 注册表；SetLUT 后检查返回值并渲染对照"
+
+  - id: P16
+    issue: "Resolve 21.0.3.7 公共脚本 API 无 Fairlight 音量自动化"
+    impact: "可建音轨但无法脚本写 clip/track 音量关键帧，Sound Recipe 主链不能依赖 Fairlight Automation"
+    fix: "在 execution/audio 中确定性预烘焙包络与 WAV，再导入 Resolve 音轨；禁止用 GUI Automation 冒充主链"
+
+  - id: P17
+    issue: "Timeline 与 TimelineItem 无原生 Transition API"
+    impact: "EditSpec transition 不能编译为原生时间线调用"
+    fix: "使用 Fusion transition Recipe；完成重叠语义与渲染对照前 capability 保持 unverified，默认 hard_cut"
+
+  - id: P18
+    issue: "Render TargetDir 使用相对路径时 SetRenderSettings 可成功，但 AddRenderJob 返回失败"
+    impact: "时间线已完整构建却无法创建渲染任务，错误直到 AddRenderJob 才暴露"
+    fix: "ResolveAdapter.render 在接触 API 前统一 expanduser().resolve()，永远传绝对输出目录"
+
+  - id: P19
+    issue: "AppendToTimeline 省略 mediaType 会把视频的原片音频一并放入时间线"
+    impact: "设计音乐虽已写入，成片仍混入角色对白/原声；音乐增益调整看似不生效"
+    fix: "视频 clip 强制 mediaType=1；音乐、SFX 与允许的源音频全部作为显式 AudioLayer 用 mediaType=2 放置"
+
+  - id: P20
+    issue: "Fusion TimeStretcher 的 SourceTime 超出 MediaIn 可用帧时会静默截短渲染"
+    impact: "96 帧片段实测只输出 66 帧，镜头和成片总时长都会无提示缩短"
+    fix: "把 entry/impact/exit 速度视为相对权重，积分后归一化到 0..duration-1；实渲强制核对输入/输出帧数"
+
+  - id: P21
+    issue: "在 Whip/Blur 峰值帧上计算光流会因跟踪点丢失而把高速运动误判为静止"
+    impact: "真实跨切点 Carry 会被 QA 错判为不连续，导致错误调整运动公式"
+    fix: "跨 Cut 连续性采样必须位于动态 Blur 包络之外；当前 7 帧包络使用 Cut 前 -8→-6 与 Cut 后 +6→+8"

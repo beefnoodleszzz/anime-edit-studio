@@ -1,0 +1,23 @@
+version: "1"
+
+# Phase 3/7 按能力逐项登记。任何模型缓存 key 必须包含 model、
+# model_version、pipeline_version 与参数。
+models:
+  semantic_embedding:
+    provider: open_clip
+    architecture: ViT-B-32
+    weights: laion2b_s34b_b79k
+    dimensions: 512
+    pipeline_version: clip-embedding-1.0.0
+  aesthetic:
+    provider: open_clip
+    architecture: ViT-B-32-quickgelu
+    weights: openai
+    head: kit/models/sa_0_4_vit_b_32_linear.pth
+    pipeline_version: aesthetic-1.0.0
+  anime_tagger:
+    provider: wdtagger
+    repository: SmilingWolf/wd-swinv2-tagger-v3
+    general_threshold: 0.35
+    character_threshold: 0.9
+    pipeline_version: wd-tagger-1.0.0

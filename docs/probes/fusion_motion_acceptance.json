@@ -1,0 +1,28 @@
+{
+  "project": "_aes_fusion_motion_acceptance",
+  "resolve_version": "21.0.3.7",
+  "timespeed_recipe": {
+    "baseline": "fusion_speed_base.mov",
+    "effect": "fusion_speed_effect.mov",
+    "checks": {
+      "duration_preserved": true,
+      "entry_changed": true,
+      "impact_changed": true,
+      "exit_changed": true
+    },
+    "verified": true
+  },
+  "transition": {
+    "baseline": "fusion_transition_base.mov",
+    "effect": "fusion_transition_effect.mov",
+    "checks": {
+      "duration_preserved": true,
+      "left_identity_preserved": true,
+      "right_identity_preserved": true,
+      "left_cut_side_changed": true,
+      "right_cut_side_changed": true
+    },
+    "verified": true
+  },
+  "verified": true
+}

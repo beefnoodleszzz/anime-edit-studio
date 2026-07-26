@@ -1,0 +1,21 @@
+{
+  "date": "2026-07-25",
+  "project": "phase5-real-acceptance",
+  "command": "aes first-cut phase5-real-acceptance --music /Users/zhangxiaolong/Desktop/study/a.mp4 --reference /Users/zhangxiaolong/Desktop/study/a.mp4 --duration 25 --tone 燃向",
+  "director_plan_revision": 3,
+  "edit_spec_revision": 3,
+  "duration_sec": 25.0,
+  "clip_count": 40,
+  "mean_shot_length_sec": 0.625,
+  "median_shot_length_sec": 0.6223721844,
+  "reference_mean_shot_length_sec": 0.6569105691,
+  "reference_asl_delta_ratio": 0.0486,
+  "candidate_groups": 5,
+  "candidate_preview_videos": 15,
+  "manual_resolve_operations": 0,
+  "editspec_validation": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "passed": true
+}

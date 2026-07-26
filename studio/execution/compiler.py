@@ -47,6 +47,8 @@ from studio.execution.resolve import (
     append_prebaked_audio,
     apply_color_recipe,
     apply_fusion_recipe,
+    apply_speed_ramp_recipe,
+    apply_whip_blur_side,
 )
 
 log = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ class BuildReport:
     clips_removed: int = 0
     markers_written: int = 0
     recipes_applied: int = 0
+    motion_phrases_applied: int = 0
     audio_written: int = 0
     #: 发生变化的时间线区间（秒）。渲染层据此只渲这些段，而非整条片子。
     changed_ranges: list[tuple[float, float]] = field(default_factory=list)
@@ -98,6 +101,7 @@ class BuildReport:
             "clips_removed": self.clips_removed,
             "markers_written": self.markers_written,
             "recipes_applied": self.recipes_applied,
+            "motion_phrases_applied": self.motion_phrases_applied,
             "audio_written": self.audio_written,
             "changed_ranges": [[round(a, 3), round(b, 3)] for a, b in self.changed_ranges],
             "changed_duration_sec": round(self.changed_duration_sec, 3),
@@ -160,6 +164,9 @@ def spec_execution_fingerprint(spec: EditSpec) -> str:
             "audio": [layer.model_dump() for layer in spec.audio],
             "markers": [marker.model_dump() for marker in spec.markers],
             "captions": [caption.model_dump() for caption in spec.captions],
+            "motion_phrases": [
+                phrase.model_dump() for phrase in spec.motion_phrases
+            ],
         }
     )[:16]
 
@@ -280,7 +287,7 @@ class ResolveCompiler:
 
         report.clips_written = len(written)
         self._apply_clip_properties(spec, written, media, report)
-        self._apply_recipes(written, report)
+        self._apply_recipes(spec, written, report)
         report.audio_written = self._append_audio(spec, written)
         report.markers_written = self._write_markers(spec, written)
 
@@ -424,19 +431,105 @@ class ResolveCompiler:
 
     def _apply_recipes(
         self,
+        spec: EditSpec,
         written: list[tuple[Clip, object]],
         report: BuildReport,
     ) -> None:
         """Apply only recipes already admitted by validator/R4."""
         self.rv.clear_color_groups()
         color_groups: dict[str, list[object]] = {}
+        timeline_fps = self._timebase(spec)
+        phrase_beats = {
+            beat.clip_id: (phrase, beat)
+            for phrase in spec.motion_phrases
+            for beat in phrase.beats
+        }
         for clip, item in written:
+            phrase_row = phrase_beats.get(clip.id)
+            if phrase_row is not None:
+                phrase, beat = phrase_row
+                impact_sec = (
+                    clip.retime.impact_at_sec
+                    if clip.retime.impact_at_sec is not None
+                    else clip.timeline.duration_sec / 2
+                )
+                self.rv.build_motion_phrase_comp(
+                    item,
+                    comp_name=f"aes:motion:{phrase.id}:{beat.stage}",
+                    stage=beat.stage,
+                    direction=phrase.direction,
+                    intensity=beat.intensity,
+                    duration_frames=int(item.GetDuration() or 0),
+                    transition_frames=max(
+                        1, timeline_fps.to_frames(phrase.cut_window_sec)
+                    ),
+                    translation=phrase.translation,
+                    scale_delta=phrase.scale_delta,
+                    rotation_deg=phrase.rotation_deg,
+                    blur_strength=phrase.blur_strength,
+                    retime=(
+                        {
+                            "entry_speed": clip.retime.entry_speed,
+                            "impact_speed": clip.retime.impact_speed,
+                            "exit_speed": clip.retime.exit_speed,
+                            "impact_frame": timeline_fps.to_frames(impact_sec),
+                        }
+                        if clip.retime.type == "speed_ramp"
+                        else None
+                    ),
+                )
+                report.motion_phrases_applied += 1
+                if clip.retime.type == "speed_ramp":
+                    report.recipes_applied += 1
+                if clip.color is not None:
+                    color_groups.setdefault(clip.color.recipe, []).append(item)
+                continue
             for ref in clip.effects:
                 apply_fusion_recipe(
                     self.rv,
                     self.recipe_registry,
                     item=item,
                     ref=ref,
+                )
+                report.recipes_applied += 1
+            if clip.retime.type == "speed_ramp":
+                duration_frames = int(item.GetDuration() or 0)
+                impact_frame = timeline_fps.to_frames(
+                    clip.retime.impact_at_sec
+                    if clip.retime.impact_at_sec is not None
+                    else clip.timeline.duration_sec / 2
+                )
+                apply_speed_ramp_recipe(
+                    self.rv,
+                    self.recipe_registry,
+                    item=item,
+                    duration_frames=duration_frames,
+                    entry_speed=clip.retime.entry_speed,
+                    impact_speed=clip.retime.impact_speed,
+                    exit_speed=clip.retime.exit_speed,
+                    impact_frame=impact_frame,
+                )
+                report.recipes_applied += 1
+            for side, end in (
+                ("in", clip.transition.in_),
+                ("out", clip.transition.out),
+            ):
+                if end.recipe in {"hard_cut", "none"}:
+                    continue
+                if end.recipe != "motion_blur_transition_v1":
+                    raise ResolveOperationError(
+                        f"transition recipe 尚无执行器: {end.recipe}"
+                    )
+                apply_whip_blur_side(
+                    self.rv,
+                    self.recipe_registry,
+                    item=item,
+                    side=side,
+                    duration_frames=int(item.GetDuration() or 0),
+                    transition_frames=max(
+                        1, timeline_fps.to_frames(end.duration_sec)
+                    ),
+                    params=end.params,
                 )
                 report.recipes_applied += 1
             if clip.color is not None:

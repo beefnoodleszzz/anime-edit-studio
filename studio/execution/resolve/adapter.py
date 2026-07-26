@@ -499,6 +499,240 @@ class ResolveAdapter:
                 raise ResolveOperationError(f"Fusion 参数回读不一致: {address}")
         return comp
 
+    @staticmethod
+    def fusion_tool(comp, name: str):
+        """Resolve one named tool from an imported Recipe composition."""
+        tools = comp.GetToolList(False) or {}
+        tool = tools.get(name)
+        if tool is None:
+            tool = next(
+                (
+                    candidate
+                    for candidate in tools.values()
+                    if (candidate.GetAttrs() or {}).get("TOOLS_Name") == name
+                ),
+                None,
+            )
+        if tool is None:
+            raise ResolveOperationError(f"Fusion Recipe 找不到工具: {name}")
+        return tool
+
+    def configure_speed_ramp(
+        self,
+        comp,
+        *,
+        duration_frames: int,
+        entry_speed: float,
+        impact_speed: float,
+        exit_speed: float,
+        impact_frame: int,
+    ) -> str:
+        """Configure a deterministic three-point source-time curve."""
+        if duration_frames < 2:
+            raise ValueError("speed ramp 至少需要 2 帧")
+        impact_frame = max(1, min(int(impact_frame), duration_frames - 2))
+        tail = duration_frames - 1 - impact_frame
+        first_slope = (impact_speed - entry_speed) / impact_frame
+        second_slope = (exit_speed - impact_speed) / max(tail, 1)
+        first_area = entry_speed * impact_frame + 0.5 * first_slope * impact_frame**2
+        total_area = (
+            first_area
+            + impact_speed * tail
+            + 0.5 * second_slope * tail**2
+        )
+        if total_area <= 0:
+            raise ValueError("speed ramp 积分必须大于 0")
+        # Fusion truncates the rendered clip when SourceTime runs past MediaIn.
+        # Normalize relative speed weights so the last timeline frame maps
+        # exactly to the last available source frame.
+        scale = (duration_frames - 1) / total_area
+        expression = (
+            f"iif(time <= {impact_frame}, "
+            f"({scale:.12f})*(({entry_speed:.9f})*time "
+            f"+ 0.5*({first_slope:.9f})*time*time), "
+            f"({scale:.12f})*(({first_area:.9f}) "
+            f"+ ({impact_speed:.9f})*(time-{impact_frame}) "
+            f"+ 0.5*({second_slope:.9f})*(time-{impact_frame})*(time-{impact_frame})))"
+        )
+        tool = self.fusion_tool(comp, "SpeedRamp")
+        source_time = getattr(tool, "SourceTime", None)
+        if source_time is None:
+            raise ResolveOperationError("SpeedRamp.SourceTime 不可访问")
+        source_time.SetExpression(expression)
+        if source_time.GetExpression() != expression:
+            raise ResolveOperationError("SpeedRamp.SourceTime 表达式回读不一致")
+        return expression
+
+    def configure_whip_blur_side(
+        self,
+        comp,
+        *,
+        side: str,
+        duration_frames: int,
+        transition_frames: int,
+        length: float,
+        angle: float,
+    ) -> str:
+        """Place the accepted blur Recipe at one side of a clip boundary."""
+        if side not in {"in", "out"}:
+            raise ValueError(f"未知 transition side: {side}")
+        if duration_frames < 1 or transition_frames < 1:
+            raise ValueError("transition duration 必须至少 1 帧")
+        center = 0 if side == "in" else duration_frames - 1
+        width = max(1, transition_frames - 1)
+        expression = (
+            f"({length:.9f}) * max(0, 1 - abs(time - ({center})) / ({width}))"
+        )
+        tool = self.fusion_tool(comp, "MotionBlurTransition")
+        tool.SetInput("Angle", angle)
+        blur_length = getattr(tool, "Length", None)
+        if blur_length is None:
+            raise ResolveOperationError("MotionBlurTransition.Length 不可访问")
+        blur_length.SetExpression(expression)
+        if blur_length.GetExpression() != expression:
+            raise ResolveOperationError("MotionBlurTransition.Length 表达式回读不一致")
+        return expression
+
+    def build_motion_phrase_comp(
+        self,
+        item,
+        *,
+        comp_name: str,
+        stage: str,
+        direction: str,
+        intensity: float,
+        duration_frames: int,
+        transition_frames: int,
+        translation: float,
+        scale_delta: float,
+        rotation_deg: float,
+        blur_strength: float,
+        retime: dict | None = None,
+    ):
+        """Build one composited Fusion graph for all motion operations."""
+        if duration_frames < 2:
+            raise ValueError("MotionPhrase clip 至少需要 2 帧")
+        for existing in item.GetFusionCompNameList() or []:
+            if not item.DeleteFusionCompByName(existing):
+                raise ResolveOperationError(f"无法删除旧 Fusion comp: {existing}")
+        comp = item.AddFusionComp()
+        if not comp:
+            raise ResolveOperationError("MotionPhrase AddFusionComp 失败")
+        tools = comp.GetToolList(False) or {}
+        media_in = next(
+            (
+                tool for tool in tools.values()
+                if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaIn"
+            ),
+            None,
+        )
+        media_out = next(
+            (
+                tool for tool in tools.values()
+                if (tool.GetAttrs() or {}).get("TOOLS_RegID") == "MediaOut"
+            ),
+            None,
+        )
+        if media_in is None or media_out is None:
+            raise ResolveOperationError("MotionPhrase comp 缺 MediaIn/MediaOut")
+        previous = media_in
+        if retime is not None:
+            speed = comp.AddTool("TimeStretcher")
+            speed.SetAttrs({"TOOLS_Name": "SpeedRamp"})
+            if not speed.ConnectInput("Input", previous):
+                raise ResolveOperationError("MotionPhrase TimeStretcher 连接失败")
+            self.configure_speed_ramp(
+                comp,
+                duration_frames=duration_frames,
+                entry_speed=float(retime["entry_speed"]),
+                impact_speed=float(retime["impact_speed"]),
+                exit_speed=float(retime["exit_speed"]),
+                impact_frame=int(retime["impact_frame"]),
+            )
+            previous = speed
+
+        transform = comp.AddTool("Transform")
+        transform.SetAttrs({"TOOLS_Name": "MotionTransform"})
+        if not transform.ConnectInput("Input", previous):
+            raise ResolveOperationError("MotionPhrase Transform 连接失败")
+        last = duration_frames - 1
+        # Fusion Transform.Center moves the image content in the opposite
+        # visual direction, so semantic left/up require a positive center.
+        sign = 1.0 if direction in {"left", "up"} else -1.0
+        axis_x = direction in {"left", "right"}
+        distance = translation * intensity
+        scale = scale_delta * intensity
+        t = f"(time/{last})"
+        ease_in = f"({t})*({t})*({t})"
+        ease_out = f"(1-(1-{t})*(1-{t})*(1-{t}))"
+        if stage in {"accelerate", "whip"}:
+            offset = f"({sign * distance:.9f})*({ease_in})"
+            size = f"1 + ({scale:.9f})*({ease_in})"
+        elif stage == "carry":
+            offset = f"({sign * distance:.9f})*(2*({ease_out})-1)"
+            size = (
+                f"1 + ({scale:.9f})*"
+                f"(1-abs(2*({ease_out})-1))*0.65"
+            )
+        elif stage == "settle":
+            offset = f"({-sign * distance:.9f})*(1-({ease_out}))"
+            size = f"1 + ({scale * 0.55:.9f})*(1-({ease_out}))"
+        elif stage == "reverse":
+            offset = f"({-sign * distance:.9f})*({ease_in})"
+            size = f"1 + ({scale:.9f})*({ease_in})"
+        else:
+            offset = "0"
+            size = "1"
+        center = (
+            f"Point(0.5 + ({offset}), 0.5)"
+            if axis_x
+            else f"Point(0.5, 0.5 + ({offset}))"
+        )
+        transform.Center.SetExpression(center)
+        transform.Size.SetExpression(size)
+        transform.Angle.SetExpression(
+            f"({rotation_deg * intensity:.9f})*({ease_in})"
+        )
+        for input_object, expected, label in (
+            (transform.Center, center, "Center"),
+            (transform.Size, size, "Size"),
+        ):
+            if input_object.GetExpression() != expected:
+                raise ResolveOperationError(
+                    f"MotionPhrase Transform.{label} 表达式回读不一致"
+                )
+
+        blur = comp.AddTool("DirectionalBlur")
+        blur.SetAttrs({"TOOLS_Name": "MotionBlur"})
+        blur.SetInput("Angle", 0.0 if axis_x else 90.0)
+        if not blur.ConnectInput("Input", transform):
+            raise ResolveOperationError("MotionPhrase DirectionalBlur 连接失败")
+        width = max(1, transition_frames - 1)
+        peak = blur_strength * intensity
+        entry_envelope = f"max(0, 1-abs(time-0)/({width}))"
+        exit_envelope = f"max(0, 1-abs(time-({last}))/({width}))"
+        if stage in {"accelerate", "whip"}:
+            envelope = exit_envelope
+        elif stage == "carry":
+            envelope = f"max({entry_envelope}, {exit_envelope})"
+        elif stage in {"settle", "reverse"}:
+            envelope = entry_envelope
+        else:
+            envelope = "0"
+        blur_expression = f"({peak:.9f})*({envelope})"
+        blur.Length.SetExpression(blur_expression)
+        if blur.Length.GetExpression() != blur_expression:
+            raise ResolveOperationError("MotionPhrase Blur 表达式回读不一致")
+        if not media_out.ConnectInput("Input", blur):
+            raise ResolveOperationError("MotionPhrase MediaOut 连接失败")
+
+        names = item.GetFusionCompNameList() or []
+        current_name = names[-1] if names else None
+        if current_name and current_name != comp_name:
+            if not item.RenameFusionCompByName(current_name, comp_name):
+                raise ResolveOperationError(f"MotionPhrase comp 重命名失败: {comp_name}")
+        return comp
+
     def build_fusion_comp(
         self,
         item,

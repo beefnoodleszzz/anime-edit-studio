@@ -10,10 +10,18 @@ from collections.abc import Callable
 
 from studio.core.capabilities import is_verified
 from studio.creative.director import DirectorPlan
-from studio.editspec.schema import EditSpec, RecipeRef, SfxCue
+from studio.editspec.schema import (
+    EditSpec,
+    MotionBeat,
+    MotionPhrase,
+    RecipeRef,
+    Retime,
+    SfxCue,
+    TransitionEnd,
+)
 from studio.execution.recipes import RecipeRegistry
 
-RECIPE_PLANNER_VERSION = "recipe-planner-1.1.0"
+RECIPE_PLANNER_VERSION = "recipe-planner-1.2.0"
 _MANAGED_EFFECTS = {
     "white_flash_v1", "impact_shake_v1", "eye_focus_v1", "camera_punch_v1",
 }
@@ -81,6 +89,12 @@ def apply_recipe_plan(
                 ]
             }
         )
+        if clip.transition.in_.recipe == "motion_blur_transition_v1":
+            clip.transition.in_ = TransitionEnd()
+        if clip.transition.out.recipe == "motion_blur_transition_v1":
+            clip.transition.out = TransitionEnd()
+        if clip.retime.type == "speed_ramp":
+            clip.retime = Retime()
     used_versions: dict[str, str] = {}
 
     def use(recipe_id: str) -> RecipeRef:
@@ -96,6 +110,129 @@ def apply_recipe_plan(
     )
     occupied_effects: set[str] = set()
     push_pull = "push_pull" in plan.tone
+    motion_phrases: list[MotionPhrase] = []
+
+    if (
+        capability_check("motion_phrase_compositor")
+        and plan.editing_style.source in {"reference", "curated"}
+        and len(clips) >= 3
+    ):
+        # Two moving clips followed by four unassigned holds create kinetic
+        # contrast instead of painting constant motion over the whole edit.
+        phrase_index = 0
+        cursor = 0
+        fallback_direction = "right"
+        while cursor + 1 < len(clips):
+            group = clips[cursor:cursor + 2]
+            direction_hint = (
+                plan.editing_style.motion_direction_pattern[cursor]
+                if cursor < len(plan.editing_style.motion_direction_pattern)
+                else fallback_direction
+            )
+            if phrase_index == 0 and "left" in direction_hint:
+                direction = "left"
+            elif phrase_index == 0 and "right" in direction_hint:
+                direction = "right"
+            else:
+                direction = fallback_direction
+            intensity_hint = (
+                plan.editing_style.motion_intensity_pattern[cursor]
+                if cursor < len(plan.editing_style.motion_intensity_pattern)
+                else 0.7
+            )
+            peak = max(0.45, min(1.0, float(intensity_hint)))
+            motion_phrases.append(
+                MotionPhrase(
+                    id=f"motion-phrase-{phrase_index:03d}",
+                    beats=[
+                        MotionBeat(
+                            clip_id=group[0].id,
+                            stage="accelerate",
+                            intensity=max(0.35, peak * 0.72),
+                        ),
+                        MotionBeat(
+                            clip_id=group[1].id,
+                            stage="settle",
+                            intensity=max(0.3, peak * 0.72),
+                        ),
+                    ],
+                    direction=direction,
+                    translation=0.008 + 0.012 * peak,
+                    scale_delta=0.004 + 0.012 * peak,
+                    blur_strength=0.12 + 0.24 * peak,
+                    cut_window_sec=min(
+                        0.24,
+                        min(clip.timeline.duration_sec for clip in group) / 3,
+                    ),
+                    decision={
+                        "source": "rule",
+                        "confidence": 0.82,
+                        "reasoning": (
+                            "reference motion grammar: accelerate → settle; "
+                            "four hold clips reserved after phrase"
+                        ),
+                    },
+                )
+            )
+            occupied_effects.update(clip.id for clip in group)
+            fallback_direction = "left" if direction == "right" else "right"
+            phrase_index += 1
+            cursor += 6
+
+    # Reference-led non-hard cuts become sparse, non-overlapping two-sided
+    # bridges. Both TimelineItems must remain free because Resolve Fusion comps
+    # are versions, not a serial stack.
+    desired_transitions = min(
+        max(0, round((len(clips) - 1) * (1 - plan.editing_style.hard_cut_ratio))),
+        max(0, (len(clips) - 1) // 2),
+    )
+    if desired_transitions and _admitted(
+        registry, "motion_blur_transition_v1", kind="transition",
+        capability="transition", capability_check=capability_check,
+    ):
+        candidates = list(range(len(clips) - 1))
+        for cut_index in _spread(candidates, desired_transitions):
+            left, right = clips[cut_index], clips[cut_index + 1]
+            if left.id in occupied_effects or right.id in occupied_effects:
+                continue
+            duration = min(
+                0.24,
+                left.timeline.duration_sec / 3,
+                right.timeline.duration_sec / 3,
+            )
+            params = {"length": duration, "angle": 0.0}
+            left.transition.out = TransitionEnd(
+                recipe="motion_blur_transition_v1",
+                duration_sec=duration,
+                params=params,
+            )
+            right.transition.in_ = TransitionEnd(
+                recipe="motion_blur_transition_v1",
+                duration_sec=duration,
+                params=params,
+            )
+            occupied_effects.update((left.id, right.id))
+            use("motion_blur_transition_v1")
+
+    desired_ramps = min(
+        len(impact),
+        max(0, round(plan.duration_sec * plan.editing_style.speed_ramp_density)),
+    )
+    if desired_ramps and _admitted(
+        registry, "speed_ramp_v1", kind="effect",
+        capability="timespeed_recipe", capability_check=capability_check,
+    ):
+        available = [clip for clip in impact if clip.id not in occupied_effects]
+        for clip in _spread(available, desired_ramps):
+            clip.retime = Retime(
+                type="speed_ramp",
+                entry_speed=0.55,
+                impact_speed=1.65,
+                exit_speed=0.75,
+                impact_at_sec=clip.timeline.duration_sec / 2,
+            )
+            occupied_effects.add(clip.id)
+            use("speed_ramp_v1")
 
     # Reference-led tug grammar: the accepted CameraPunch Fusion comp performs
     # a deterministic push-in then pull-out inside every shot. This deliberately
@@ -106,6 +243,8 @@ def apply_recipe_plan(
         capability="add_fusion_comp", capability_check=capability_check,
     ):
         for clip in clips:
+            if clip.id in occupied_effects:
+                continue
             clip.effects = [use("camera_punch_v1")]
             occupied_effects.add(clip.id)
 
@@ -113,7 +252,8 @@ def apply_recipe_plan(
         registry, "white_flash_v1", kind="effect",
         capability="add_fusion_comp", capability_check=capability_check,
     ):
-        for clip in _spread(impact, min(plan.impact_budget.flash_max, 2)):
+        available = [clip for clip in impact if clip.id not in occupied_effects]
+        for clip in _spread(available, min(plan.impact_budget.flash_max, 2)):
             clip.effects = [use("white_flash_v1")]
             occupied_effects.add(clip.id)
 
@@ -129,9 +269,14 @@ def apply_recipe_plan(
     # A restrained focal push at the opening is outside the impact budget but
     # still limited to one clip and never stacked with another Fusion comp.
     opening = next((clip for clip in clips if clip.role == "opening"), None)
-    if opening and not push_pull and _admitted(
+    if (
+        opening
+        and opening.id not in occupied_effects
+        and not push_pull
+        and _admitted(
         registry, "eye_focus_v1", kind="effect",
         capability="add_fusion_comp", capability_check=capability_check,
+        )
     ):
         opening.effects = [use("eye_focus_v1")]
 
@@ -201,6 +346,7 @@ def apply_recipe_plan(
     return spec.model_copy(
         update={
             "clips": clips,
+            "motion_phrases": motion_phrases,
             "meta": meta,
         }
     )

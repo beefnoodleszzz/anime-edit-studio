@@ -9,11 +9,11 @@
 
 阅读顺序，冲突时上位者胜：
 
-1. `WANT.md` —— 产品级最高规范（MASTER PLAN）
-2. `TARGET_ARCHITECTURE.md` —— 目标架构与设计决策记录
-3. `MIGRATION_PLAN.md` —— 分阶段计划、KPI、风险登记册
-4. `ARCHITECTURE_GAP_ANALYSIS.md` —— 处置决定（哪些重写、哪些删除）
-5. `CURRENT_ARCHITECTURE.md` —— v1 现状存档，**仅供理解历史，不指导新开发**
+1. `docs/product/WANT.md` —— 产品级最高规范（MASTER PLAN）
+2. `docs/architecture/TARGET_ARCHITECTURE.md` —— 目标架构与设计决策记录
+3. `docs/planning/MIGRATION_PLAN.md` —— 分阶段计划、KPI、风险登记册
+4. `docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md` —— 处置决定（哪些重写、哪些删除）
+5. tag `v1-final` —— v1 代码快照，**仅供应急与历史理解，不指导新开发**
 6. `config/resolve_capabilities.yaml` —— Resolve 能力的唯一真相来源
 
 ---
@@ -22,9 +22,9 @@
 
 | 项 | 值 |
 |---|---|
-| 分支 | `v2`（重建中） |
+| 分支 | `v2`（准备合并 `master`） |
 | v1 快照 | tag `v1-final` —— 仅供应急出片，**不得从中复制代码到 v2** |
-| 阶段 | Phase 0 完成 → Phase 1（Resolve PoC） |
+| 阶段 | Phase 0–9 确定性骨架已落地；当前为产品级验收与能力补强 |
 | 执行后端 | **DaVinci Resolve 21.0.3.7 Studio，唯一成片后端** |
 | 口径 | **完全改造**。不保留兼容层，不需要的直接删除 |
 
@@ -183,7 +183,7 @@ PYTHONPATH="$PYTHONPATH:$RESOLVE_SCRIPT_API/Modules/"
 
 1. 读 §0 的 1–4 号文档
 2. 读 `config/resolve_capabilities.yaml`，搞清楚哪些能力真的可用
-3. 确认当前处于 `MIGRATION_PLAN.md` 的哪个 Phase
+3. 确认当前处于 `docs/planning/MIGRATION_PLAN.md` 的哪个 Phase
 4. 确认要做的事在该 Phase 的任务表里；不在，就先问
 
 **不在计划内的功能，不要"顺手"实现。**

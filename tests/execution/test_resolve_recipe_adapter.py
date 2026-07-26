@@ -23,6 +23,37 @@ class _Tool:
         return {"TOOLS_Name": "Control"}
 
 
+class _Expression:
+    def __init__(self):
+        self.expression = None
+
+    def SetExpression(self, expression):
+        self.expression = expression
+
+    def GetExpression(self):
+        return self.expression
+
+
+class _MotionTool(_Tool):
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+        self.SourceTime = _Expression()
+        self.Length = _Expression()
+
+    def GetAttrs(self):
+        return {"TOOLS_Name": self.name}
+
+
+class _MotionComp:
+    def __init__(self):
+        self.speed = _MotionTool("SpeedRamp")
+        self.blur = _MotionTool("MotionBlurTransition")
+
+    def GetToolList(self, _selected):
+        return {"SpeedRamp": self.speed, "MotionBlurTransition": self.blur}
+
+
 class _Comp:
     def __init__(self):
         self.tool = _Tool()
@@ -85,3 +116,45 @@ def test_resolve_ntsc_setting_uses_real_rate_not_nominal_rate():
     assert ResolveAdapter._fps_setting(Timebase(24000, 1001)) == "23.976"
     assert ResolveAdapter._fps_setting(Timebase(30000, 1001)) == "29.97"
     assert ResolveAdapter._fps_setting(Timebase(60000, 1001)) == "59.94"
+
+
+def test_speed_ramp_expression_ends_inside_available_source_range():
+    adapter = ResolveAdapter(_Resolve())
+    comp = _MotionComp()
+    expression = adapter.configure_speed_ramp(
+        comp,
+        duration_frames=96,
+        entry_speed=0.45,
+        impact_speed=1.8,
+        exit_speed=0.65,
+        impact_frame=48,
+    )
+    assert expression == comp.speed.SourceTime.GetExpression()
+    assert "iif(time <= 48" in expression
+    assert "(time-48)" in expression
+
+
+def test_whip_blur_expression_targets_requested_clip_side():
+    adapter = ResolveAdapter(_Resolve())
+    incoming = _MotionComp()
+    outgoing = _MotionComp()
+    adapter.configure_whip_blur_side(
+        incoming,
+        side="in",
+        duration_frames=48,
+        transition_frames=7,
+        length=0.24,
+        angle=15.0,
+    )
+    adapter.configure_whip_blur_side(
+        outgoing,
+        side="out",
+        duration_frames=48,
+        transition_frames=7,
+        length=0.24,
+        angle=-15.0,
+    )
+    assert "time - (0)" in incoming.blur.Length.GetExpression()
+    assert "time - (47)" in outgoing.blur.Length.GetExpression()
+    assert incoming.blur.values["Angle"] == 15.0
+    assert outgoing.blur.values["Angle"] == -15.0

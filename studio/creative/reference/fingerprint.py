@@ -14,7 +14,7 @@ from studio.core.cache import JsonCache
 from studio.core.hashing import analysis_cache_key, file_sha256
 from studio.editing.music import MusicMap, analyze_music
 
-STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.2.0"
+STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.4.0"
 MODEL = "opencv+scenedetect+librosa"
 MODEL_VERSION = f"opencv-{cv2.__version__}"
 
@@ -49,6 +49,9 @@ class StyleFingerprint(BaseModel):
     slow_motion_locations: list[dict]
     shot_scale_sequence: list[float]
     motion_direction_sequence: list[str]
+    motion_magnitude_sequence: list[float] = Field(default_factory=list)
+    motion_sample_directions: list[str] = Field(default_factory=list)
+    motion_sample_magnitudes: list[float] = Field(default_factory=list)
     camera_motion: list[str]
     cut_timestamps: list[float] = Field(default_factory=list)
     shot_durations: list[float] = Field(default_factory=list)
@@ -143,6 +146,18 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
                     float(np.mean(cv2.absdiff(previous_end, first))) / 255
                 )
             previous_end = last
+        sample_directions: list[str] = []
+        sample_magnitudes: list[float] = []
+        sample_sec = 0.0
+        while sample_sec + 0.25 < duration:
+            first = _frame(capture, sample_sec)
+            second = _frame(capture, sample_sec + 0.25)
+            sample_sec += 0.25
+            if float(np.mean(cv2.absdiff(first, second))) / 255 >= 0.18:
+                continue
+            direction, magnitude = _motion(first, second)
+            sample_directions.append(direction)
+            sample_magnitudes.append(magnitude)
     finally:
         capture.release()
     cut_times = [start.seconds for start, _ in scenes[1:]]
@@ -248,6 +263,9 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
         slow_motion_locations=slow,
         shot_scale_sequence=scales,
         motion_direction_sequence=directions,
+        motion_magnitude_sequence=magnitudes,
+        motion_sample_directions=sample_directions,
+        motion_sample_magnitudes=sample_magnitudes,
         camera_motion=directions,
         cut_timestamps=cut_times,
         shot_durations=lengths,
@@ -261,6 +279,8 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
             "slow_motion_locations": 0.3,
             "shot_scale_sequence": 0.48,
             "camera_motion": 0.4,
+            "motion_magnitude_sequence": 0.62,
+            "motion_sample_magnitudes": 0.72,
             "speed_ramp_locations": 0.5,
             "visual_rhyme": 0.55,
             "motion_rhyme": 0.52,

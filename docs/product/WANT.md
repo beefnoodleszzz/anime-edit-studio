@@ -2581,7 +2581,7 @@ Deprecated Components
 
 制作：
 
-ARCHITECTURE_GAP_ANALYSIS.md
+docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md
 
 对照本文档逐项判断：
 
@@ -2600,7 +2600,7 @@ Can Reuse
 
 生成：
 
-MIGRATION_PLAN.md
+docs/planning/MIGRATION_PLAN.md
 
 迁移必须：
 
@@ -2891,10 +2891,10 @@ GUI Automation 只能作为 fallback。
 
 然后创建：
 
-CURRENT_ARCHITECTURE.md
-ARCHITECTURE_GAP_ANALYSIS.md
-TARGET_ARCHITECTURE.md
-MIGRATION_PLAN.md
+v1-final tag
+docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md
+docs/architecture/TARGET_ARCHITECTURE.md
+docs/planning/MIGRATION_PLAN.md
 
 暂时不要进行大规模重构。
 
@@ -2928,10 +2928,10 @@ anime-edit-studio/
 
 生成：
 
-CURRENT_ARCHITECTURE.md
-ARCHITECTURE_GAP_ANALYSIS.md
-TARGET_ARCHITECTURE.md
-MIGRATION_PLAN.md
+v1-final tag
+docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md
+docs/architecture/TARGET_ARCHITECTURE.md
+docs/planning/MIGRATION_PLAN.md
 
 必须说明：
 

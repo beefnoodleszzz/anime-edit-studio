@@ -97,3 +97,66 @@ def test_push_pull_tone_applies_accepted_camera_punch_to_every_clip():
         ref.recipe in {"white_flash_v1", "impact_shake_v1", "eye_focus_v1"}
         for clip in result.clips for ref in clip.effects
     )
+
+
+def test_reference_motion_grammar_emits_admitted_non_stacking_recipes():
+    style = _plan().editing_style.model_copy(
+        update={"hard_cut_ratio": 0.75, "speed_ramp_density": 0.2}
+    )
+    plan = _plan().model_copy(update={"editing_style": style})
+    result = apply_recipe_plan(_spec(), plan=plan)
+
+    bridges = [
+        (left, right)
+        for left, right in zip(result.clips, result.clips[1:])
+        if left.transition.out.recipe == "motion_blur_transition_v1"
+    ]
+    assert bridges
+    assert all(
+        right.transition.in_.recipe == "motion_blur_transition_v1"
+        and left.transition.out.duration_sec == right.transition.in_.duration_sec
+        and left.transition.out.params == right.transition.in_.params
+        for left, right in bridges
+    )
+    ramps = [clip for clip in result.clips if clip.retime.type == "speed_ramp"]
+    assert ramps
+    assert all(not clip.effects for clip in ramps)
+    assert all(
+        not left.effects and not right.effects
+        for left, right in bridges
+    )
+
+
+def test_motion_phrase_planner_reserves_holds_and_alternates_direction():
+    plan = _plan().model_copy(
+        update={
+            "editing_style": _plan().editing_style.model_copy(
+                update={
+                    "source": "curated",
+                    "motion_direction_pattern": ["right"] * 12,
+                    "motion_intensity_pattern": [0.8] * 12,
+                }
+            )
+        }
+    )
+    result = apply_recipe_plan(
+        _spec(),
+        plan=plan,
+        capability_check=lambda name: name == "motion_phrase_compositor",
+    )
+    assert len(result.motion_phrases) >= 2
+    assert [phrase.direction for phrase in result.motion_phrases[:2]] == [
+        "right", "left",
+    ]
+    moving = {
+        beat.clip_id
+        for phrase in result.motion_phrases
+        for beat in phrase.beats
+    }
+    assert result.clips[2].id not in moving
+    assert result.clips[3].id not in moving
+    assert result.clips[4].id not in moving
+    assert result.clips[5].id not in moving
+    assert [beat.stage for beat in result.motion_phrases[0].beats] == [
+        "accelerate", "settle",
+    ]

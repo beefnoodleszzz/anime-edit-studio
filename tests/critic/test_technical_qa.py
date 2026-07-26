@@ -119,3 +119,43 @@ def test_qa_uses_video_duration_and_allows_declared_low_motion_freeze(
     assert next(
         check for check in result.checks if check.name == "freeze_frames"
     ).measured == 0
+
+
+def test_freeze_threshold_allows_one_frame_quantization(tmp_path, monkeypatch):
+    media = tmp_path / "render.mov"
+    media.write_bytes(b"render")
+    monkeypatch.setattr(
+        module,
+        "probe_media_json",
+        lambda *args, **kwargs: {
+            "format": {"duration": "2.0"},
+            "streams": [
+                {
+                    "codec_type": "video", "codec_name": "h264",
+                    "width": 1080, "height": 1350,
+                    "duration": "2.0", "avg_frame_rate": "24000/1001",
+                    "nb_read_frames": "48",
+                },
+                {"codec_type": "audio"},
+            ],
+        },
+    )
+
+    def diagnostics(path, *, video_filter=None, audio_filter=None):
+        if video_filter and "freezedetect" in video_filter:
+            return 0, "freeze_start: 0.0\nfreeze_end: 0.75075"
+        if audio_filter and "ebur128" in audio_filter:
+            return 0, "I: -14.0 LUFS"
+        return 0, ""
+
+    monkeypatch.setattr(module, "run_media_diagnostic", diagnostics)
+    result = module.run_technical_qa(
+        media,
+        expected_duration=2,
+        expected_width=1080,
+        expected_height=1350,
+        expected_fps=Fraction(24000, 1001),
+    )
+    assert next(
+        check for check in result.checks if check.name == "freeze_frames"
+    ).passed

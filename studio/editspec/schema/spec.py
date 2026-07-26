@@ -20,13 +20,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SPEC_VERSION = "2.0.0"
+SPEC_VERSION = "2.1.0"
 
 ShotRole = Literal[
     "opening", "character_intro", "build", "pre_drop", "impact", "release", "ending",
 ]
 TrackKind = Literal["video", "audio", "subtitle"]
 DecisionSource = Literal["ai", "user", "rule"]
+MotionStage = Literal["hold", "accelerate", "whip", "carry", "settle", "reverse"]
 
 
 class _Base(BaseModel):
@@ -167,6 +168,35 @@ class Decision(_Base):
     locked: bool = Field(False, description="用户锁定后 Revision 不得改动")
 
 
+class MotionBeat(_Base):
+    """One clip's role inside a cross-cut motion phrase."""
+
+    clip_id: str
+    stage: MotionStage
+    intensity: float = Field(..., ge=0, le=1)
+
+
+class MotionPhrase(_Base):
+    """Backend-independent choreography spanning two to four adjacent clips."""
+
+    id: str
+    beats: list[MotionBeat] = Field(..., min_length=2, max_length=4)
+    direction: Literal["left", "right", "up", "down"]
+    translation: float = Field(0.12, ge=0, le=0.35)
+    scale_delta: float = Field(0.12, ge=0, le=0.4)
+    rotation_deg: float = Field(0.0, ge=-12, le=12)
+    blur_strength: float = Field(0.24, ge=0, le=0.5)
+    cut_window_sec: float = Field(0.24, gt=0, le=0.5)
+    decision: Decision = Field(default_factory=Decision)
+
+    @model_validator(mode="after")
+    def _unique_clip_ids(self):
+        ids = [beat.clip_id for beat in self.beats]
+        if len(ids) != len(set(ids)):
+            raise ValueError("MotionPhrase beats.clip_id 不得重复")
+        return self
+
+
 class Clip(_Base):
     id: str = Field(..., description="稳定 ID，diff 的锚点，禁止重排后重新编号")
     asset_id: str
@@ -279,6 +309,7 @@ class EditSpec(_Base):
         ]
     )
     clips: list[Clip] = Field(default_factory=list)
+    motion_phrases: list[MotionPhrase] = Field(default_factory=list)
     audio: list[AudioLayer] = Field(default_factory=list)
     markers: list[Marker] = Field(default_factory=list)
     captions: list[Caption] = Field(default_factory=list)
@@ -291,6 +322,7 @@ class EditSpec(_Base):
             ("track", [item.id for item in self.tracks]),
             ("audio", [item.id for item in self.audio]),
             ("caption", [item.id for item in self.captions]),
+            ("motion_phrase", [item.id for item in self.motion_phrases]),
         ):
             if len(values) != len(set(values)):
                 raise ValueError(f"{label} id 必须唯一")

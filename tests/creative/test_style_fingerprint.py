@@ -43,6 +43,7 @@ def test_style_fingerprint_extracts_editing_grammar(tmp_path: Path, monkeypatch)
     assert result.shot_count == 3
     assert len(result.shot_scale_sequence) == 3
     assert len(result.motion_direction_sequence) == 3
+    assert len(result.motion_magnitude_sequence) == 3
     assert result.music_structure[1]["type"] == "drop"
     assert "slow_motion_locations" in result.confidence
 
@@ -68,6 +69,7 @@ def test_reference_compiles_to_versioned_portable_style():
         slow_motion_locations=[],
         shot_scale_sequence=[.2, .7, .3],
         motion_direction_sequence=["left", "right", "right"],
+        motion_magnitude_sequence=[.5, 2.5, 1.2],
         camera_motion=[],
         cut_timestamps=[.5, 1.2, 3, 7],
         shot_durations=[.5, .7, 1.8, 4, 3],
@@ -79,4 +81,7 @@ def test_reference_compiles_to_versioned_portable_style():
     assert profile.target_cut_density == 1.4
     assert profile.beat_sync_target == .65
     assert profile.normalized_cut_positions == [.05, .12, .3, .7]
+    assert profile.shot_scale_pattern == [0, 1, .5]
+    assert profile.motion_direction_pattern == ["left", "right", "right"]
+    assert profile.motion_intensity_pattern == [0, 1, .5]
     assert profile.id.startswith("reference-")

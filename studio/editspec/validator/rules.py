@@ -108,6 +108,11 @@ def check_structure(spec: EditSpec) -> list[Issue]:
 
     known_tracks = {t.id for t in spec.tracks}
     track_kinds = {t.id: t.kind for t in spec.tracks}
+    phrase_by_clip = {
+        beat.clip_id: phrase
+        for phrase in spec.motion_phrases
+        for beat in phrase.beats
+    }
     for clip in spec.clips:
         if clip.timeline.track not in known_tracks:
             issues.append(
@@ -148,6 +153,64 @@ def check_structure(spec: EditSpec) -> list[Issue]:
                         f"音量点 {point.sec:.3f}s 超过 clip 时长 "
                         f"{clip.timeline.duration_sec:.3f}s",
                         clip.id,
+                    )
+                )
+        fusion_operations = (
+            len(clip.effects)
+            + sum(
+                end.recipe not in {"hard_cut", "none"}
+                for end in (clip.transition.in_, clip.transition.out)
+            )
+            + int(clip.id in phrase_by_clip)
+            + int(clip.retime.type == "speed_ramp" and clip.id not in phrase_by_clip)
+        )
+        if fusion_operations > 1:
+            issues.append(
+                Issue(
+                    "FUSION_STACK_UNSUPPORTED",
+                    Severity.ERROR,
+                    "同一 clip 请求了多个 Fusion 效果/变速/转场；Resolve 将 comp "
+                    "视为版本而非串联效果，请由 Recipe Planner 分配到不同镜头",
+                    clip.id,
+                )
+            )
+    clip_ids = {clip.id for clip in spec.clips}
+    for phrase in spec.motion_phrases:
+        ids = [beat.clip_id for beat in phrase.beats]
+        missing = [clip_id for clip_id in ids if clip_id not in clip_ids]
+        if missing:
+            issues.append(
+                Issue(
+                    "MOTION_PHRASE_CLIP_NOT_FOUND",
+                    Severity.ERROR,
+                    f"MotionPhrase {phrase.id!r} 引用了不存在的 clips: {missing}",
+                )
+            )
+            continue
+        ordered = sorted(
+            (spec.clip_by_id(clip_id) for clip_id in ids),
+            key=lambda clip: clip.timeline.in_sec,
+        )
+        if [clip.id for clip in ordered] != ids:
+            issues.append(
+                Issue(
+                    "MOTION_PHRASE_ORDER",
+                    Severity.ERROR,
+                    f"MotionPhrase {phrase.id!r} beats 必须按时间线顺序排列",
+                )
+            )
+        for left, right in zip(ordered, ordered[1:]):
+            if (
+                left.timeline.track != right.timeline.track
+                or abs(left.timeline.out_sec - right.timeline.in_sec) > 1 / 24
+            ):
+                issues.append(
+                    Issue(
+                        "MOTION_PHRASE_NOT_CONTIGUOUS",
+                        Severity.ERROR,
+                        f"MotionPhrase {phrase.id!r} 的 {left.id} → {right.id} "
+                        "必须同轨且相邻",
+                        right.id,
                     )
                 )
     for layer in spec.audio:
@@ -369,7 +432,7 @@ def check_media(
 _FEATURE_CAPABILITY: dict[str, str] = {
     "smart_reframe": "portrait_reframe",
     "magic_mask_track": "subject_tracking",
-    "speed_ramp": "speed_ramp",
+    "speed_ramp": "timespeed_recipe",
     "effects": "add_fusion_comp",
     "color": "color_recipe",
     "transition": "transition",
@@ -379,6 +442,7 @@ _FEATURE_CAPABILITY: dict[str, str] = {
     "audio_automation": "fairlight_automation",
     "captions": "fusion_title_generator",
     "retime_interpolation": "retime_interpolation_mapping",
+    "motion_phrase": "motion_phrase_compositor",
 }
 
 
@@ -428,6 +492,12 @@ def check_capabilities(spec: EditSpec, is_verified: Callable[[str], bool]) -> li
                 need("transition", clip.id, f"transition.{end_name}={end.recipe!r}")
     if spec.captions:
         need("captions", "spec", f"captions({len(spec.captions)} 条)")
+    if spec.motion_phrases:
+        need(
+            "motion_phrase",
+            "spec",
+            f"motion_phrases({len(spec.motion_phrases)} 条)",
+        )
 
     return issues
 

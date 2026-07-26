@@ -159,4 +159,7 @@ def test_phase2_risk_probe_conclusions_are_locked():
     assert entries["fairlight_automation"]["available"] is False
     assert entries["fairlight_automation"]["verified"] is False
     assert entries["transition"]["path"] == "fusion_recipe"
-    assert entries["transition"]["verified"] is False
+    assert entries["transition"]["verified"] is True
+    assert entries["timespeed_recipe"]["verified"] is True
+    assert entries["motion_phrase_compositor"]["verified"] is True
+    assert entries["transition"]["evidence"].endswith("fusion_motion_acceptance.json")

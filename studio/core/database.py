@@ -267,7 +267,7 @@ def _migration_002(conn: sqlite3.Connection) -> None:
 
 
 def _migration_003(conn: sqlite3.Connection) -> None:
-    """Complete the Phase 3 Shot contract required by WANT.md §11."""
+    """Complete the Phase 3 Shot contract required by docs/product/WANT.md §11."""
     additions = (
         ("character_confidence", "REAL"),
         ("action_confidence", "REAL"),

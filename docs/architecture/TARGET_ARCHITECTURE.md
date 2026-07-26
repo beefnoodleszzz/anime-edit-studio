@@ -1,6 +1,6 @@
-# TARGET_ARCHITECTURE.md
+# Target Architecture
 
-> 依据 `WANT.md` 定义的目标架构，结合本仓既有资产做的落地化设计。
+> 依据 `docs/product/WANT.md` 定义的目标架构，结合本仓既有资产做的落地化设计。
 > 与 MASTER PLAN 有出入之处均在文中显式标注理由。
 
 ---
@@ -84,8 +84,8 @@
 ```text
 anime-edit-studio/
 ├── AGENTS.md
-├── CURRENT_ARCHITECTURE.md / ARCHITECTURE_GAP_ANALYSIS.md
-├── TARGET_ARCHITECTURE.md / MIGRATION_PLAN.md
+├── v1-final tag / docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md
+├── docs/architecture/TARGET_ARCHITECTURE.md / docs/planning/MIGRATION_PLAN.md
 ├── pyproject.toml                  entrypoint: aes = studio.cli:app
 ├── config/
 │   ├── app.yaml                    ← 由 config.toml 重写
@@ -502,6 +502,22 @@ Ranking (多信号)
   不负责生成整条时间线
 - 切点先按风格的归一化节奏/时长 pattern 生成，再按目标比例吸附 beat/impact；
   禁止机械地逐拍切，也禁止为单个参考片硬编码时间点
+
+### 6.3 Motion Choreography（2026-07-26 实测冻结）
+
+单镜头 `CameraMove` 不足以表达参考漫剪的运动语法。EditSpec 顶层
+`motion_phrases` 以 2–4 个相邻 clip 为一组，显式描述 direction、
+`hold/accelerate/whip/carry/settle/reverse` 阶段、强度、位移、缩放、旋转与
+切点 Blur 窗口。
+
+Planner 联合设计相邻镜头，并从选片阶段为 Hold 槽位偏好低 `motion_mag` 素材。
+执行层将 TimeStretcher、Transform、DirectionalBlur 合成在同一个 Fusion comp，
+解决 Resolve 多 comp 仅为版本、不可保证串联的问题。Resolve 21.0.3.7 实渲证据
+见 `docs/probes/motion_phrase_acceptance.json`：144 帧完整，跨 Cut 连续性
+0.00→0.90。
+
+确定性 Motion QA 独立检查 median/P75、动态范围、Hold 比例、方向平衡、方向
+反转率和短语内部跨 Cut 连续性。光流采样必须避开 Whip/Blur 峰值窗口（P21）。
 
 ---
 

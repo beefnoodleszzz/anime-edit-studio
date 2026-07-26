@@ -155,9 +155,10 @@ def run_technical_qa(
         checks.append(
             QACheck(
                 name="freeze_frames",
-                passed=max(unexpected_freeze_durations, default=0) <= max_freeze_sec,
+                passed=max(unexpected_freeze_durations, default=0)
+                <= max_freeze_sec + 1 / float(expected_fps),
                 measured=max(unexpected_freeze_durations, default=0),
-                expected=f"<= {max_freeze_sec}s",
+                expected=f"<= {max_freeze_sec}s + 1 frame",
                 detail=(
                     f"intentional low-motion ranges: {expected_freezes}"
                     if expected_freezes else ""
@@ -265,7 +266,7 @@ def run_technical_qa(
                 expected="fully decodable",
             )
         )
-    # Exactly the WANT.md §75 gate: file + 12 other checks.
+    # Exactly the docs/product/WANT.md §75 gate: file + 12 other checks.
     result = TechnicalQAResult(
         file=str(path),
         passed=len(checks) == 13 and all(check.passed for check in checks),

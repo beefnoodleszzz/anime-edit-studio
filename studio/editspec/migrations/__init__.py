@@ -26,8 +26,16 @@ def _dev_to_200(payload: dict) -> dict:
     return result
 
 
+def _200_to_210(payload: dict) -> dict:
+    result = deepcopy(payload)
+    result.setdefault("motion_phrases", [])
+    result["spec_version"] = "2.1.0"
+    return result
+
+
 _MIGRATIONS: dict[str, tuple[str, Migration]] = {
     "2.0.0-dev": ("2.0.0", _dev_to_200),
+    "2.0.0": ("2.1.0", _200_to_210),
 }
 
 

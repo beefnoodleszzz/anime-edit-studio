@@ -181,10 +181,14 @@ capabilities:
   timespeed_recipe:
     path: fusion_api
     api: "Fusion TimeSpeed / TimeStretcher Recipe"
-    probed: false
-    verified: false
+    probed: true
+    verified: true
     priority: high
-    note: "常速与曲线变速均须具体 Recipe 样张和人工验收；AddFusionComp 技术通路通过不等于 TimeSpeed Recipe 通过。"
+    evidence: "docs/probes/fusion_motion_acceptance.json"
+    note: |
+      Resolve 21.0.3.7 实渲通过：96 帧输入与输出时长一致，入口/冲击/出口
+      三个采样点均相对基线发生变化。速度参数作为相对权重积分后归一化，
+      保证 SourceTime 首尾严格落在可用源帧内（见 P20）。
 
   camera_move_recipe:
     path: fusion_api
@@ -294,14 +298,28 @@ capabilities:
   transition:
     path: fusion_recipe
     probed: true
-    verified: false
+    verified: true
     fallback: hard_cut
     priority: high
-    evidence: "docs/probes/phase2_risk_probe.json"
+    evidence: "docs/probes/fusion_motion_acceptance.json"
     note: |
       Timeline / TimelineItem 均无原生 transition API。
-      CreateFusionClip([相邻 clips]) 可成功创建 Fusion 容器，证明 fallback 入口存在；
-      但尚未完成有重叠语义和渲染对照的正式转场 Recipe，因此保持 unverified。
+      自动链采用双侧 Fusion bridge：前镜出口与后镜入口由同一 Whip/Blur Recipe
+      协调，不合并 TimelineItem，因此 clip_id、总时长和连续多切点能力均保留。
+      96 帧 A/B 实渲验证：切点两侧发生变化、远端身份保持、总帧数不变。
+
+  motion_phrase_compositor:
+    path: fusion_api
+    api: "one-comp TimeStretcher + Transform + DirectionalBlur choreography"
+    probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/motion_phrase_acceptance.json"
+    note: |
+      将 MotionPhrase 的 hold/accelerate/whip/carry/settle/reverse 编译到每个
+      TimelineItem 的单个 Fusion comp，解决 Resolve 多 comp 仅为版本、不可串联的问题。
+      Resolve 21.0.3.7 实渲：6 秒 144 帧完整；动态范围 2.11、hold 21.7%，
+      跨切点运动连续性由基线 0.00 提升至 0.90。
 
   fairlight_automation:
     path: unsupported
@@ -470,3 +488,13 @@ pitfalls:
     issue: "AppendToTimeline 省略 mediaType 会把视频的原片音频一并放入时间线"
     impact: "设计音乐虽已写入，成片仍混入角色对白/原声；音乐增益调整看似不生效"
     fix: "视频 clip 强制 mediaType=1；音乐、SFX 与允许的源音频全部作为显式 AudioLayer 用 mediaType=2 放置"
+
+  - id: P20
+    issue: "Fusion TimeStretcher 的 SourceTime 超出 MediaIn 可用帧时会静默截短渲染"
+    impact: "96 帧片段实测只输出 66 帧，镜头和成片总时长都会无提示缩短"
+    fix: "把 entry/impact/exit 速度视为相对权重，积分后归一化到 0..duration-1；实渲强制核对输入/输出帧数"
+
+  - id: P21
+    issue: "在 Whip/Blur 峰值帧上计算光流会因跟踪点丢失而把高速运动误判为静止"
+    impact: "真实跨切点 Carry 会被 QA 错判为不连续，导致错误调整运动公式"
+    fix: "跨 Cut 连续性采样必须位于动态 Blur 包络之外；当前 7 帧包络使用 Cut 前 -8→-6 与 Cut 后 +6→+8"

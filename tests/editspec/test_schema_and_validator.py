@@ -52,7 +52,7 @@ NONE_VERIFIED = lambda _: False    # noqa: E731
 class TestSchema:
     def test_minimal_spec(self):
         spec = make_spec([make_clip("c1", 0.0, 2.0)])
-        assert spec.spec_version == "2.0.0"
+        assert spec.spec_version == "2.1.0"
         assert spec.revision == 1
         assert spec.duration_sec == pytest.approx(2.0)
 
@@ -261,7 +261,7 @@ class TestCapabilityGate:
             ]
         )
         result = validate(spec, is_verified=NONE_VERIFIED)
-        assert any("speed_ramp" in i.message for i in result.errors)
+        assert any("timespeed_recipe" in i.message for i in result.errors)
 
     def test_allowed_once_verified(self):
         spec = make_spec(

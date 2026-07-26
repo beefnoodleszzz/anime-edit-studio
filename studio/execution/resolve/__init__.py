@@ -12,7 +12,11 @@ from studio.execution.resolve.adapter import (  # noqa: F401
 from studio.execution.resolve.connection import ResolveUnavailable  # noqa: F401
 from studio.execution.resolve.color import apply_color_recipe
 from studio.execution.resolve.fairlight import append_prebaked_audio
-from studio.execution.resolve.fusion import apply_fusion_recipe
+from studio.execution.resolve.fusion import (
+    apply_fusion_recipe,
+    apply_speed_ramp_recipe,
+    apply_whip_blur_side,
+)
 
 __all__ = [
     "MediaInfo",
@@ -23,4 +27,6 @@ __all__ = [
     "append_prebaked_audio",
     "apply_color_recipe",
     "apply_fusion_recipe",
+    "apply_speed_ramp_recipe",
+    "apply_whip_blur_side",
 ]

@@ -6,11 +6,61 @@ import sqlite3
 from pathlib import Path
 
 from studio.core.hashing import stable_hash
+from studio.core.timecode import Timebase
 from studio.editspec.schema import EditSpec
 from studio.execution.resolve import RenderResult, ResolveAdapter
 
 PRESETS = {"preview": "H.264 Master", "master": "H.265 Master"}
 EXECUTION_PIPELINE_VERSION = "resolve-execution-2.1.0"
+
+
+def render_flattened_master(
+    adapter: ResolveAdapter,
+    *,
+    project_id: str,
+    revision: int,
+    media: Path,
+    duration_sec: float,
+    timebase: Timebase,
+    width: int,
+    height: int,
+    output_dir: Path,
+) -> RenderResult:
+    """Return a post-processed locked picture to Resolve for final delivery.
+
+    The input is a picture-locked, audio-bearing mezzanine (for example the
+    Real-ESRGAN result).  Resolve remains the final renderer: picture and audio
+    are appended explicitly so source audio cannot leak in through P19.
+    """
+    if not media.is_file():
+        raise FileNotFoundError(media)
+    adapter.ensure_project(
+        f"{project_id}-delivery",
+        timebase=timebase,
+        width=width,
+        height=height,
+    )
+    adapter.ensure_timeline("master", reset=True)
+    info = adapter.import_media([media], bin_name="master")[str(media)]
+    request = {
+        "media_path": media,
+        "source_in_sec": 0.0,
+        "source_out_sec": duration_sec,
+        "timeline_in_sec": 0.0,
+        "track_index": 1,
+        "media_fps": info.fps,
+        "timeline_fps": timebase,
+    }
+    adapter.append_clips([{**request, "media_type": 1}])
+    adapter.append_audio([request])
+    return adapter.render(
+        output_dir=output_dir,
+        name=(
+            f"{project_id}-r{revision}-"
+            f"{EXECUTION_PIPELINE_VERSION}-4k-master"
+        ),
+        preset=PRESETS["master"],
+    )
 
 
 def render_spec(

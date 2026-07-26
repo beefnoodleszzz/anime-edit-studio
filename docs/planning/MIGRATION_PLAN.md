@@ -1,4 +1,4 @@
-# MIGRATION_PLAN.md
+# Migration Plan
 
 > **口径：完全改造**（用户 2026-07-25 决策）。
 > 不保留向后兼容，不做适配层，不需要的代码直接删除。
@@ -578,6 +578,13 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 
 截至 2026-07-25，Phase 3–9 的确定性实现、自动化测试、Resolve 技术 E2E
 和六页面 Review UI 已落地。当前不得绕过的最后门槛：
+
+2026-07-26 补充：`MotionPhrase`、单 comp Motion compositor 与 Motion QA 已完成
+Resolve 真机验证并进入自动链。炼狱 V3 产品级预览已通过 Rhythm QA、Motion QA
+与 13 项 Technical QA。所有者随后锁定 V3：40 个镜头固化为 revision 6，
+最终 Color/Sound Recipe、`realesr-animevideov3-x3` 逐帧超分、3072×3840
+Resolve H.265 delivery 均已跑通；645/645 帧完整，响度 -14.1 LUFS，最终
+Technical QA 13/13 通过。自动指标不得替代后续作品的人工审美确认。
 
 1. 所有者集中观看 21 个 Recipe 的 `preview.mp4`，逐项给出通过/拒绝和备注。
 2. 只有人工通过项才可把 `config/recipes.yaml` 的 `verified` 转为 true；拒绝项继续迭代。

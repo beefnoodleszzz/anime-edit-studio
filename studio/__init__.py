@@ -7,5 +7,5 @@ AI 导演 → EditSpec (IR) → DaVinci Resolve 执行 → Preview → Critic �
 
 __version__ = "2.0.0.dev0"
 
-# 当前所处的迁移阶段，见 MIGRATION_PLAN.md
+# 当前所处的迁移阶段，见 docs/planning/MIGRATION_PLAN.md
 PHASE = "phase-3-asset-intelligence"

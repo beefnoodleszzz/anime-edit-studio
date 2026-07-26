@@ -1,6 +1,6 @@
-# ARCHITECTURE_GAP_ANALYSIS.md
+# Architecture Gap Analysis
 
-> 对照 `WANT.md`（ANIME_EDIT_STUDIO_MASTER_PLAN）逐条判断现状差距。
+> 对照 `docs/product/WANT.md`（ANIME_EDIT_STUDIO_MASTER_PLAN）逐条判断现状差距。
 > 判定口径：**EXISTS** 已具备 / **PARTIAL** 部分具备 / **MISSING** 完全缺失 /
 > **REFACTOR** 已有但架构错误须改造 / **DEMOTE** 保留但降级 / **REMOVE** 应废弃 / **REUSE** 直接复用
 

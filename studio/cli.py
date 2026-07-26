@@ -37,12 +37,12 @@ def out(data, as_json: bool) -> None:
 
 
 def _load_spec(path: Path):
-    from studio.editspec.schema import EditSpec
+    from studio.editspec.migrations import load_migrated
 
     if not path.exists():
         typer.secho(f"EditSpec 不存在: {path}", fg="red", err=True)
         raise typer.Exit(2)
-    return EditSpec.model_validate_json(path.read_text(encoding="utf-8"))
+    return load_migrated(_json.loads(path.read_text(encoding="utf-8")))
 
 
 def _resolver(prefer_master: bool):
@@ -636,6 +636,30 @@ def _resolve_render_command(
             "status": rendered.status,
         }
         if kind == "master":
+            expected_freezes = []
+            for clip in spec.clips:
+                if not clip.shot_id:
+                    continue
+                row = conn.execute(
+                    """
+                    SELECT coalesce(subject_motion,motion_mag,1)
+                    FROM shots WHERE id=?
+                    """,
+                    (clip.shot_id,),
+                ).fetchone()
+                if row is not None and row[0] <= 0.01:
+                    padding = 2 / float(spec.timebase.fps)
+                    expected_freezes.append(
+                        (
+                            max(0.0, clip.timeline.in_sec - padding),
+                            min(
+                                spec.duration_sec,
+                                clip.timeline.in_sec
+                                + clip.timeline.duration_sec
+                                + padding,
+                            ),
+                        )
+                    )
             qa = run_technical_qa(
                 rendered.output,
                 expected_duration=spec.duration_sec,
@@ -643,6 +667,7 @@ def _resolve_render_command(
                 expected_height=spec.canvas.height,
                 expected_fps=Fraction(spec.timebase.num, spec.timebase.den),
                 expected_audio=True,
+                expected_freeze_ranges=expected_freezes,
                 expected_silence_ranges=[
                     (marker.sec, marker.sec + marker.duration_sec)
                     for marker in spec.markers

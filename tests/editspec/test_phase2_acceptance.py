@@ -118,7 +118,7 @@ def accepted_registry(tmp_path: Path) -> RecipeRegistry:
     return RecipeRegistry(recipes, root=tmp_path)
 
 
-def test_complete_phase2_spec_passes_with_accepted_recipes(tmp_path):
+def test_complete_phase2_spec_rejects_multiple_fusion_versions_on_one_clip(tmp_path):
     media = tmp_path / "source.mov"
     media.write_bytes(b"media")
     result = validate(
@@ -128,7 +128,11 @@ def test_complete_phase2_spec_passes_with_accepted_recipes(tmp_path):
         is_verified=lambda _: True,
         recipe_registry=accepted_registry(tmp_path),
     )
-    assert result.ok, result.to_dict()
+    assert not result.ok
+    assert any(
+        issue.code == "FUSION_STACK_UNSUPPORTED"
+        for issue in result.errors
+    )
 
 
 def test_compiler_rejects_unregistered_and_unverified_recipe_before_resolve(tmp_path):

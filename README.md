@@ -90,10 +90,10 @@ aes data migrate-v1 --target /tmp/engine.v2-check.sqlite --json
 
 进入仓库先读：
 
-1. `WANT.md`
-2. `TARGET_ARCHITECTURE.md`
-3. `MIGRATION_PLAN.md`
-4. `ARCHITECTURE_GAP_ANALYSIS.md`
+1. `docs/product/WANT.md`
+2. `docs/architecture/TARGET_ARCHITECTURE.md`
+3. `docs/planning/MIGRATION_PLAN.md`
+4. `docs/architecture/ARCHITECTURE_GAP_ANALYSIS.md`
 5. `config/resolve_capabilities.yaml`
 
 核心硬规则：

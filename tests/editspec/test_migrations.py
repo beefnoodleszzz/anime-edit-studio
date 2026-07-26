@@ -4,7 +4,7 @@ from studio.editspec.migrations import MigrationError, load_migrated, migrate_pa
 from studio.editspec.schema import Canvas, EditSpec, Timebase
 
 
-def payload(version="2.0.0"):
+def payload(version="2.1.0"):
     return EditSpec(
         id="p",
         timebase=Timebase(num=24),
@@ -24,10 +24,19 @@ def test_internal_v2_dev_migration_adds_new_fields():
     source.pop("captions")
     source.pop("revision")
     result = migrate_payload(source)
-    assert result["spec_version"] == "2.0.0"
+    assert result["spec_version"] == "2.1.0"
     assert result["captions"] == []
     assert result["revision"] == 1
-    assert load_migrated(source).spec_version == "2.0.0"
+    assert result["motion_phrases"] == []
+    assert load_migrated(source).spec_version == "2.1.0"
+
+
+def test_200_migration_adds_motion_phrases():
+    source = payload("2.0.0")
+    source.pop("motion_phrases")
+    result = migrate_payload(source)
+    assert result["spec_version"] == "2.1.0"
+    assert result["motion_phrases"] == []
 
 
 def test_v1_is_explicitly_rejected():

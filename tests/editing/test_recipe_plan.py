@@ -127,7 +127,7 @@ def test_reference_motion_grammar_emits_admitted_non_stacking_recipes():
     )
 
 
-def test_motion_phrase_planner_reserves_holds_and_alternates_direction():
+def test_motion_phrase_planner_carries_velocity_and_breaks_periodicity():
     plan = _plan().model_copy(
         update={
             "editing_style": _plan().editing_style.model_copy(
@@ -145,18 +145,18 @@ def test_motion_phrase_planner_reserves_holds_and_alternates_direction():
         capability_check=lambda name: name == "motion_phrase_compositor",
     )
     assert len(result.motion_phrases) >= 2
-    assert [phrase.direction for phrase in result.motion_phrases[:2]] == [
-        "right", "left",
-    ]
+    assert all(phrase.direction == "right" for phrase in result.motion_phrases)
     moving = {
         beat.clip_id
         for phrase in result.motion_phrases
         for beat in phrase.beats
     }
-    assert result.clips[2].id not in moving
     assert result.clips[3].id not in moving
-    assert result.clips[4].id not in moving
-    assert result.clips[5].id not in moving
     assert [beat.stage for beat in result.motion_phrases[0].beats] == [
-        "accelerate", "settle",
+        "accelerate", "carry", "settle",
     ]
+    starts = [
+        next(i for i, clip in enumerate(result.clips) if clip.id == phrase.beats[0].clip_id)
+        for phrase in result.motion_phrases
+    ]
+    assert len(set(b - a for a, b in zip(starts, starts[1:]))) > 1

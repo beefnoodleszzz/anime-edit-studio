@@ -21,7 +21,7 @@ from studio.editspec.schema import (
 )
 from studio.execution.recipes import RecipeRegistry
 
-RECIPE_PLANNER_VERSION = "recipe-planner-1.2.0"
+RECIPE_PLANNER_VERSION = "recipe-planner-1.3.0"
 _MANAGED_EFFECTS = {
     "white_flash_v1", "impact_shake_v1", "eye_focus_v1", "camera_punch_v1",
 }
@@ -117,21 +117,29 @@ def apply_recipe_plan(
         and plan.editing_style.source in {"reference", "curated"}
         and len(clips) >= 3
     ):
-        # Two moving clips followed by four unassigned holds create kinetic
-        # contrast instead of painting constant motion over the whole edit.
+        # A phrase must carry velocity through the cut.  V1.2 used a fixed
+        # "two moving + four hold" cadence; that leaked a visible four-second
+        # template into reference-led edits and stopped motion at the cut.
+        # Three-beat phrases keep the peak on the boundary and vary the
+        # breathing gaps.  The final emotional tail is left un-whipped so its
+        # deceleration comes from the picture rhythm rather than a late effect.
         phrase_index = 0
         cursor = 0
         fallback_direction = "right"
-        while cursor + 1 < len(clips):
-            group = clips[cursor:cursor + 2]
+        gap_pattern = (1, 2, 1, 3, 1)
+        ending_start = plan.duration_sec * (1 - plan.editing_style.ending_duration_ratio)
+        while cursor + 2 < len(clips):
+            group = clips[cursor:cursor + 3]
+            if group[0].timeline.in_sec >= ending_start:
+                break
             direction_hint = (
                 plan.editing_style.motion_direction_pattern[cursor]
                 if cursor < len(plan.editing_style.motion_direction_pattern)
                 else fallback_direction
             )
-            if phrase_index == 0 and "left" in direction_hint:
+            if "left" in direction_hint:
                 direction = "left"
-            elif phrase_index == 0 and "right" in direction_hint:
+            elif "right" in direction_hint:
                 direction = "right"
             else:
                 direction = fallback_direction
@@ -140,7 +148,11 @@ def apply_recipe_plan(
                 if cursor < len(plan.editing_style.motion_intensity_pattern)
                 else 0.7
             )
-            peak = max(0.45, min(1.0, float(intensity_hint)))
+            # Preserve the reference's kinetic contrast.  Clamping every
+            # phrase to a medium peak makes the whole edit move uniformly;
+            # low-energy hints should remain micro-motion while high-energy
+            # hints are allowed to produce the visible whip.
+            peak = max(0.12, min(1.0, float(intensity_hint)))
             motion_phrases.append(
                 MotionPhrase(
                     id=f"motion-phrase-{phrase_index:03d}",
@@ -148,18 +160,23 @@ def apply_recipe_plan(
                         MotionBeat(
                             clip_id=group[0].id,
                             stage="accelerate",
-                            intensity=max(0.35, peak * 0.72),
+                            intensity=max(0.12, peak * 0.72),
                         ),
                         MotionBeat(
                             clip_id=group[1].id,
+                            stage="carry",
+                            intensity=max(0.14, peak * 0.78),
+                        ),
+                        MotionBeat(
+                            clip_id=group[2].id,
                             stage="settle",
-                            intensity=max(0.3, peak * 0.72),
+                            intensity=max(0.1, peak * 0.58),
                         ),
                     ],
                     direction=direction,
-                    translation=0.008 + 0.012 * peak,
-                    scale_delta=0.004 + 0.012 * peak,
-                    blur_strength=0.12 + 0.24 * peak,
+                    translation=0.004 + 0.016 * peak,
+                    scale_delta=0.002 + 0.014 * peak,
+                    blur_strength=0.06 + 0.3 * peak,
                     cut_window_sec=min(
                         0.24,
                         min(clip.timeline.duration_sec for clip in group) / 3,
@@ -168,16 +185,17 @@ def apply_recipe_plan(
                         "source": "rule",
                         "confidence": 0.82,
                         "reasoning": (
-                            "reference motion grammar: accelerate → settle; "
-                            "four hold clips reserved after phrase"
+                            "reference velocity wave: accelerate → carry across "
+                            "cuts → settle; irregular breathing gap"
                         ),
                     },
                 )
             )
             occupied_effects.update(clip.id for clip in group)
             fallback_direction = "left" if direction == "right" else "right"
+            gap = gap_pattern[phrase_index % len(gap_pattern)]
             phrase_index += 1
-            cursor += 6
+            cursor += len(group) + gap
 
     # Reference-led non-hard cuts become sparse, non-overlapping two-sided
     # bridges. Both TimelineItems must remain free because Resolve Fusion comps

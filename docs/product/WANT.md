@@ -1,8 +1,8 @@
 # Anime Edit Studio — AI 原生动漫短视频生产系统总体改造规范
 
-> 文档级别：最高优先级项目规范  
-> 适用对象：Codex、Claude Code、GPT、项目开发 Agent、代码审查 Agent  
-> 项目定位：AI 驱动、用户轻审核、DaVinci Resolve 专业执行的动漫剪辑代理系统  
+> 文档级别：最高优先级项目规范
+> 适用对象：Codex、Claude Code、GPT、项目开发 Agent、代码审查 Agent
+> 项目定位：AI 驱动、用户轻审核、DaVinci Resolve 专业执行的动漫剪辑代理系统
 > 状态：Architecture Migration / Major Refactor
 
 ---

@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from studio.asset_intelligence.motion.action_peak import ActionPeak
 from studio.core.timecode import Timebase
 from studio.editing.music import MusicMap
-from studio.editspec.schema import EditSpec
+from studio.editspec.schema import EditSpec, TransitionEnd
 
 from .action_sync import ACTION_SYNC_VERSION, solve_action_sync
 
@@ -124,12 +124,22 @@ def apply_action_sync(
     """Return a spec with Action Sync retimes and its acceptance report."""
     timebase = Timebase.from_fps(spec.timebase.fps, drop_frame=spec.timebase.drop_frame)
     hits = _target_hits(music)
+    # A motion phrase owns its clips' motion; never retime a phrase member.
+    phrase_clip_ids = {
+        beat.clip_id for phrase in spec.motion_phrases for beat in phrase.beats
+    }
     rows: list[CutAccuracyRow] = []
     retimed = measured = on_beat = 0
     max_error = 0
     for clip in spec.clips:
         t0 = clip.timeline.in_sec
         t1 = t0 + clip.timeline.duration_sec
+        if clip.id in phrase_clip_ids:
+            rows.append(CutAccuracyRow(
+                clip_id=clip.id, shot_id=clip.shot_id, timeline_in_sec=round(t0, 4),
+                note="owned by motion phrase; not action-synced",
+            ))
+            continue
         shot_start = shot_starts.get(clip.shot_id)
         peaks = peaks_by_shot.get(clip.shot_id, [])
         peak = (
@@ -180,6 +190,14 @@ def apply_action_sync(
         achievable = row.action_peak_error_frames <= MAX_RETIME_ERROR_FRAMES
         if solution.retime.type == "speed_ramp" and achievable:
             clip.retime = solution.retime
+            # The action-sync ramp is this clip's single Fusion op; Resolve
+            # treats multiple comps as versions, so clear any competing effect
+            # or non-hard-cut transition the recipe plan put here.
+            clip.effects = []
+            if clip.transition.in_.recipe not in {"hard_cut", "none"}:
+                clip.transition.in_ = TransitionEnd()
+            if clip.transition.out.recipe not in {"hard_cut", "none"}:
+                clip.transition.out = TransitionEnd()
             retimed += 1
             row.retimed = True
             row.note = solution.reason

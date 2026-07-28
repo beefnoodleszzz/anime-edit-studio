@@ -50,13 +50,13 @@ def _clip(cid: str, t_in: float, dur: float, src_in: float) -> Clip:
     )
 
 
-def test_measured_peak_on_impact_gets_retimed():
-    # Clip source window [10,12]; shot starts at 8, peak at shot-relative 3.6s
-    # => absolute source 11.6s => 1.6s into the window.  An impact sits 0.5s
-    # into the clip, so the peak must be pulled earlier.
+def test_achievable_peak_gets_retimed():
+    # Clip source window [10,12]; shot starts at 8, peak at shot-relative 2.9s
+    # => absolute source 10.9s => 0.9s into the window.  An impact sits 0.7s
+    # into the clip: a small, reachable shift, so the clip is retimed.
     spec = _spec([_clip("c1", 0.0, 2.0, 10.0)])
-    music = _music(impact_points=[0.5], downbeats=[0.0, 2.0])
-    peaks = {"shot1": [ActionPeak(sec=3.6, magnitude=5.0, confidence=0.9)]}
+    music = _music(impact_points=[0.7], downbeats=[0.0, 2.0])
+    peaks = {"shot1": [ActionPeak(sec=2.9, magnitude=5.0, confidence=0.9)]}
     starts = {"shot1": 8.0}
     out, report = apply_action_sync(
         spec, music=music, peaks_by_shot=peaks, shot_starts=starts
@@ -65,8 +65,24 @@ def test_measured_peak_on_impact_gets_retimed():
     row = report.rows[0]
     assert row.measured_peak
     assert row.target_kind == "impact"
-    assert row.target_hit_sec == 0.5
     assert out.clips[0].retime.type == "speed_ramp"
+    assert row.retimed
+    assert row.action_peak_error_frames <= 2
+
+
+def test_unreachable_peak_keeps_hard_cut():
+    # A large shift on a short clip cannot seat the peak; keep the hard cut
+    # rather than distort motion off the beat.
+    spec = _spec([_clip("c1", 0.0, 2.0, 10.0)])
+    music = _music(impact_points=[0.5])
+    peaks = {"shot1": [ActionPeak(sec=3.8, magnitude=5.0, confidence=0.9)]}
+    out, report = apply_action_sync(
+        spec, music=music, peaks_by_shot=peaks, shot_starts={"shot1": 8.0}
+    )
+    assert report.measured_clips == 1
+    assert report.retimed_clips == 0
+    assert out.clips[0].retime.type == "constant"
+    assert "kept hard cut" in report.rows[0].note
 
 
 def test_no_measured_peak_stays_hard_cut():

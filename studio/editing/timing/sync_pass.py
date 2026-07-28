@@ -26,6 +26,12 @@ from .action_sync import ACTION_SYNC_VERSION, solve_action_sync
 # *inside* the shot, not to the source change already on the cut.
 MIN_TARGET_OFFSET_SEC = 0.12
 
+# Only retime when the peak can actually be seated on the beat.  On a short
+# drum-locked clip the peak cannot be moved far; a badly clamped speed ramp
+# would distort motion without landing on the beat — strictly worse than the
+# hard cut.  Above this residual we keep the hard cut and report the attempt.
+MAX_RETIME_ERROR_FRAMES = 2
+
 
 class CutAccuracyRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -171,12 +177,19 @@ def apply_action_sync(
         row.target_kind = target_kind
         row.action_peak_error_frames = abs(solution.residual_frames)
         row.clamped = solution.clamped
-        max_error = max(max_error, row.action_peak_error_frames)
-        if solution.retime.type == "speed_ramp":
+        achievable = row.action_peak_error_frames <= MAX_RETIME_ERROR_FRAMES
+        if solution.retime.type == "speed_ramp" and achievable:
             clip.retime = solution.retime
             retimed += 1
             row.retimed = True
             row.note = solution.reason
+            # Only retimed clips claim a sync, so only they count toward the
+            # delivered peak-error ceiling.
+            max_error = max(max_error, row.action_peak_error_frames)
+        elif solution.retime.type == "speed_ramp":
+            # Reachable target but the clip is too short to seat the peak;
+            # keep the hard cut rather than distort motion off the beat.
+            row.note = f"kept hard cut: peak unreachable ({row.action_peak_error_frames}f)"
         else:
             row.note = solution.reason
         if row.action_peak_error_frames <= 1:

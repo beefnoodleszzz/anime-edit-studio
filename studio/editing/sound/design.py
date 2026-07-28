@@ -102,19 +102,25 @@ def _in_silence(music: MusicMap, sec: float) -> bool:
 
 
 def _targets(spec: EditSpec, music: MusicMap) -> list[float]:
-    """Drum targets to score: clip cuts that coincide with a musical impact.
+    """Drum targets to score: cuts that land on a major musical hit.
 
     Every clip boundary is a real source change; a boundary that also sits on a
-    MusicMap impact point is a hit worth designing sound around.
+    MusicMap impact point or downbeat is a major hit worth designing sound
+    around.  Impacts rank first so, under budget, the biggest hits win.
     """
     cut_starts = [clip.timeline.in_sec for clip in spec.clips if clip.timeline.in_sec > 0]
     impacts = sorted(music.impact_points)
-    targets: list[float] = []
+    downbeats = sorted(music.downbeats)
     tolerance = 0.06
+    ranked: list[tuple[int, float]] = []
     for cut in cut_starts:
         if any(abs(cut - impact) <= tolerance for impact in impacts):
-            targets.append(cut)
-    return targets
+            ranked.append((0, cut))
+        elif any(abs(cut - down) <= tolerance for down in downbeats):
+            ranked.append((1, cut))
+    # Impacts first, then chronological, so the budget spends on big hits.
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [cut for _, cut in ranked]
 
 
 def apply_sound_design(

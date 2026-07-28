@@ -33,9 +33,17 @@ def _200_to_210(payload: dict) -> dict:
     return result
 
 
+def _210_to_220(payload: dict) -> dict:
+    """2.2 adds optional editorial metadata; old decisions remain valid."""
+    result = deepcopy(payload)
+    result["spec_version"] = "2.2.0"
+    return result
+
+
 _MIGRATIONS: dict[str, tuple[str, Migration]] = {
     "2.0.0-dev": ("2.0.0", _dev_to_200),
     "2.0.0": ("2.1.0", _200_to_210),
+    "2.1.0": ("2.2.0", _210_to_220),
 }
 
 

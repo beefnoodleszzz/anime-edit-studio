@@ -14,7 +14,7 @@ from studio.core.cache import JsonCache
 from studio.core.hashing import analysis_cache_key, file_sha256
 from studio.editing.music import MusicMap, analyze_music
 
-STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.4.0"
+STYLE_FINGERPRINT_VERSION = "style-fingerprint-1.5.0"
 MODEL = "opencv+scenedetect+librosa"
 MODEL_VERSION = f"opencv-{cv2.__version__}"
 
@@ -23,6 +23,16 @@ class CurvePoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
     time: float = Field(..., ge=0)
     value: float = Field(..., ge=0, le=1)
+
+
+class MotionCurvePoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    time: float = Field(..., ge=0)
+    vx: float
+    vy: float
+    magnitude: float = Field(..., ge=0)
+    acceleration: float = 0.0
+    confidence: float = Field(..., ge=0, le=1)
 
 
 class StyleFingerprint(BaseModel):
@@ -52,6 +62,11 @@ class StyleFingerprint(BaseModel):
     motion_magnitude_sequence: list[float] = Field(default_factory=list)
     motion_sample_directions: list[str] = Field(default_factory=list)
     motion_sample_magnitudes: list[float] = Field(default_factory=list)
+    motion_curve: list[MotionCurvePoint] = Field(default_factory=list)
+    motion_peaks: list[float] = Field(default_factory=list)
+    motion_zero_crossings: list[float] = Field(default_factory=list)
+    direction_reversals: list[float] = Field(default_factory=list)
+    cut_carry_vectors: list[dict] = Field(default_factory=list)
     camera_motion: list[str]
     cut_timestamps: list[float] = Field(default_factory=list)
     shot_durations: list[float] = Field(default_factory=list)
@@ -80,11 +95,7 @@ def _palette_vector(value: str) -> np.ndarray:
 
 
 def _motion(first: np.ndarray, second: np.ndarray) -> tuple[str, float]:
-    a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
-    b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY)
-    flow = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-    fx, fy = float(np.median(flow[..., 0])), float(np.median(flow[..., 1]))
-    magnitude = float(np.median(np.hypot(flow[..., 0], flow[..., 1])))
+    fx, fy, magnitude = _motion_vector(first, second)
     if magnitude < 0.3:
         return "static", magnitude
     directions = [
@@ -93,6 +104,15 @@ def _motion(first: np.ndarray, second: np.ndarray) -> tuple[str, float]:
     ]
     angle = np.degrees(np.arctan2(fy, fx))
     return directions[int(((angle + 202.5) % 360) // 45)], magnitude
+
+
+def _motion_vector(first: np.ndarray, second: np.ndarray) -> tuple[float, float, float]:
+    a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
+    b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY)
+    flow = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    fx, fy = float(np.median(flow[..., 0])), float(np.median(flow[..., 1]))
+    magnitude = float(np.median(np.hypot(flow[..., 0], flow[..., 1])))
+    return fx, fy, magnitude
 
 
 def _subject_scale(image: np.ndarray) -> float:
@@ -148,19 +168,64 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
             previous_end = last
         sample_directions: list[str] = []
         sample_magnitudes: list[float] = []
+        motion_curve: list[MotionCurvePoint] = []
         sample_sec = 0.0
-        while sample_sec + 0.25 < duration:
+        interval = 0.1
+        previous_magnitude = 0.0
+        while sample_sec + interval < duration:
             first = _frame(capture, sample_sec)
-            second = _frame(capture, sample_sec + 0.25)
-            sample_sec += 0.25
-            if float(np.mean(cv2.absdiff(first, second))) / 255 >= 0.18:
-                continue
+            second = _frame(capture, sample_sec + interval)
+            delta = float(np.mean(cv2.absdiff(first, second))) / 255
+            fx, fy, magnitude = _motion_vector(first, second)
             direction, magnitude = _motion(first, second)
             sample_directions.append(direction)
             sample_magnitudes.append(magnitude)
+            motion_curve.append(
+                MotionCurvePoint(
+                    time=sample_sec + interval / 2,
+                    vx=fx,
+                    vy=fy,
+                    magnitude=magnitude,
+                    acceleration=(magnitude - previous_magnitude) / interval,
+                    confidence=max(0.2, 1.0 - delta),
+                )
+            )
+            previous_magnitude = magnitude
+            sample_sec += interval
     finally:
         capture.release()
     cut_times = [start.seconds for start, _ in scenes[1:]]
+    peak_threshold = (
+        float(np.percentile([point.magnitude for point in motion_curve], 75))
+        if motion_curve else 0.0
+    )
+    motion_peaks = [
+        point.time for left, point, right in zip(
+            motion_curve, motion_curve[1:], motion_curve[2:]
+        )
+        if point.magnitude >= peak_threshold
+        and point.magnitude >= left.magnitude
+        and point.magnitude >= right.magnitude
+    ]
+    motion_zero_crossings = [
+        right.time for left, right in zip(motion_curve, motion_curve[1:])
+        if left.magnitude >= 0.3 and right.magnitude < 0.3
+    ]
+    direction_reversals = [
+        right.time for left, right in zip(motion_curve, motion_curve[1:])
+        if abs(left.vx) >= 0.15 and abs(right.vx) >= 0.15 and left.vx * right.vx < 0
+    ]
+    cut_carry_vectors = []
+    for cut in cut_times:
+        before = min(motion_curve, key=lambda p: abs(p.time - (cut - 0.1)), default=None)
+        after = min(motion_curve, key=lambda p: abs(p.time - (cut + 0.1)), default=None)
+        if before and after:
+            cut_carry_vectors.append({
+                "time": cut, "vx_before": before.vx, "vx_after": after.vx,
+                "magnitude_before": before.magnitude,
+                "magnitude_after": after.magnitude,
+                "same_direction": before.vx * after.vx > 0,
+            })
     synced = sum(
         1 for cut in cut_times
         if music.beats and min(abs(cut - beat) for beat in music.beats) <= 0.08
@@ -266,6 +331,11 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
         motion_magnitude_sequence=magnitudes,
         motion_sample_directions=sample_directions,
         motion_sample_magnitudes=sample_magnitudes,
+        motion_curve=motion_curve,
+        motion_peaks=motion_peaks,
+        motion_zero_crossings=motion_zero_crossings,
+        direction_reversals=direction_reversals,
+        cut_carry_vectors=cut_carry_vectors,
         camera_motion=directions,
         cut_timestamps=cut_times,
         shot_durations=lengths,
@@ -281,6 +351,7 @@ def _compute(path: Path, reference_id: str | None, music: MusicMap) -> StyleFing
             "camera_motion": 0.4,
             "motion_magnitude_sequence": 0.62,
             "motion_sample_magnitudes": 0.72,
+            "motion_curve": 0.78,
             "speed_ramp_locations": 0.5,
             "visual_rhyme": 0.55,
             "motion_rhyme": 0.52,

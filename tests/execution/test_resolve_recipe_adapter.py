@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 
+import pytest
+
 from studio.execution.resolve import ResolveAdapter
 from studio.core.timecode import Timebase
 
@@ -158,3 +160,46 @@ def test_whip_blur_expression_targets_requested_clip_side():
     assert "time - (47)" in outgoing.blur.Length.GetExpression()
     assert incoming.blur.values["Angle"] == 15.0
     assert outgoing.blur.values["Angle"] == -15.0
+
+
+def test_reverse_motion_stage_pushes_away_without_scaling_below_fill():
+    expression = ResolveAdapter._reverse_scale_expression(0.12, "(time/12)^3")
+    assert expression == "1 + (0.120000000)*(1-((time/12)^3))"
+
+
+def test_reverse_motion_stage_returns_from_pull_endpoint_to_center():
+    expression = ResolveAdapter._reverse_offset_expression(-0.04, "(time/12)^3")
+    assert expression == "(-0.040000000)*(1-((time/12)^3))"
+
+
+def test_localized_cut_envelopes_hold_the_middle_of_the_clip():
+    entry, exit = ResolveAdapter._localized_cut_envelopes(last=23, width=4)
+    assert "time/(4)" in entry
+    assert "time-(19)" in exit
+    assert entry.startswith("(1-(")
+    assert exit.endswith(")*(min(1,max(0,(time-(19))/(4))))")
+
+
+def test_curve_flow_has_fast_settle_stable_and_anticipation_points():
+    curves = ResolveAdapter._velocity_smooth_shake_curves(
+        duration_frames=13,
+        sign=1.0,
+        translation=0.035,
+        scale_delta=0.06,
+        rotation_deg=0.4,
+        blur_strength=0.0,
+        intensity=1.0,
+    )
+
+    assert set(curves["center_x"]) == {0.0, 3.0, 6.0, 8.0, 12.0}
+    assert curves["center_x"][0.0] == pytest.approx(0.465)
+    assert curves["center_x"][3.0] == pytest.approx(0.4951)
+    assert curves["center_x"][6.0] == pytest.approx(0.5)
+    assert curves["center_x"][8.0] == pytest.approx(0.5049)
+    assert curves["center_x"][12.0] == pytest.approx(0.535)
+    assert curves["center_y"][0.0] == pytest.approx(0.5)
+    assert curves["center_y"][12.0] == pytest.approx(0.5)
+    assert curves["size"][0.0] == pytest.approx(1.10)
+    assert curves["size"][6.0] == pytest.approx(1.04)
+    assert curves["size"][12.0] == pytest.approx(1.09)
+    assert "blur" not in curves

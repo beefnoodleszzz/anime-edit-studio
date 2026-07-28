@@ -99,9 +99,13 @@ def test_push_pull_tone_applies_accepted_camera_punch_to_every_clip():
     )
 
 
-def test_reference_motion_grammar_emits_admitted_non_stacking_recipes():
+def test_curated_motion_grammar_emits_admitted_non_stacking_recipes():
     style = _plan().editing_style.model_copy(
-        update={"hard_cut_ratio": 0.75, "speed_ramp_density": 0.2}
+        update={
+            "source": "curated",
+            "hard_cut_ratio": 0.75,
+            "speed_ramp_density": 0.2,
+        }
     )
     plan = _plan().model_copy(update={"editing_style": style})
     result = apply_recipe_plan(_spec(), plan=plan)
@@ -127,7 +131,25 @@ def test_reference_motion_grammar_emits_admitted_non_stacking_recipes():
     )
 
 
-def test_motion_phrase_planner_carries_velocity_and_breaks_periodicity():
+def test_reference_soft_boundaries_do_not_invent_whip_transitions():
+    style = _plan().editing_style.model_copy(
+        update={
+            "source": "reference",
+            "hard_cut_ratio": 0.5,
+            "speed_ramp_density": 0.0,
+        }
+    )
+    result = apply_recipe_plan(
+        _spec(), plan=_plan().model_copy(update={"editing_style": style})
+    )
+    assert all(
+        clip.transition.in_.recipe == "hard_cut"
+        and clip.transition.out.recipe == "hard_cut"
+        for clip in result.clips
+    )
+
+
+def test_motion_phrase_planner_carries_velocity_and_uses_reference_direction():
     plan = _plan().model_copy(
         update={
             "editing_style": _plan().editing_style.model_copy(
@@ -146,17 +168,12 @@ def test_motion_phrase_planner_carries_velocity_and_breaks_periodicity():
     )
     assert len(result.motion_phrases) >= 2
     assert all(phrase.direction == "right" for phrase in result.motion_phrases)
-    moving = {
+    moving = [
         beat.clip_id
         for phrase in result.motion_phrases
         for beat in phrase.beats
-    }
-    assert result.clips[3].id not in moving
+    ]
+    assert len(moving) == len(set(moving))
     assert [beat.stage for beat in result.motion_phrases[0].beats] == [
-        "accelerate", "carry", "settle",
+        "accelerate", "carry", "settle", "reverse",
     ]
-    starts = [
-        next(i for i, clip in enumerate(result.clips) if clip.id == phrase.beats[0].clip_id)
-        for phrase in result.motion_phrases
-    ]
-    assert len(set(b - a for a, b in zip(starts, starts[1:]))) > 1

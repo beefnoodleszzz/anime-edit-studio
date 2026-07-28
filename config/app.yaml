@@ -10,10 +10,12 @@ library:
   cache: "library/cache"
 
 delivery:
+  target_lufs: -11.0
+  true_peak_dbfs: -1.0
   canvas:
     width: 3072
-    height: 3840
-    aspect: "4:5"
+    height: 3072
+    aspect: "1:1"
   fps:
     num: 60
     den: 1

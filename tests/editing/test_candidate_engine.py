@@ -104,6 +104,24 @@ def test_production_retrieval_rejects_text_and_contaminated_tags(tmp_path):
     assert ids == ["s1"]
 
 
+def test_retrieval_enforces_cutability_and_maximum_duration(tmp_path):
+    conn = connect(tmp_path / "v2.sqlite")
+    _seed(conn)
+    with conn:
+        conn.execute(
+            "UPDATE shots SET cutability=0.3,end_sec=25 WHERE id='s2'"
+        )
+    ids = retrieve(
+        conn,
+        RetrievalQuery(
+            min_cutability=0.55,
+            max_duration_sec=10.0,
+            limit=100,
+        ),
+    )
+    assert ids == ["s1", "s0"]
+
+
 def test_contaminated_candidate_gets_intrinsic_penalty(tmp_path):
     conn = connect(tmp_path / "v2.sqlite")
     _seed(conn)

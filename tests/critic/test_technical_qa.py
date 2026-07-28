@@ -27,7 +27,7 @@ def test_technical_qa_has_exactly_thirteen_independent_checks(tmp_path, monkeypa
 
     def diagnostics(path, *, video_filter=None, audio_filter=None):
         if audio_filter and "ebur128" in audio_filter:
-            return 0, "I: -14.0 LUFS"
+            return 0, "I: -11.0 LUFS"
         return 0, ""
 
     monkeypatch.setattr(module, "run_media_diagnostic", diagnostics)
@@ -102,7 +102,7 @@ def test_qa_uses_video_duration_and_allows_declared_low_motion_freeze(
         if video_filter and "freezedetect" in video_filter:
             return 0, "freeze_start: 0.5\nfreeze_end: 1.7"
         if audio_filter and "ebur128" in audio_filter:
-            return 0, "I: -14.0 LUFS"
+            return 0, "I: -11.0 LUFS"
         return 0, ""
 
     monkeypatch.setattr(module, "run_media_diagnostic", diagnostics)
@@ -145,7 +145,7 @@ def test_freeze_threshold_allows_one_frame_quantization(tmp_path, monkeypatch):
         if video_filter and "freezedetect" in video_filter:
             return 0, "freeze_start: 0.0\nfreeze_end: 0.75075"
         if audio_filter and "ebur128" in audio_filter:
-            return 0, "I: -14.0 LUFS"
+            return 0, "I: -11.0 LUFS"
         return 0, ""
 
     monkeypatch.setattr(module, "run_media_diagnostic", diagnostics)

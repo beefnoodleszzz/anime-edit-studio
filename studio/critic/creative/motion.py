@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from studio.creative.reference import EditingStyleProfile
 
-MOTION_QA_VERSION = "motion-qa-1.0.0"
+MOTION_QA_VERSION = "motion-qa-1.1.0"
 
 
 class MotionCheck(BaseModel):
@@ -36,6 +36,7 @@ class MotionQAResult(BaseModel):
     direction_balance: float
     direction_reversal_rate: float
     cross_cut_continuity: float
+    phrase_reversal_rate: float = 0.0
     checks: list[MotionCheck]
     passed: bool
 
@@ -69,9 +70,10 @@ def evaluate_motion(
     profile: EditingStyleProfile,
     *,
     cut_times: list[float] | None = None,
-    sample_interval_sec: float = 0.25,
+    reversal_times: list[float] | None = None,
+    sample_interval_sec: float = 0.1,
 ) -> MotionQAResult:
-    """Measure motion dynamics without treating hard cuts as camera movement."""
+    """Measure motion dynamics on the same 10 Hz basis as StyleFingerprint."""
     capture = cv2.VideoCapture(str(video))
     if not capture.isOpened():
         raise ValueError(f"无法打开 Motion QA 视频: {video}")
@@ -113,6 +115,22 @@ def evaluate_motion(
                 before_mag, after_mag, 0.2
             )
             continuity.append(0.7 * direction + 0.3 * magnitude_fit)
+        reversal_checks: list[float] = []
+        for boundary in reversal_times or []:
+            before_a = _read_frame(capture, boundary - 0.15)
+            before_b = _read_frame(capture, boundary - 0.05)
+            after_a = _read_frame(capture, boundary + 0.05)
+            after_b = _read_frame(capture, boundary + 0.15)
+            if any(value is None for value in (before_a, before_b, after_a, after_b)):
+                continue
+            before_mag, before_dx = _global_motion(before_a, before_b)
+            after_mag, after_dx = _global_motion(after_a, after_b)
+            reversal_checks.append(
+                1.0 if (
+                    before_mag >= 0.15 and after_mag >= 0.15
+                    and before_dx * after_dx < 0
+                ) else 0.0
+            )
     finally:
         capture.release()
 
@@ -127,6 +145,7 @@ def evaluate_motion(
     reversals = sum(a != b for a, b in zip(horizontal, horizontal[1:]))
     reversal_rate = reversals / max(1, len(horizontal) - 1)
     cross_cut = float(median(continuity)) if continuity else 0.0
+    phrase_reversal = float(np.mean(reversal_checks)) if reversal_checks else 0.0
 
     def around(metric: str, actual: float, target: float, tolerance: float):
         return MotionCheck(
@@ -181,6 +200,16 @@ def evaluate_motion(
                 passed=cross_cut >= 0.5,
             )
         )
+    if reversal_times:
+        checks.append(
+            MotionCheck(
+                metric="phrase_reversal_rate",
+                actual=phrase_reversal,
+                target=0.6,
+                tolerance=0.2,
+                passed=phrase_reversal >= 0.4,
+            )
+        )
     return MotionQAResult(
         style_id=profile.id,
         sample_count=len(magnitudes),
@@ -191,6 +220,7 @@ def evaluate_motion(
         direction_balance=balance,
         direction_reversal_rate=reversal_rate,
         cross_cut_continuity=cross_cut,
+        phrase_reversal_rate=phrase_reversal,
         checks=checks,
         passed=all(check.passed for check in checks),
     )

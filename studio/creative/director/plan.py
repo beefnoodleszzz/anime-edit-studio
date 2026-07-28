@@ -148,6 +148,21 @@ def generate_director_plan(
         if style is not None
         else default_editing_style()
     )
+    if (
+        style is not None
+        and abs(style.duration_sec - duration) / max(duration, 1e-6) > 0.25
+    ):
+        # Normalized timestamps preserve a reference's exact macro edit only
+        # when both works have comparable durations. For a substantially
+        # longer/shorter target, reuse the measured duration grammar and cut
+        # density instead of stretching every cut into slow, unrelated timing.
+        editing_style = editing_style.model_copy(
+            update={"normalized_cut_positions": []}
+        )
+    if "vibe" in {item.strip().lower() for item in brief.tone}:
+        editing_style = editing_style.model_copy(
+            update={"beat_grid_subdivision": "section_1_2_4"}
+        )
     structure = []
     for section in music.sections:
         start, end = section.start, min(section.end, duration)
@@ -170,7 +185,12 @@ def generate_director_plan(
                 average_shot_length=asl,
             )
         )
-    fallback_used = len(structure) < 3 or len({item.role for item in structure}) < 3
+    roles = {item.role for item in structure}
+    fallback_used = (
+        len(structure) < 3
+        or len(roles) < 3
+        or not {"opening", "impact", "ending"}.issubset(roles)
+    )
     if fallback_used:
         structure = _fallback_arc(duration, music, reference_asl)
     if structure[-1].end < duration:

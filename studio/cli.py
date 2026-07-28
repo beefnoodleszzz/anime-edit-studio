@@ -198,6 +198,11 @@ def first_cut_cmd(
     ),
     character: list[str] | None = typer.Option(None, "--character"),
     tone: list[str] | None = typer.Option(None, "--tone"),
+    naked_cut: bool = typer.Option(
+        False,
+        "--naked-cut",
+        help="只生成硬切与原速镜头，不附加 Recipe、转场或运动短语。",
+    ),
     json: bool = typer.Option(False, "--json"),
 ):
     """一条命令生成 MusicMap、DirectorPlan、候选组和第一版 EditSpec。"""
@@ -210,6 +215,7 @@ def first_cut_cmd(
         reference_path=reference,
         primary_characters=character,
         tone=tone,
+        naked_cut=naked_cut,
     )
     out(result.model_dump(mode="json"), json) if json else typer.echo(
         f"{result.clip_count} clips / {result.duration_sec:.2f}s\n{result.spec_path}"

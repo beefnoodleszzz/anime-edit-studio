@@ -86,11 +86,21 @@ def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
     assert len(spec.clips) == 3
     assert len({clip.shot_id for clip in spec.clips}) == 3
     assert spec.duration_sec == 3
+    assert (spec.canvas.width, spec.canvas.height, spec.canvas.aspect) == (
+        1080, 1080, "1:1",
+    )
     assert all(clip.role == "build" for clip in spec.clips)
     assert all(clip.decision.alternatives for clip in spec.clips)
+    assert spec.clips[0].incoming_cut.kind == "establish"
+    assert all(clip.incoming_cut is not None for clip in spec.clips)
+    assert all(clip.source_selection is not None for clip in spec.clips)
+    assert all(
+        clip.source.in_sec <= clip.source_selection.anchor_sec <= clip.source.out_sec
+        for clip in spec.clips
+    )
     assert conn.execute("SELECT count(*) FROM edit_specs").fetchone()[0] == 1
     requirements = role_source_duration_requirements(plan, music)
-    assert requirements["build"] > 1
+    assert requirements["build"] >= 1
 
 
 def test_forced_role_shot_is_not_consumed_by_an_earlier_role(tmp_path):
@@ -146,6 +156,59 @@ def test_forced_role_shot_is_not_consumed_by_an_earlier_role(tmp_path):
     )
     assert spec.clips[0].shot_id != "s0"
     assert spec.clips[1].shot_id == "s0"
+
+
+def test_planner_preserves_long_source_for_later_long_slot(tmp_path):
+    conn = connect(tmp_path / "v2.sqlite")
+    with conn:
+        conn.execute(
+            "INSERT INTO assets(id,path,sha256,fps_num,fps_den,duration_sec) "
+            "VALUES ('a','x','hash',24,1,20)"
+        )
+        conn.executemany(
+            "INSERT INTO shots(id,asset_id,idx,start_sec,end_sec,character,"
+            "motion_dir,shot_scale,visual_energy) VALUES (?,?,?,?,?,?,?,?,?)",
+            [
+                ("short", "a", 0, 0, 1.05, "zenitsu", "right", .5, .5),
+                ("long", "a", 1, 2, 4.0, "zenitsu", "right", .5, .5),
+            ],
+        )
+    plan = DirectorPlan(
+        project_id="duration-conservation", revision=1, duration_sec=2.5,
+        primary_characters=["zenitsu"], tone=["clean"],
+        structure=[
+            DirectorSection(
+                role="opening", start=0, end=2.5, energy=.5,
+                average_shot_length=1.25,
+            )
+        ],
+        visual_rules={"prefer": [], "avoid": []}, sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=0, flash_max=0, shake_max=0),
+        generation={"llm_used": False},
+        editing_style=EditingStyleProfile(
+            target_cut_density=.4,
+            normalized_cut_positions=[.4],
+        ),
+    )
+    music = MusicMap(
+        duration_sec=2.5, bpm=120, beats=[], bars=[], downbeats=[],
+        onsets=[], beat_energy=[],
+        sections=[MusicSection(type="build", start=0, end=2.5, energy=.5)],
+        impact_points=[], risers=[], breaks=[], silences=[],
+        spectral_change_points=[],
+    )
+    ranked = [
+        RankedCandidate(
+            shot_id=shot_id, intrinsic=.8, contextual=.8, total=total,
+            intrinsic_components={}, contextual_components={},
+        )
+        for shot_id, total in [("long", .9), ("short", .89)]
+    ]
+    spec = plan_sequence(
+        conn, plan=plan, music=music,
+        candidates_by_role={"opening": ranked}, beam_width=1,
+    )
+    assert [clip.shot_id for clip in spec.clips] == ["short", "long"]
 
 
 def test_source_window_is_centered_on_scored_keyframe(tmp_path):

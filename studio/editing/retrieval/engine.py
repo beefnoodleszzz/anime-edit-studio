@@ -19,9 +19,14 @@ class RetrievalQuery(BaseModel):
     subtitle_allowed: bool = True
     min_face: float | None = Field(None, ge=0, le=1)
     min_pose: float | None = Field(None, ge=0, le=1)
+    min_eye: float | None = Field(None, ge=0, le=1)
+    min_image_quality: float | None = Field(None, ge=0, le=1)
+    min_cutability: float | None = Field(None, ge=0, le=1)
+    min_aesthetic: float | None = Field(None, ge=0, le=10)
     required_any_tags: list[str] = Field(default_factory=list)
     excluded_tags: list[str] = Field(default_factory=list)
     min_duration_sec: float | None = Field(None, gt=0)
+    max_duration_sec: float | None = Field(None, gt=0)
     limit: int = Field(200, ge=100, le=300)
 
 
@@ -66,7 +71,14 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
         where.append("coalesce(json_extract(s.subtitle_region,'$.present'),0)=0")
         # OCR is intentionally conservative and can miss stylised/burned text.
         # Tagger evidence is therefore a second deterministic cleanliness gate.
-        for tag in ("subtitled", "english_text", "text_focus"):
+        for tag in (
+            "subtitled",
+            "english_text",
+            "japanese_text",
+            "korean_text",
+            "chinese_text",
+            "text_focus",
+        ):
             where.append("lower(coalesce(s.tags,'')) NOT LIKE ?")
             params.append(f"%{tag}%")
     if query.min_face is not None:
@@ -75,6 +87,18 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
     if query.min_pose is not None:
         where.append("coalesce(s.pose_quality,0)>=?")
         params.append(query.min_pose)
+    if query.min_eye is not None:
+        where.append("coalesce(s.eye_visibility,0)>=?")
+        params.append(query.min_eye)
+    if query.min_image_quality is not None:
+        where.append("coalesce(s.image_quality,0)>=?")
+        params.append(query.min_image_quality)
+    if query.min_cutability is not None:
+        where.append("coalesce(s.cutability,0)>=?")
+        params.append(query.min_cutability)
+    if query.min_aesthetic is not None:
+        where.append("coalesce(s.aesthetic,0)>=?")
+        params.append(query.min_aesthetic)
     required = [tag.strip().lower() for tag in query.required_any_tags if tag.strip()]
     if required:
         where.append(
@@ -91,6 +115,9 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
     if query.min_duration_sec is not None:
         where.append("s.end_sec-s.start_sec>=?")
         params.append(query.min_duration_sec)
+    if query.max_duration_sec is not None:
+        where.append("s.end_sec-s.start_sec<=?")
+        params.append(query.max_duration_sec)
 
     sql = "SELECT s.id FROM shots s " + " ".join(joins)
     if where:

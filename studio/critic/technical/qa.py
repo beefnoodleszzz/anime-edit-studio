@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from studio.execution.ffmpeg import (
+    DELIVERY_TARGET_LUFS,
     probe_media_json,
     run_media_diagnostic,
 )
@@ -45,7 +46,7 @@ def run_technical_qa(
     expected_fps: Fraction,
     allowed_codecs: set[str] | None = None,
     expected_audio: bool = True,
-    target_lufs: float = -14.0,
+    target_lufs: float = DELIVERY_TARGET_LUFS,
     lufs_tolerance: float = 1.5,
     max_black_sec: float = 0.35,
     max_freeze_sec: float = 0.75,

@@ -56,6 +56,15 @@ log = logging.getLogger(__name__)
 STATE_FILENAME = ".resolve_build_state.json"
 REPO = Path(__file__).resolve().parents[2]
 
+# EditSpec 枚举 → Resolve project.SetSetting('imageRetimeInterpolation', ...)
+# 实测的精确字符串（大小写敏感，见 config/resolve_capabilities.yaml
+# -> project_setting_retime_interpolation）。
+_RETIME_INTERPOLATION_MAP = {
+    "nearest": "nearest",
+    "frame_blend": "frameBlend",
+    "optical_flow": "opticalFlow",
+}
+
 
 def _audio_duration(path: Path) -> float:
     probe = probe_media_json(path)
@@ -327,6 +336,24 @@ class ResolveCompiler:
         video_tracks = len(spec.video_tracks())
         if video_tracks > 1:
             self.rv.ensure_video_tracks(video_tracks)
+        self._apply_retime_interpolation(spec)
+
+    def _apply_retime_interpolation(self, spec: EditSpec) -> None:
+        """`imageRetimeInterpolation` 是工程级设置，不是逐 clip 的开关 ——
+        一个工程里所有非 nearest 的 clip 必须要求同一档插值，否则无法用
+        当前唯一验证过的 API 表达（见 ResolveAdapter.set_retime_interpolation
+        docstring）。混用会在这里显式拒绝，而不是静默套用其中一个值。
+        """
+        requested = {c.retime.interpolation for c in spec.clips} - {"nearest"}
+        if not requested:
+            return
+        if len(requested) > 1:
+            raise ValueError(
+                f"retime.interpolation 在同一 EditSpec 里出现了多种非 nearest 取值 "
+                f"{sorted(requested)}：Resolve 的插值方式是工程级设置，无法为不同 "
+                f"clip 分别生效，请统一成一种"
+            )
+        self.rv.set_retime_interpolation(_RETIME_INTERPOLATION_MAP[requested.pop()])
 
     def _import_media(self, spec: EditSpec) -> dict[str, object]:
         """导入 spec 用到的全部素材，返回 asset_id → MediaInfo。"""
@@ -365,6 +392,7 @@ class ResolveCompiler:
                     "source_in_sec": clip.source.in_sec,
                     "source_out_sec": clip.source.out_sec,
                     "timeline_in_sec": clip.timeline.in_sec,
+                    "timeline_duration_sec": clip.timeline.duration_sec,
                     "track_index": self._track_index(spec, clip.timeline.track),
                     "media_fps": info.fps,        # 源时基（如 23.976）
                     "timeline_fps": tl_fps,       # 交付时基

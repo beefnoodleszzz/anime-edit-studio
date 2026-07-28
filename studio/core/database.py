@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
@@ -405,6 +405,17 @@ def _migration_008(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_009(conn: sqlite3.Connection) -> None:
+    """Persist deterministic Graphic Match descriptors per representative frame."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(shots)")}
+    if "graphic_features" not in existing:
+        conn.execute("ALTER TABLE shots ADD COLUMN graphic_features TEXT")
+    if "graphic_features_confidence" not in existing:
+        conn.execute(
+            "ALTER TABLE shots ADD COLUMN graphic_features_confidence REAL"
+        )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -414,6 +425,7 @@ MIGRATIONS = (
     (6, _migration_006),
     (7, _migration_007),
     (8, _migration_008),
+    (9, _migration_009),
 )
 
 

@@ -2,6 +2,7 @@
 
 from .rhythm import RhythmCheck, RhythmQAResult, evaluate_rhythm
 from .motion import MotionCheck, MotionQAResult, evaluate_motion
+from .edit_grammar import EditGrammarCheck, EditGrammarQAResult, evaluate_edit_grammar
 from .revision import (
     CreativeReview,
     RevisionIssue,
@@ -19,6 +20,9 @@ __all__ = [
     "MotionCheck",
     "MotionQAResult",
     "evaluate_motion",
+    "EditGrammarCheck",
+    "EditGrammarQAResult",
+    "evaluate_edit_grammar",
     "CreativeReview",
     "RevisionIssue",
     "SuggestedFix",

@@ -19,7 +19,7 @@ from studio.core.cache import JsonCache
 from studio.core.contracts import ConfidenceValue, ShotAnalysis, SubjectBox
 from studio.core.hashing import analysis_cache_key, file_sha256
 
-PIPELINE_VERSION = "visual-1.1.0"
+PIPELINE_VERSION = "visual-1.2.0"
 MODEL = "opencv+wdtag-derived"
 MODEL_VERSION = f"opencv-{cv2.__version__}"
 
@@ -140,6 +140,25 @@ class VisualAnalyzer:
         )
         center_x = subject.x + subject.width / 2
         center_y = subject.y + subject.height / 2
+        weights = gray.astype(np.float64) + 1.0
+        yy_grid, xx_grid = np.mgrid[0:gray.shape[0], 0:gray.shape[1]]
+        luminance_x = float((xx_grid * weights).sum() / weights.sum() / gray.shape[1])
+        luminance_y = float((yy_grid * weights).sum() / weights.sum() / gray.shape[0])
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1)
+        angles = np.mod(np.arctan2(gy, gx), np.pi)
+        strengths = np.hypot(gx, gy)
+        orientation, _ = np.histogram(
+            angles, bins=8, range=(0, np.pi), weights=strengths
+        )
+        orientation = orientation / max(float(orientation.sum()), 1e-6)
+        graphic_features = {
+            "subject_x": center_x,
+            "subject_y": center_y,
+            "luminance_x": luminance_x,
+            "luminance_y": luminance_y,
+            "edge_orientation": orientation.tolist(),
+        }
         thirds_distance = min(
             math.hypot(center_x - tx, center_y - ty)
             for tx in (1 / 3, 2 / 3)
@@ -189,6 +208,11 @@ class VisualAnalyzer:
                 camera_motion, 0.35, "global_flow_direction_proxy"
             ),
             cutability=cv(cutability, 0.38, "single_keyframe_proxy"),
+            graphic_features=cv(
+                graphic_features,
+                min(0.76, subject.confidence),
+                "subject_saliency+luminance_centroid+edge_orientation",
+            ),
         )
         return VisualResult(analysis, subject)
 
@@ -334,6 +358,7 @@ def analyze_pending(
                     "color_palette", "subtitle_region", "pose_quality",
                     "face_visibility", "eye_visibility", "visual_energy", "cutability",
                     "composition", "image_quality", "blur_score", "camera_motion",
+                    "graphic_features",
                 )
             }
             conn.execute(
@@ -352,6 +377,7 @@ def analyze_pending(
                   image_quality=?,image_quality_confidence=?,
                   blur_score=?,blur_score_confidence=?,
                   camera_motion=?,camera_motion_confidence=?,
+                  graphic_features=?,graphic_features_confidence=?,
                   cutability=?,cutability_confidence=?,analysis_version=?
                 WHERE id=?
                 """,
@@ -371,6 +397,8 @@ def analyze_pending(
                     values["image_quality"].value, values["image_quality"].confidence,
                     values["blur_score"].value, values["blur_score"].confidence,
                     values["camera_motion"].value, values["camera_motion"].confidence,
+                    json.dumps(values["graphic_features"].value),
+                    values["graphic_features"].confidence,
                     values["cutability"].value, values["cutability"].confidence,
                     PIPELINE_VERSION, row["id"],
                 ),

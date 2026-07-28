@@ -113,7 +113,8 @@ def check_structure(spec: EditSpec) -> list[Issue]:
         for phrase in spec.motion_phrases
         for beat in phrase.beats
     }
-    for clip in spec.clips:
+    ordered_clips = sorted(spec.clips, key=lambda item: item.timeline.in_sec)
+    for index, clip in enumerate(ordered_clips):
         if clip.timeline.track not in known_tracks:
             issues.append(
                 Issue(
@@ -155,6 +156,46 @@ def check_structure(spec: EditSpec) -> list[Issue]:
                         clip.id,
                     )
                 )
+        if clip.source_selection is not None and not (
+            clip.source.in_sec - 1e-6
+            <= clip.source_selection.anchor_sec
+            <= clip.source.out_sec + 1e-6
+        ):
+            issues.append(
+                Issue(
+                    "SOURCE_ANCHOR_OUTSIDE_RANGE",
+                    Severity.ERROR,
+                    f"source_selection.anchor_sec={clip.source_selection.anchor_sec:.3f} "
+                    f"不在源区间 {clip.source.in_sec:.3f}–{clip.source.out_sec:.3f}",
+                    clip.id,
+                )
+            )
+        if (
+            index == 0
+            and clip.incoming_cut is not None
+            and clip.incoming_cut.kind != "establish"
+        ):
+            issues.append(
+                Issue(
+                    "FIRST_CUT_RELATION",
+                    Severity.ERROR,
+                    "时间线首镜的 incoming_cut 必须是 establish",
+                    clip.id,
+                )
+            )
+        if (
+            index > 0
+            and clip.incoming_cut is not None
+            and clip.incoming_cut.kind == "establish"
+        ):
+            issues.append(
+                Issue(
+                    "LATE_ESTABLISH_RELATION",
+                    Severity.ERROR,
+                    "非首镜不能把 incoming_cut 标为 establish",
+                    clip.id,
+                )
+            )
         fusion_operations = (
             len(clip.effects)
             + sum(
@@ -441,7 +482,7 @@ _FEATURE_CAPABILITY: dict[str, str] = {
     "constant_retime": "timespeed_recipe",
     "audio_automation": "fairlight_automation",
     "captions": "fusion_title_generator",
-    "retime_interpolation": "retime_interpolation_mapping",
+    "retime_interpolation": "project_setting_retime_interpolation",
     "motion_phrase": "motion_phrase_compositor",
 }
 

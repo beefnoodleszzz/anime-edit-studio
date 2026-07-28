@@ -196,7 +196,7 @@ anime-edit-studio/
     "preference_profile": "pp_global_v4"
   },
   "timebase": { "fps": 24, "drop_frame": false },
-  "canvas": { "width": 3072, "height": 3840, "aspect": "4:5" },
+  "canvas": { "width": 3072, "height": 3072, "aspect": "1:1" },
   "duration_sec": 25.0,
 
   "tracks": [
@@ -357,7 +357,8 @@ EditSpec ──> ResolveCompiler ──> 一系列 ResolveAdapter 调用（有�
 |---|---|---|
 | **主体感知竖屏重构图** | `TimelineItem.SmartReframe` | ❌ 实测返回 `True` 但属性与渲染输出均不变。Phase 3 改为自研主体检测，输出 Pan/Zoom 参数，经已验证的 `transform` 通道写入 |
 | **主体跟踪遮罩** | `CreateMagicMask` / `RegenerateMagicMask` | ❌ 所有实测签名均返回 `False`。Phase 3 改为自研逐帧主体检测，不依赖 Resolve Magic Mask |
-| **三段变速** | `SetSpeedRamp` | ❌ Resolve 21.0.3 中属性值为 `None`，不可调用。速度曲线改走 Fusion `TimeSpeed` Recipe；`RetimeProcess` / `MotionEstimation` 目前只验证为可写整数属性 |
+| **三段变速** | `SetSpeedRamp` | ❌ Resolve 21.0.3 中属性值为 `None`，不可调用。速度曲线改走 Fusion `TimeSpeed` Recipe |
+| **插帧方式（nearest/frame_blend/optical_flow）** | `project.SetSetting('imageRetimeInterpolation', str)` | ✅ 2026-07-28 渲染对照实测确认。旧结论「`RetimeProcess`/`MotionEstimation` 整数属性可编程」已证伪 —— 那条 per-clip 路径只能触达 nearest/frame_blend 两档，摸不到真光流；真正生效的是这条工程级字符串设置（`nearest`\|`frameBlend`\|`opticalFlow`，无 `speedWarp`）。工程级 = 同一工程内所有非 nearest 的 clip 只能统一成一种插值，见 `ResolveCompiler._apply_retime_interpolation` |
 | **Fusion Comp 创建** | `AddFusionComp` | ✅ 已验证能返回 comp 对象。`ImportFusionComp` / `ExportFusionComp` / 参数注入的完整 Recipe 闭环仍须 Phase 2.0 实测 |
 | **调色分组候选路径** | `AssignToColorGroup` / `AddVersion` / `CopyGrades` / `ExportLUT` | ⚠️ 方法已发现但尚未验证。Color Recipe 是否采用 ColorGroup，等待 Phase 2.0 渲染对照后冻结 |
 | **26 个可写变换属性** | `SetProperty` | Zoom/Pan/Tilt/Crop/Opacity/CompositeMode/ResizeFilter 全可编程 |
@@ -519,6 +520,22 @@ Planner 联合设计相邻镜头，并从选片阶段为 Hold 槽位偏好低 `m
 确定性 Motion QA 独立检查 median/P75、动态范围、Hold 比例、方向平衡、方向
 反转率和短语内部跨 Cut 连续性。光流采样必须避开 Whip/Blur 峰值窗口（P21）。
 
+### 6.4 Editorial Grammar（产品验收补强）
+
+Sequence Planner 不能只回答「何时切」和「镜头运动多强」，还必须为每个相邻镜头
+生成结构化 `CutRelation`：`continuation / match_action / graphic_match /
+contrast / reaction / parallel / reveal / ellipsis`。该字段描述剪辑语义，不等同于
+Resolve transition；例如 match-action 默认仍可执行为 hard cut。
+
+每个 clip 同时携带 `SourceSelection`，记录实际源区间围绕
+`anticipation / action / impact / reaction / settle` 哪个动作相位取点、锚点秒数、
+证据和置信度。没有逐帧动作 landmark 时只能使用有界的 shot-level 语义估计，
+不得伪称为精确命中帧；后续分析升级可替换估计而不改变 Compiler。
+
+`EditGrammarQA` 与 Rhythm/Motion/Technical QA 分离，确定性检查有动机切镜覆盖率、
+源相位覆盖率、关系多样性和单一关系的连续重复。它是首剪创意诊断证据，不代替
+所有者观看确认。
+
 ---
 
 ## 7. Critic / QA 设计（§76 严格分离）
@@ -577,6 +594,8 @@ Creative Critic 只产出建议与 Revision 提案。
 | `renders` | spec_version / backend / preset / output_path / duration / status |
 | `qa_results` | render_id / kind(technical\|creative) / passed / checks_json |
 | `workflow_states` | project + state + entered_at + payload（§56 状态机持久化） |
+| `production_readiness_reports` | project + version + source_scope + coverage + blockers + ready |
+| `character_appearances` | work + character + season/arc/episode + provenance + confidence + version |
 
 `shots` 表补齐字段（§11 缺失项）：
 `shot_scale, subject_motion, pose_quality, face_visibility, eye_visibility,
@@ -588,7 +607,7 @@ audio_energy, music_presence, cutability`，以及各自的 `*_confidence` 与 `
 ## 9. Workflow State Machine（§56）
 
 ```
-CREATED → INGESTING → ANALYZED → DIRECTING → CANDIDATES_READY → USER_SELECTION
+CREATED → SCOPED → READINESS_CHECK → ASSETS_READY → DIRECTING → CANDIDATES_READY → USER_SELECTION
 → EDIT_PLANNING → RESOLVE_BUILD → PREVIEW_RENDER → AI_REVIEW → USER_REVIEW
 → REVISION ⟲ → LOCKED → MASTER_RENDER → FINAL_QA → DELIVERED
                                                         ↓
@@ -597,6 +616,12 @@ CREATED → INGESTING → ANALYZED → DIRECTING → CANDIDATES_READY → USER_S
 
 持久化在 `workflow_states`。每个 step 必须：可重试（幂等）、可恢复（从上一个成功状态续跑）、
 可记录（结构化日志 + 耗时）。任何 step 失败进入 `FAILED_<state>`，保留 payload 供诊断。
+
+`READINESS_CHECK → ASSETS_READY` 是硬门禁。报告必须由确定性代码计算：
+资产/代理/分镜存在性、分析覆盖率、候选计数和时长匹配不可交给 LLM。
+LLM 只可辅助生成 Source Scope 与 Appearance Catalog 候选，且输出 schema 强约束；
+外部资料必须保存 provenance。`create_first_cut()` 必须验证最新报告的 scope hash、
+asset hashes、analysis versions 与 planner version，任何变化都使旧报告失效。
 
 ---
 
@@ -639,4 +664,5 @@ render_preview  run_technical_qa  run_creative_critic  apply_revision
 | A13 | Fusion Recipe 候选路径为 GUI 制作后 Export，代码 Import+注参 | `AddFusionComp` 已验证；Export/Import/注参闭环须通过 Phase 2.0 后才能定案 |
 | A14 | Color Recipe 优先验证 ColorGroup 架构 | `AssignToColorGroup` + `AddVersion` 理论上适合整体替换，但尚未 verified，Phase 2.0 结论优先 |
 | A15 | 用 marker 的 customData 存 EditSpec `clip_id` | IR ↔ Resolve 双向定位，是选择性更新的实现基础 |
-| A16 | Resolve 原生光流作为首选候选，RIFE 保留为按需工具 | `RetimeProcess`/`MotionEstimation` 已验证可写整数值；具体档位语义和视觉质量仍须逐档渲染验收 |
+| A16 | Resolve 原生光流（工程级 `imageRetimeInterpolation='opticalFlow'`）作为首选，RIFE 保留为按需工具 | 2026-07-28 渲染对照已验证生效且档位语义明确（见 `project_setting_retime_interpolation`）；RIFE 额外做了逐镜切点保护，Resolve 原生路径靠「每个 clip 是独立 TimelineItem、conform 只在各自 source range 内进行」天然规避跨切点糊帧，但尚未有对照渲染验证这一点在生产素材上成立 |
+| A17 | 首剪前引入 Production Readiness Gate | 防止已入库但 `shots=0`、分析缺失或候选不可行时仍进入选片；适用于所有作品 |

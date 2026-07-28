@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from studio.core.database import DEFAULT_V2_DB, connect
-from studio.critic.creative import evaluate_rhythm
+from studio.critic.creative import evaluate_edit_grammar, evaluate_rhythm
 from studio.creative.director import DirectorBrief, generate_director_plan
 from studio.creative.preference import PreferenceModel, preference_signal
 from studio.creative.reference import analyze_reference
@@ -21,9 +21,10 @@ from studio.editing.sequence import (
     apply_recipe_plan,
     plan_sequence,
     role_source_duration_requirements,
+    plan_visual_phrases,
 )
 from studio.editspec.schema import AudioLayer, EditSpec, Marker
-from studio.execution.ffmpeg import measure_integrated_lufs
+from studio.execution.ffmpeg import DELIVERY_TARGET_LUFS, measure_integrated_lufs
 
 REPO = Path(__file__).resolve().parents[2]
 CACHE = REPO / "library" / "cache"
@@ -36,9 +37,17 @@ class FirstCutResult(BaseModel):
     spec_path: str
     style_profile_path: str
     rhythm_qa_path: str
+    edit_grammar_qa_path: str
+    visual_phrase_path: str
     candidate_group_ids: list[str]
     clip_count: int
     duration_sec: float
+
+
+def _tone_allows_menacing_expression(tone: list[str] | None) -> bool:
+    """Keep villain performance signals when the director explicitly asks for them."""
+    normalized = {item.strip().lower() for item in (tone or [])}
+    return bool(normalized & {"menacing", "dominant", "villainous", "ferocious"})
 
 
 def _write_atomic(path: Path, value: str) -> None:
@@ -66,6 +75,7 @@ def create_first_cut(
     database: Path = DEFAULT_V2_DB,
     output_dir: Path | None = None,
     reuse_candidate_groups: bool = False,
+    naked_cut: bool = False,
 ) -> FirstCutResult:
     if not music_path.is_file():
         raise FileNotFoundError(f"音乐不存在: {music_path}")
@@ -104,6 +114,14 @@ def create_first_cut(
             style_profile_path,
             plan.editing_style.model_dump_json(indent=2),
         )
+        visual_phrase_path = root / "visual_phrase_plan.json"
+        visual_phrase = plan_visual_phrases(
+            music, duration_sec=plan.duration_sec
+        )
+        _write_atomic(
+            visual_phrase_path,
+            visual_phrase.model_dump_json(indent=2),
+        )
         candidates_by_role = {}
         group_ids = []
         duration_requirements = role_source_duration_requirements(plan, music)
@@ -136,36 +154,104 @@ def create_first_cut(
             if role in candidates_by_role:
                 continue
             front_facing = "front_facing" in (tone or [])
+            menacing_expression = _tone_allows_menacing_expression(tone)
+            character = (primary_characters or [None])[0]
+            zenitsu = character == "agatsuma_zenitsu"
             query = RetrievalQuery(
                 project_id=project_id,
-                character=(primary_characters or [None])[0],
+                character=character,
                 subtitle_allowed=False,
-                min_face=0.65 if front_facing else 0.55,
-                min_pose=0.5,
-                required_any_tags=(
-                    ["looking_at_viewer", "facing_viewer"]
-                    if front_facing
-                    else ["solo", "male_focus"]
-                ),
+                # A high face threshold over-selects distressed close-ups and
+                # suppresses the stronger medium/wide action compositions.
+                min_face=0.30 if zenitsu else 0.40,
+                min_pose=0.30,
+                min_eye=0.10,
+                min_image_quality=0.72,
+                min_cutability=0.42,
+                min_aesthetic=4.5,
+                required_any_tags=[],
                 excluded_tags=[
                     "fake_screenshot",
-                    "parody",
                     "chibi",
+                    "parody",
                     "muscular",
                     "monochrome",
                     "logo",
-                    "multiple_boys",
-                    "2boys",
-                    "1girl",
-                    "lying",
-                    "head_out_of_frame",
-                    "topless_male",
-                    "upside-down",
-                    "upside_down",
+                    "watermark",
+                    "twitter_username",
+                    "artist_name",
+                    "credits",
+                    "black_background",
                     *(
                         [
-                            "profile",
-                            "from_side",
+                            "bubble_blowing",
+                            "nose_bubble",
+                            "meme",
+                            "heart",
+                            "snot",
+                            "drooling",
+                            "fangs",
+                            "yellow_sweater",
+                            "school_uniform",
+                            "holding_hair",
+                            "grabbing_another's_hair",
+                            "crawling",
+                            "death",
+                            "corpse",
+                            "topless_male",
+                            "open_mouth",
+                            "wide-eyed",
+                            "teeth",
+                            "clenched_teeth",
+                            "anger_vein",
+                            "horror_(theme)",
+                            "spider",
+                        ]
+                        if zenitsu else []
+                    ),
+                    "1girl",
+                    "2girls",
+                    "multiple_girls",
+                    *(
+                        []
+                        if zenitsu
+                        else [
+                            "multiple_boys",
+                            "2boys",
+                            "kamado_nezuko",
+                            "topless_male",
+                        ]
+                    ),
+                    "lying",
+                    "head_out_of_frame",
+                    "upside-down",
+                    "upside_down",
+                    "blood_on_face",
+                    "one_eye_closed",
+                    "crying",
+                    "crying_with_eyes_open",
+                    "tears",
+                    "sad",
+                    "scared",
+                    *(
+                        []
+                        if zenitsu or menacing_expression
+                        else [
+                            "closed_eyes",
+                            "wide-eyed",
+                            "open_mouth",
+                            "sweat",
+                            "sweatdrop",
+                            "blood",
+                        ]
+                    ),
+                    "bandages",
+                    "bandaged_head",
+                    "from_behind",
+                    "facing_away",
+                    "head_out_of_frame",
+                    *(
+                        [
                             "looking_away",
                             "looking_back",
                             "from_behind",
@@ -175,6 +261,7 @@ def create_first_cut(
                     ),
                 ],
                 min_duration_sec=duration_requirements[role],
+                max_duration_sec=10.0,
                 limit=200,
             )
             recalled = retrieve(conn, query)
@@ -199,7 +286,7 @@ def create_first_cut(
                     character=(primary_characters or [None])[0],
                     preference_by_shot=preference_by_shot,
                 ),
-                limit=50,
+                limit=200,
             )
             existing = active_groups.get(role)
             if existing is not None and existing["selected_shot_id"]:
@@ -261,7 +348,11 @@ def create_first_cut(
                 duration_sec=plan.duration_sec,
                 gain_db=max(
                     -12.0,
-                    min(12.0, -14.0 - measure_integrated_lufs(music_path)),
+                    min(
+                        12.0,
+                        DELIVERY_TARGET_LUFS
+                        - measure_integrated_lufs(music_path),
+                    ),
                 ),
             )
         )
@@ -280,7 +371,8 @@ def create_first_cut(
             for sec in music.impact_points
             if sec <= plan.duration_sec
         )
-        spec = apply_recipe_plan(spec, plan=plan)
+        if not naked_cut:
+            spec = apply_recipe_plan(spec, plan=plan)
         # Revalidate after attaching the external audio layer.
         spec = EditSpec.model_validate(spec.model_dump(mode="python", by_alias=True))
         with conn:
@@ -293,12 +385,20 @@ def create_first_cut(
         rhythm_qa = evaluate_rhythm(spec, music, plan.editing_style)
         rhythm_qa_path = root / "rhythm_qa.json"
         _write_atomic(rhythm_qa_path, rhythm_qa.model_dump_json(indent=2))
+        edit_grammar_qa = evaluate_edit_grammar(spec)
+        edit_grammar_qa_path = root / "edit_grammar_qa.json"
+        _write_atomic(
+            edit_grammar_qa_path,
+            edit_grammar_qa.model_dump_json(indent=2),
+        )
         return FirstCutResult(
             project_id=project_id,
             plan_path=str(plan_path),
             spec_path=str(spec_path),
             style_profile_path=str(style_profile_path),
             rhythm_qa_path=str(rhythm_qa_path),
+            edit_grammar_qa_path=str(edit_grammar_qa_path),
+            visual_phrase_path=str(visual_phrase_path),
             candidate_group_ids=group_ids,
             clip_count=len(spec.clips),
             duration_sec=spec.duration_sec,

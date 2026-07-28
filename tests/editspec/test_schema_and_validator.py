@@ -52,7 +52,7 @@ NONE_VERIFIED = lambda _: False    # noqa: E731
 class TestSchema:
     def test_minimal_spec(self):
         spec = make_spec([make_clip("c1", 0.0, 2.0)])
-        assert spec.spec_version == "2.1.0"
+        assert spec.spec_version == "2.2.0"
         assert spec.revision == 1
         assert spec.duration_sec == pytest.approx(2.0)
 
@@ -268,6 +268,30 @@ class TestCapabilityGate:
             [make_clip("c1", 0.0, 1.0, framing=Framing(mode="smart_reframe"))]
         )
         assert validate(spec, is_verified=ALL_VERIFIED).ok
+
+    def test_retime_interpolation_blocked_when_unverified(self):
+        spec = make_spec(
+            [make_clip("c1", 0.0, 1.0,
+                       retime=Retime(type="constant", speed=1.0, interpolation="optical_flow"))]
+        )
+        result = validate(spec, is_verified=NONE_VERIFIED)
+        assert not result.ok
+        issue = next(i for i in result.errors if i.code == "CAPABILITY_NOT_VERIFIED")
+        assert "project_setting_retime_interpolation" in issue.message
+
+    def test_retime_interpolation_verified_against_real_capabilities(self):
+        """光流插帧走的是工程级 project.SetSetting，不是 clip 级 RetimeProcess
+        整数属性（2026-07-28 渲染对照证伪，见 config/resolve_capabilities.yaml
+        -> retime_interpolation_mapping）。这里用真实 capability loader（不用
+        stub）防止以后有人把 _FEATURE_CAPABILITY 的映射键改回那条走不通的路。
+        """
+        from studio.core.capabilities import is_verified
+
+        spec = make_spec(
+            [make_clip("c1", 0.0, 1.0,
+                       retime=Retime(type="constant", speed=1.0, interpolation="optical_flow"))]
+        )
+        assert validate(spec, is_verified=is_verified).ok
 
     def test_uses_real_capability_matrix_by_default(self):
         """默认走真实 yaml：当前 portrait_reframe 未 verified，应被拦截。"""

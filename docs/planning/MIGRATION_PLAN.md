@@ -37,8 +37,14 @@ AddMarker         -> True
 
 **变化 1 —— R1 风险大幅下降。**
 原假设"Resolve 21 可能不支持脚本控制关键帧变速"，实测 `TimelineItem.SetSpeedRamp` **方法存在**，
-且 `RetimeProcess` / `MotionEstimation` 属性可写（光流变速质量可编程控制）。
+且 `RetimeProcess` / `MotionEstimation` 属性可写。
 风险从 🔴 降为 🟡，仍需 Phase 6 实测生效性。
+
+> 2026-07-28 更新：Phase 6 实测已完成，结论与本节原假设**相反**——
+> per-clip `RetimeProcess`/`MotionEstimation` 属性虽然可写，但**不驱动真正的插值渲染**
+> （只能触达 nearest/frame_blend 两档，见 `retime_interpolation_mapping`）。
+> 真正生效的光流控制入口是工程级 `project.SetSetting('imageRetimeInterpolation', 'opticalFlow')`，
+> 见 `project_setting_retime_interpolation` 与 `ResolveCompiler._apply_retime_interpolation`。
 
 **变化 2 —— Phase 6A Recipe 库成本下降。**
 `ExportFusionComp` 存在，意味着 recipe 可以在 Fusion GUI 里**手工做好后导出 `.comp`**，
@@ -76,7 +82,7 @@ Phase 1.12–1.14 对三项关键能力做了实跑 + 渲染出帧验证，结�
 | 能力 | 结论 |
 |---|---|
 | `render` | ✅ 完整渲染通路打通：`LoadRenderPreset` → `SetRenderSettings` → `AddRenderJob` → `StartRendering` → 轮询。实测 1 秒素材约 0.7–1.2s |
-| `retime_interpolation` | ✅ `RetimeProcess` / `MotionEstimation` 接受**整数** 0–3（传字符串一律被拒） |
+| `retime_interpolation` | ⚠️ `RetimeProcess` / `MotionEstimation` 接受**整数** 0–3（传字符串一律被拒），但 2026-07-28 渲染对照证实这条 per-clip 路径不驱动真实插值 —— 真正生效的是工程级 `project.SetSetting('imageRetimeInterpolation', str)`，见 `project_setting_retime_interpolation` |
 | `create_bin` | ✅ |
 
 ### 由此产生的两条方法论铁律（已写入 pitfalls P12–P14）
@@ -548,7 +554,7 @@ Phase 0 → 1 → 2 → 3/4(并行) → 5 → 6 → 7 → 8 → 9
 | 竖屏主体感知重构图 | `reframe_x` 单轴手搓偏移 | 自研主体检测 → `transform`（`SmartReframe` 实测空转） | Phase 3 |
 | 主体跟踪 | rembg 静态遮罩，无跟踪 | 自研逐帧主体框 → 关键帧 Pan/Zoom（`CreateMagicMask` 不可用） | Phase 3 |
 | 速度曲线 | `speed` 平均倍率近似 | Fusion `TimeSpeed` Recipe（无逐片段变速 API） | Phase 6A |
-| 变速插值 | RIFE 外挂 + 额外转码 | ✅ `RetimeProcess`/`MotionEstimation` 已验证可编程 | Phase 6 |
+| 变速插值 | RIFE 外挂 + 额外转码 | ✅ 工程级 `imageRetimeInterpolation='opticalFlow'` 已验证生效（`ResolveCompiler._apply_retime_interpolation`）；RIFE 仍保留为需要逐镜切点保护/自定义模型时的备选 | Phase 6 |
 | 调色 | 单条 LUT 文件 | ColorGroup + Version + 节点图 | Phase 6 |
 | 音频 | ffmpeg 音床后处理 | Fairlight 多轨 + 音量自动化 | Phase 6 |
 | 视觉特效 | Remotion CSS/SVG | Fusion 节点图 Recipe | Phase 6A |
@@ -590,3 +596,42 @@ Technical QA 13/13 通过。自动指标不得替代后续作品的人工审美�
 2. 只有人工通过项才可把 `config/recipes.yaml` 的 `verified` 转为 true；拒绝项继续迭代。
 3. 使用单一主题素材从 Review UI 跑一次产品级 25 秒 E2E，确认创意质量而不只是 13 项技术 QA。
 4. 完成后按 `docs/V2_COMPLETION_AUDIT.md` 再做一次逐项证据审计。
+
+2026-07-26 产品验收补强：Motion System V2 与 Graphic Match V2 已进入自动链。
+StyleFingerprint 1.5 以 10Hz 保存 velocity curve、运动峰值、零速点、方向反转和
+cut-carry vector；Sequence Planner 2.3 删除固定 `index % 6` Hold 模板，并使用
+主体中心、亮度中心、边缘方向区分 Carry/Reverse/Impact Cut。Motion QA 1.1
+分别验收跨 Cut carry 与 phrase 内 reverse。炼狱 V6 Resolve preview 已通过
+Rhythm、Motion 与 Technical QA；自动验收仍不得替代所有者观看确认。
+
+### 产品验收补强：Production Readiness Gate
+
+当前缺口：`first-cut` 会把“资产已登记”误当成“素材已准备”，无法阻止目标剧集
+`shots=0` 或分析覆盖不足的项目进入选片。
+
+| # | 任务 |
+|---|---|
+| PR.1 | 定义 versioned `SourceScope`、`CharacterAppearance`、`ProductionReadinessReport` schema |
+| PR.2 | 新增 `aes prepare-production`：检查 asset/proxy/shots/analysis/candidate coverage |
+| PR.3 | 只对 report blocker 指向的 asset 幂等执行 shots/analyze，并支持恢复 |
+| PR.4 | `create_first_cut()` 强制验证最新 ready report 与 scope/cache versions |
+| PR.5 | Review UI 展示缺失剧集、分析进度、候选分布与可执行修复 |
+| PR.6 | E2E：高频剧集已入库但 `shots=0` 时首剪必须失败，补齐后通过 |
+
+验收 KPI：未准备素材进入首剪次数为 0；定向补齐不得退化为全库扫描；
+同作品同角色 Appearance Catalog 可跨项目复用；Time To First Preview 只从
+Readiness Gate 通过后开始计算。
+
+### 产品验收补强：Editorial Grammar
+
+| # | 任务 |
+|---|---|
+| EG.1 | EditSpec 2.2 增加 `CutRelation` 与 `SourceSelection`，旧 2.1 制品前向迁移 |
+| EG.2 | Sequence Planner 根据动作、运动、景别、亮度、情绪和共享语义解释相邻镜头 |
+| EG.3 | 源区间从「代表帧居中」升级为带置信度的动作相位取点 |
+| EG.4 | Recipe Planner 按镜头语义选择已验收 Effect/Color/Sound Recipe |
+| EG.5 | 新增独立 `edit_grammar_qa.json`，不与 Rhythm/Motion/Technical QA 混分 |
+
+该补强属于既有 Phase 5–7 产品级验收，不新增 Resolve capability，也不引入
+LLM 时间码逻辑。真实动作 landmark 尚未落库时，Schema 必须保留低置信度证据，
+禁止把 shot-level 估计写成逐帧检测结论。

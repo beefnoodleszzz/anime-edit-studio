@@ -20,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SPEC_VERSION = "2.1.0"
+SPEC_VERSION = "2.2.0"
 
 ShotRole = Literal[
     "opening", "character_intro", "build", "pre_drop", "impact", "release", "ending",
@@ -28,6 +28,25 @@ ShotRole = Literal[
 TrackKind = Literal["video", "audio", "subtitle"]
 DecisionSource = Literal["ai", "user", "rule"]
 MotionStage = Literal["hold", "accelerate", "whip", "carry", "settle", "reverse"]
+CutRelationKind = Literal[
+    "establish",
+    "continuation",
+    "match_action",
+    "graphic_match",
+    "contrast",
+    "reaction",
+    "parallel",
+    "reveal",
+    "ellipsis",
+]
+SourcePhase = Literal[
+    "representative",
+    "anticipation",
+    "action",
+    "impact",
+    "reaction",
+    "settle",
+]
 
 
 class _Base(BaseModel):
@@ -168,6 +187,28 @@ class Decision(_Base):
     locked: bool = Field(False, description="用户锁定后 Revision 不得改动")
 
 
+class CutRelation(_Base):
+    """The editorial reason this clip follows the previous clip.
+
+    This is deliberately semantic metadata, not a Resolve transition.  A
+    match-action cut may still execute as a plain hard cut.
+    """
+
+    kind: CutRelationKind = "continuation"
+    motivation: str = Field(..., min_length=1)
+    confidence: float = Field(..., ge=0, le=1)
+    matched_features: list[str] = Field(default_factory=list)
+
+
+class SourceSelection(_Base):
+    """Why this exact source window was chosen inside the detected shot."""
+
+    phase: SourcePhase = "representative"
+    anchor_sec: float = Field(..., ge=0, description="素材绝对秒")
+    confidence: float = Field(..., ge=0, le=1)
+    evidence: list[str] = Field(default_factory=list)
+
+
 class MotionBeat(_Base):
     """One clip's role inside a cross-cut motion phrase."""
 
@@ -216,6 +257,8 @@ class Clip(_Base):
     audio: ClipAudio = Field(default_factory=ClipAudio)
 
     decision: Decision = Field(default_factory=Decision)
+    incoming_cut: CutRelation | None = None
+    source_selection: SourceSelection | None = None
 
     @model_validator(mode="after")
     def _check_speed_consistency(self):

@@ -108,6 +108,12 @@ class TestSeamlessConcatenation:
         assert tb.duration_frames(0.0, 0.001) == 1
         assert tb.duration_frames(10.0, 0.0) == 1
 
+    def test_rebased_duration_preserves_target_frame_count(self):
+        source = Timebase(30000, 1001)
+        timeline = Timebase(24000, 1001)
+        assert source.frames_for_rebased_duration(48, timeline) == 60
+        assert timeline.frames_for_rebased_duration(48, timeline) == 48
+
 
 class TestTimecodeString:
     def test_non_drop_frame(self):

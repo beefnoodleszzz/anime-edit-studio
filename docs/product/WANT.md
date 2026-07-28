@@ -2485,6 +2485,11 @@ Rendering V2.
 
 Picture locked.
 
+### 默认交付画布
+
+新作品默认采用 `1:1` 方形画布：首剪与预览为 1080×1080，正式超分交付为
+3072×3072。旧项目保持自身已声明的 Canvas；只有用户明确要求时才派生新的比例版本。
+
 Running:
 high quality retime
 final Fusion
@@ -2956,3 +2961,37 @@ docs/planning/MIGRATION_PLAN.md
 现状审计 → Gap Analysis → Target Architecture → Migration Plan → Resolve PoC → 渐进式迁移。
 
 这样你后面无论换 Codex、Claude Code，还是两者交叉开发，整个项目的“方向盘”都不会再掌握在某一个 AI 的临时判断里。
+
+---
+
+# 通用作品制作流程与首剪就绪门禁
+
+本流程适用于任意动漫、角色和音乐：
+
+`Director Contract → Source Scope → Appearance Catalog（按需联网）`
+`→ Production Readiness Gate → 定向 Ingest/Shots/Analyze`
+`→ MusicMap/VisualPhrasePlan → Naked First Cut → Resolve Choreography`
+`→ Picture Lock → 超分/Master/Technical QA/Delivery`
+
+每个项目必须明确作品、角色/主题、时长、必须包含/避免内容，以及允许使用的
+season / arc / episode / asset 范围。角色高频剧集属于素材准备信息，不属于
+Sequence Planner 业务逻辑。
+
+首剪前必须生成 `ProductionReadinessReport`，至少包含：
+
+- scope 内资产总数、已入库数、代理可达数；
+- `shots > 0` 的资产比例及所有未分镜资产；
+- motion / embedding / tags / visual / cutability 分析覆盖率；
+- 目标角色/主题候选总量与 clean / action / emotional / hold 分布；
+- 按预计槽位时长计算的唯一候选可行性；
+- 外部 appearance 资料的 URL、获取时间与置信度；
+- `ready`、阻塞原因和可重试补齐命令。
+
+`ready=false` 时禁止生成首剪。系统只补齐报告指出的缺口，不得无边界扫描整个素材库，
+也不得通过允许字幕、负面表情、喜剧污染或重复镜头来掩盖素材准备失败。
+联网不是默认步骤；只有本地候选不足或 scope 存在未分析资产时，才研究角色高频剧集，
+结果进入版本化 Appearance Catalog，供同一作品和角色跨项目复用。
+
+第一阶段必须是 Naked First Cut，只验收音乐、选镜、视觉乐句和切镜。
+裸切通过后才进入 Resolve Choreography，把 hold / carry / reverse / impact / settle
+编译为已 verified 的 MotionPhrase、Retime、Transition、Color 和 Sound Recipe。

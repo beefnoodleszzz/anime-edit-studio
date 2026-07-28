@@ -14,9 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from studio.core.hashing import stable_hash
 
-from .fingerprint import StyleFingerprint
+from .fingerprint import MotionCurvePoint, StyleFingerprint
 
-EDITING_STYLE_PROFILE_VERSION = "editing-style-profile-1.2.0"
+EDITING_STYLE_PROFILE_VERSION = "editing-style-profile-1.4.0"
 
 
 class EditingStyleProfile(BaseModel):
@@ -40,6 +40,7 @@ class EditingStyleProfile(BaseModel):
     beat_sync_target: float = Field(0.55, ge=0, le=1)
     beat_tolerance_sec: float = Field(0.08, gt=0, le=0.25)
     impact_snap_priority: float = Field(1.0, ge=0, le=2)
+    beat_grid_subdivision: Literal["adaptive", "section_1_2_4"] = "adaptive"
     hook_duration_ratio: float = Field(0.075, ge=0.03, le=0.2)
     hook_event_count: int = Field(5, ge=1, le=8)
     ending_duration_ratio: float = Field(0.24, ge=0.08, le=0.4)
@@ -54,6 +55,11 @@ class EditingStyleProfile(BaseModel):
     shot_scale_pattern: list[float] = Field(default_factory=list)
     motion_direction_pattern: list[str] = Field(default_factory=list)
     motion_intensity_pattern: list[float] = Field(default_factory=list)
+    motion_curve: list[MotionCurvePoint] = Field(default_factory=list)
+    motion_peaks: list[float] = Field(default_factory=list)
+    motion_zero_crossings: list[float] = Field(default_factory=list)
+    direction_reversals: list[float] = Field(default_factory=list)
+    cut_carry_vectors: list[dict] = Field(default_factory=list)
     motion_median_target: float = Field(0.3, ge=0)
     motion_p75_target: float = Field(0.8, ge=0)
     motion_dynamic_range_target: float = Field(2.0, ge=1)
@@ -215,6 +221,11 @@ def compile_editing_style(
         motion_intensity_pattern=_percentile_pattern(
             fingerprint.motion_magnitude_sequence
         ),
+        motion_curve=fingerprint.motion_curve,
+        motion_peaks=fingerprint.motion_peaks,
+        motion_zero_crossings=fingerprint.motion_zero_crossings,
+        direction_reversals=fingerprint.direction_reversals,
+        cut_carry_vectors=fingerprint.cut_carry_vectors,
         motion_median_target=motion_median,
         motion_p75_target=motion_p75,
         motion_dynamic_range_target=max(

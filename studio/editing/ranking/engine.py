@@ -8,7 +8,7 @@ import sqlite3
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-RANKING_VERSION = "candidate-ranking-1.1.0"
+RANKING_VERSION = "candidate-ranking-1.2.0"
 
 
 class CandidateContext(BaseModel):
@@ -135,8 +135,8 @@ def rank_candidates(
     *,
     limit: int = 50,
 ) -> list[RankedCandidate]:
-    if not 1 <= limit <= 50:
-        raise ValueError("精排输出必须在 1..50")
+    if not 1 <= limit <= 200:
+        raise ValueError("精排输出必须在 1..200")
     if not shot_ids:
         return []
     conn.row_factory = sqlite3.Row
@@ -170,9 +170,18 @@ def rank_candidates(
             )
         semantic = 0.5
         if context.character:
-            semantic += 0.25 if context.character.lower() in (
-                (row["character"] or "") + "," + (row["tags"] or "")
-            ).lower() else -0.25
+            character = context.character.lower()
+            tags = (row["tags"] or "").lower()
+            if character == (row["character"] or "").lower():
+                semantic += 0.30
+            elif character in tags:
+                semantic += 0.12
+            else:
+                semantic -= 0.25
+            semantic += 0.08 if "solo" in tags else 0.0
+            semantic -= 0.08 if any(
+                value in tags for value in ("multiple_boys", "multiple_girls")
+            ) else 0.0
         if context.action:
             semantic += 0.25 if context.action.lower() in (
                 (row["action"] or "") + "," + (row["tags"] or "")

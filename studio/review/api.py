@@ -113,7 +113,7 @@ def create_review_app(
                       project_id,character_query,theme,target_emotions,duration_sec,
                       aspect_ratio,target_platform,creative_contract_json,
                       created_at,updated_at
-                    ) VALUES (?,?,?,?,?,'4:5',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                    ) VALUES (?,?,?,?,?,'1:1',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),
                       strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                     """,
                     (

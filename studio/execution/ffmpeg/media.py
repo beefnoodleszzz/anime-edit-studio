@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+DELIVERY_TARGET_LUFS = -11.0
+
 
 class MediaToolError(RuntimeError):
     pass

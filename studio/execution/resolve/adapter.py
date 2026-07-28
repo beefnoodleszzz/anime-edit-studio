@@ -302,6 +302,7 @@ class ResolveAdapter:
               "source_in_sec": float,    # 源入点（源时基）
               "source_out_sec": float,   # 源出点（源时基）
               "timeline_in_sec": float,  # 时间线落点（交付时基）
+              "timeline_duration_sec": float, # 目标时间线时长
               "track_index": int,        # 1-based
               "media_fps": Timebase,     # 源时基
               "timeline_fps": Timebase,  # 交付时基
@@ -329,10 +330,25 @@ class ResolveAdapter:
             src_fps: Timebase = r["media_fps"]
             tl_fps: Timebase = r["timeline_fps"]
             start_f = src_fps.to_frames(r["source_in_sec"])
-            # P11：按时长取帧，保证套格后的时间线时长精确
-            n_frames = src_fps.duration_frames(
-                r["source_in_sec"], r["source_out_sec"] - r["source_in_sec"]
-            )
+            source_duration = r["source_out_sec"] - r["source_in_sec"]
+            if r.get("timeline_duration_sec") is not None:
+                # The placement boundary is authoritative.  Converting source
+                # duration independently can produce a one-frame gap when its
+                # rounding phase differs from recordFrame.  First derive the
+                # exact target-frame count, then rebase that duration to the
+                # source timebase.
+                target_frames = tl_fps.duration_frames(
+                    r["timeline_in_sec"], r["timeline_duration_sec"]
+                )
+                n_frames = src_fps.frames_for_rebased_duration(
+                    target_frames,
+                    tl_fps,
+                )
+            else:
+                # P11：按时长取帧，保证套格后的时间线时长精确
+                n_frames = src_fps.duration_frames(
+                    r["source_in_sec"], source_duration
+                )
             end_f = start_f + n_frames
             payload.append(
                 {
@@ -383,6 +399,59 @@ class ResolveAdapter:
         items = self.timeline_items(track_index)
         if items:
             self.timeline.DeleteClips(items)
+
+    # ---------- 变速插值（retime_interpolation，2026-07-28 实测） ----------
+
+    _RETIME_INTERPOLATION_VALUES = {"nearest", "frameBlend", "opticalFlow"}
+    _MOTION_ESTIMATION_VALUES = {
+        "standardFaster", "standardBetter", "enhancedFaster", "enhancedBetter",
+    }
+
+    def set_retime_interpolation(
+        self, interpolation: str, *, motion_estimation: str = "enhancedBetter"
+    ) -> None:
+        """设置素材 fps 与时间线 fps 不一致时的插帧方式。
+
+        这是**工程级**设置（``project.SetSetting``），不是逐 clip 的开关 ——
+        对本工程里所有需要 conform 的素材统一生效。per-clip
+        ``TimelineItem.SetProperty('RetimeProcess'/'MotionEstimation', int)``
+        实测走不通：只能触达 nearest/frame_blend 两种效果，摸不到真正的光流
+        （见 config/resolve_capabilities.yaml -> retime_interpolation_mapping，
+        证据 docs/probes/retime_mapping_probe.json）。
+
+        真正生效的是这条工程级字符串设置（同一份证据文件确认，见
+        project_setting_retime_interpolation），但有一个前提：**调用之前不能
+        对目标 clip 用过 per-clip SetProperty('RetimeProcess'/'MotionEstimation', ...)**，
+        否则那个残留的 clip 级值会盖过工程级设置，本方法读回校验也测不出来
+        （返回值仍是 True，只是渲染时没生效）。正常通过 append_clips 放置、
+        从未被逐 clip 调过速度/插值属性的素材不受影响。
+
+        Args:
+            interpolation: "nearest" | "frameBlend" | "opticalFlow"。
+                没有 "speedWarp" —— 实测这个值在这个设置项里一律被拒，
+                目前找不到任何脚本入口能激活 Speed Warp。
+            motion_estimation: "standardFaster" | "standardBetter" |
+                "enhancedFaster" | "enhancedBetter"。仅在
+                interpolation="opticalFlow" 时影响画质/速度权衡。
+        """
+        if interpolation not in self._RETIME_INTERPOLATION_VALUES:
+            raise ValueError(
+                f"interpolation 必须是 {sorted(self._RETIME_INTERPOLATION_VALUES)} 之一，"
+                f"收到 {interpolation!r}（注意没有 'speedWarp'，脚本层暂时无法激活）"
+            )
+        if motion_estimation not in self._MOTION_ESTIMATION_VALUES:
+            raise ValueError(
+                f"motion_estimation 必须是 {sorted(self._MOTION_ESTIMATION_VALUES)} 之一，"
+                f"收到 {motion_estimation!r}"
+            )
+        if not self.project.SetSetting("imageRetimeInterpolation", interpolation):
+            raise ResolveOperationError(
+                f"project.SetSetting('imageRetimeInterpolation', {interpolation!r}) 被拒绝"
+            )
+        if not self.project.SetSetting("imageMotionEstimationMode", motion_estimation):
+            raise ResolveOperationError(
+                f"project.SetSetting('imageMotionEstimationMode', {motion_estimation!r}) 被拒绝"
+            )
 
     # ---------- 标记（IR ↔ Resolve 双向定位，TARGET A15） ----------
 
@@ -593,6 +662,100 @@ class ResolveAdapter:
             raise ResolveOperationError("MotionBlurTransition.Length 表达式回读不一致")
         return expression
 
+    @staticmethod
+    def _reverse_scale_expression(scale: float, ease_in: str) -> str:
+        """Push away from safe overscan to fill; never scale below 1."""
+        return f"1 + ({scale:.9f})*(1-({ease_in}))"
+
+    @staticmethod
+    def _reverse_offset_expression(
+        signed_distance: float, ease_in: str
+    ) -> str:
+        """Return from the prior Pull endpoint to center without a cut jump."""
+        return f"({signed_distance:.9f})*(1-({ease_in}))"
+
+    @staticmethod
+    def _localized_cut_envelopes(last: int, width: int) -> tuple[str, str]:
+        """Cubic entry decay and exit acceleration localized around clip edges."""
+        safe_width = max(1, width)
+        entry_progress = f"min(1,max(0,time/({safe_width})))"
+        exit_progress = (
+            f"min(1,max(0,(time-({last - safe_width}))/({safe_width})))"
+        )
+        entry_decay = f"(1-({entry_progress}))*(1-({entry_progress}))*(1-({entry_progress}))"
+        exit_rise = f"({exit_progress})*({exit_progress})*({exit_progress})"
+        return entry_decay, exit_rise
+
+    @classmethod
+    def _velocity_smooth_shake_curves(
+        cls,
+        *,
+        duration_frames: int,
+        sign: float,
+        translation: float,
+        scale_delta: float,
+        rotation_deg: float,
+        blur_strength: float,
+        intensity: float,
+    ) -> dict[str, dict[float, float]]:
+        last = duration_frames - 1
+        fast_settle = max(1, round(last * 0.25))
+        stable = max(fast_settle + 1, round(last * 0.50))
+        anticipation = max(stable + 1, round(last * 0.69))
+        points = (0, fast_settle, stable, anticipation, last)
+        distance = translation * intensity
+        scale = scale_delta * intensity
+        rotation = rotation_deg * intensity
+        curves = {
+            "center_x": {
+                float(points[0]): 0.5 - sign * distance,
+                float(points[1]): 0.5 - sign * distance * 0.14,
+                float(points[2]): 0.5,
+                float(points[3]): 0.5 + sign * distance * 0.14,
+                float(points[4]): 0.5 + sign * distance,
+            },
+            "center_y": {float(frame): 0.5 for frame in points},
+            "size": {
+                float(points[0]): 1.04 + scale,
+                float(points[1]): 1.04 + scale / 12,
+                float(points[2]): 1.04,
+                float(points[3]): 1.04 + scale / 12,
+                float(points[4]): 1.04 + scale * 5 / 6,
+            },
+            "angle": {
+                float(points[0]): -sign * rotation,
+                float(points[1]): -sign * rotation / 8,
+                float(points[2]): 0.0,
+                float(points[3]): sign * rotation / 8,
+                float(points[4]): sign * rotation,
+            },
+        }
+        return curves
+
+    @staticmethod
+    def _create_scalar_spline(comp, name: str, values: dict[float, float]):
+        spline = comp.BezierSpline()
+        if not spline:
+            raise ResolveOperationError(f"{name}: BezierSpline 创建失败")
+        spline.SetAttrs({"TOOLS_Name": name})
+        spline.SetKeyFrames(
+            {float(frame): {1: float(value)} for frame, value in values.items()}
+        )
+        actual = spline.GetKeyFrames() or {}
+        if set(actual) != set(values):
+            raise ResolveOperationError(f"{name}: BezierSpline 关键帧回读不一致")
+        return spline
+
+    @classmethod
+    def _connect_scalar_spline(
+        cls, comp, input_object, name: str, values: dict[float, float]
+    ):
+        spline = cls._create_scalar_spline(comp, name, values)
+        output = (spline.GetOutputList() or {}).get(1)
+        if output is None or not input_object.ConnectTo(output):
+            raise ResolveOperationError(f"{name}: BezierSpline 连接失败")
+        return spline
+
     def build_motion_phrase_comp(
         self,
         item,
@@ -636,7 +799,24 @@ class ResolveAdapter:
         if media_in is None or media_out is None:
             raise ResolveOperationError("MotionPhrase comp 缺 MediaIn/MediaOut")
         previous = media_in
-        if retime is not None:
+        beat_locked_curve = (
+            retime is None
+            and stage in {"carry", "reverse"}
+            and duration_frames <= 16
+        )
+        beat_curves = None
+        if beat_locked_curve:
+            sign = 1.0 if stage == "carry" else -1.0
+            beat_curves = self._velocity_smooth_shake_curves(
+                duration_frames=duration_frames,
+                sign=sign,
+                translation=translation,
+                scale_delta=scale_delta,
+                rotation_deg=rotation_deg,
+                blur_strength=blur_strength,
+                intensity=intensity,
+            )
+        elif retime is not None:
             speed = comp.AddTool("TimeStretcher")
             speed.SetAttrs({"TOOLS_Name": "SpeedRamp"})
             if not speed.ConnectInput("Input", previous):
@@ -656,6 +836,34 @@ class ResolveAdapter:
         if not transform.ConnectInput("Input", previous):
             raise ResolveOperationError("MotionPhrase Transform 连接失败")
         last = duration_frames - 1
+        if beat_locked_curve and beat_curves is not None:
+            center_x = self._create_scalar_spline(
+                comp, "BeatShakeCenterX", beat_curves["center_x"]
+            )
+            center_y = self._create_scalar_spline(
+                comp, "BeatShakeCenterY", beat_curves["center_y"]
+            )
+            center_expression = "Point(BeatShakeCenterX.Value, BeatShakeCenterY.Value)"
+            transform.Center.SetExpression(center_expression)
+            if transform.Center.GetExpression() != center_expression:
+                raise ResolveOperationError("BeatShake Center 表达式回读不一致")
+            self._connect_scalar_spline(
+                comp, transform.Size, "BeatShakeSize", beat_curves["size"]
+            )
+            self._connect_scalar_spline(
+                comp, transform.Angle, "BeatShakeAngle", beat_curves["angle"]
+            )
+            if not media_out.ConnectInput("Input", transform):
+                raise ResolveOperationError("BeatShake MediaOut 连接失败")
+            names = item.GetFusionCompNameList() or []
+            current_name = names[-1] if names else None
+            if current_name and current_name != comp_name:
+                if not item.RenameFusionCompByName(current_name, comp_name):
+                    raise ResolveOperationError(
+                        f"MotionPhrase comp 重命名失败: {comp_name}"
+                    )
+            return comp
+
         # Fusion Transform.Center moves the image content in the opposite
         # visual direction, so semantic left/up require a positive center.
         sign = 1.0 if direction in {"left", "up"} else -1.0
@@ -665,21 +873,23 @@ class ResolveAdapter:
         t = f"(time/{last})"
         ease_in = f"({t})*({t})*({t})"
         ease_out = f"(1-(1-{t})*(1-{t})*(1-{t}))"
+        width = max(1, transition_frames - 1)
+        entry_decay, exit_rise = self._localized_cut_envelopes(last, width)
         if stage in {"accelerate", "whip"}:
-            offset = f"({sign * distance:.9f})*({ease_in})"
-            size = f"1 + ({scale:.9f})*({ease_in})"
+            offset = f"({sign * distance:.9f})*({exit_rise})"
+            size = f"1 + ({scale:.9f})*({exit_rise})"
         elif stage == "carry":
-            offset = f"({sign * distance:.9f})*(2*({ease_out})-1)"
-            size = (
-                f"1 + ({scale:.9f})*"
-                f"(1-abs(2*({ease_out})-1))*0.65"
-            )
+            envelope = f"min(1,({entry_decay})+({exit_rise}))"
+            offset = f"({sign * distance:.9f})*({envelope})"
+            size = f"1 + ({scale:.9f})*({envelope})"
         elif stage == "settle":
-            offset = f"({-sign * distance:.9f})*(1-({ease_out}))"
-            size = f"1 + ({scale * 0.55:.9f})*(1-({ease_out}))"
+            offset = f"({sign * distance:.9f})*({entry_decay})"
+            size = f"1 + ({scale:.9f})*({entry_decay})"
         elif stage == "reverse":
-            offset = f"({-sign * distance:.9f})*({ease_in})"
-            size = f"1 + ({scale:.9f})*({ease_in})"
+            offset = self._reverse_offset_expression(sign * distance, ease_in)
+            # Push-away starts at the prior Pull-in endpoint and returns to the
+            # fill baseline. Scale stays >= 1, preventing exposed canvas.
+            size = self._reverse_scale_expression(scale, ease_in)
         else:
             offset = "0"
             size = "1"
@@ -702,13 +912,24 @@ class ResolveAdapter:
                     f"MotionPhrase Transform.{label} 表达式回读不一致"
                 )
 
+        peak = blur_strength * intensity
+        if peak <= 0:
+            if not media_out.ConnectInput("Input", transform):
+                raise ResolveOperationError("MotionPhrase MediaOut 连接失败")
+            names = item.GetFusionCompNameList() or []
+            current_name = names[-1] if names else None
+            if current_name and current_name != comp_name:
+                if not item.RenameFusionCompByName(current_name, comp_name):
+                    raise ResolveOperationError(
+                        f"MotionPhrase comp 重命名失败: {comp_name}"
+                    )
+            return comp
+
         blur = comp.AddTool("DirectionalBlur")
         blur.SetAttrs({"TOOLS_Name": "MotionBlur"})
         blur.SetInput("Angle", 0.0 if axis_x else 90.0)
         if not blur.ConnectInput("Input", transform):
             raise ResolveOperationError("MotionPhrase DirectionalBlur 连接失败")
-        width = max(1, transition_frames - 1)
-        peak = blur_strength * intensity
         entry_envelope = f"max(0, 1-abs(time-0)/({width}))"
         exit_envelope = f"max(0, 1-abs(time-({last}))/({width}))"
         if stage in {"accelerate", "whip"}:

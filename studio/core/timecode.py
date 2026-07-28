@@ -140,6 +140,22 @@ class Timebase:
                                + Fraction(duration_sec).limit_denominator(1_000_000_000))
         return max(1, end_f - start_f)
 
+    def frames_for_rebased_duration(
+        self,
+        target_frames: int,
+        target_timebase: "Timebase",
+    ) -> int:
+        """Source-frame count representing an exact target-frame duration.
+
+        This keeps cross-timebase rounding in the one authoritative timecode
+        module.  It is used when Resolve needs a source-frame half-open range
+        whose conformed duration must exactly fill known timeline boundaries.
+        """
+        if target_frames < 1:
+            raise TimecodeError("目标时长必须至少 1 帧")
+        exact = Fraction(target_frames) * self.rate / target_timebase.rate
+        return max(1, int(exact + Fraction(1, 2)))
+
     # ---------- timecode 字符串 ----------
 
     def to_timecode(self, frames: int) -> str:

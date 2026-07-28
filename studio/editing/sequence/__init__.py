@@ -9,6 +9,12 @@ from .planner import (
     role_source_duration_requirements,
 )
 from .recipe_plan import RECIPE_PLANNER_VERSION, apply_recipe_plan
+from .visual_phrase import (
+    VISUAL_PHRASE_VERSION,
+    VisualPhrase,
+    VisualPhrasePlan,
+    plan_visual_phrases,
+)
 
 __all__ = [
     "SEQUENCE_PLANNER_VERSION",
@@ -19,4 +25,8 @@ __all__ = [
     "role_source_duration_requirements",
     "RECIPE_PLANNER_VERSION",
     "apply_recipe_plan",
+    "VISUAL_PHRASE_VERSION",
+    "VisualPhrase",
+    "VisualPhrasePlan",
+    "plan_visual_phrases",
 ]

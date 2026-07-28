@@ -42,6 +42,7 @@ class ShotAnalysis(_Base):
     blur_score: ConfidenceValue
     camera_motion: ConfidenceValue
     cutability: ConfidenceValue
+    graphic_features: ConfidenceValue | None = None
 
 
 __all__ = ["ConfidenceValue", "ShotAnalysis", "SubjectBox"]

@@ -145,11 +145,47 @@ capabilities:
 
   retime_interpolation_mapping:
     path: native_api
-    api: "SetProperty('RetimeProcess'/'MotionEstimation', int)"
+    api: "SetProperty('RetimeProcess'/'MotionEstimation', int)  ← 已废弃，见下方 project_setting_retime_interpolation"
     probed: true
     verified: false
+    available: false
     priority: high
-    note: "整数 0–3 可写已确认，但各档视觉语义尚未用渲染对照映射；未映射前不得由 nearest/frame_blend/optical_flow 枚举生成整数。"
+    fallback: "project_setting_retime_interpolation（project.SetSetting('imageRetimeInterpolation', str)）"
+    evidence: docs/probes/retime_mapping_probe.json
+    note: |
+      ★ 2026-07-28 渲染对照实测（把 23.976fps 素材摆到 47.952fps 时间线，
+      被动 conform，不做显式变速）：per-clip SetProperty('RetimeProcess', int)
+      只能触达两种行为（0/1=nearest 复制帧，2/3=frame_blend 交叉溶解），触达不到
+      真正的运动补偿光流；'Speed'/'SpeedPercent' 属性也一律被拒。
+      这条 per-clip 整数属性路径已废弃 —— 真正生效的入口是工程级字符串设置，
+      见 project_setting_retime_interpolation。若某个 clip 之前被 SetProperty
+      显式写过 RetimeProcess/MotionEstimation，这个 per-clip 值会盖过工程级
+      设置，必须用从未被脚本碰过的新 clip 才能验证工程级设置的效果。
+
+  project_setting_retime_interpolation:
+    path: native_api
+    api: "project.SetSetting('imageRetimeInterpolation', str) / project.SetSetting('imageMotionEstimationMode', str)"
+    probed: true
+    verified: true
+    evidence: docs/probes/retime_project_setting_fresh_probe.json
+    note: |
+      ★ 2026-07-28 用从未被 per-clip SetProperty 碰过的新 clip 实测确认。
+      imageRetimeInterpolation 只接受三个精确字符串（大小写敏感，camelCase）：
+        "nearest" | "frameBlend" | "opticalFlow"
+      "speedWarp"（含所有大小写/拼写变体）一律被拒 —— Speed Warp 在这个工程
+      级设置里不存在，目前找不到任何脚本入口能激活它（Speed 相关 per-clip
+      属性也全部被拒，见 retime_interpolation_mapping）。Speed Warp 只能靠
+      GUI 手动拖 retime 手柄 / Change Clip Speed 对话框，脚本层暂时是死路。
+      imageMotionEstimationMode 接受: "standardFaster" | "standardBetter" |
+        "enhancedFaster" | "enhancedBetter"
+      渲染对照（23.976fps clip 摆到 47.952fps 时间线，被动 conform）：
+        nearest:     52/70 帧对完全重复（丢帧复制）
+        frameBlend:  0 重复帧，插值帧 Laplacian 锐度约为相邻真帧的 50%（重影/溶解）
+        opticalFlow: 0 重复帧，插值帧锐度约为相邻真帧的 80-90%（运动补偿，非溶解）
+      三档清晰可辨，可安全用于生成 EditSpec 的
+      retime.interpolation: nearest|frame_blend|optical_flow 枚举。
+      注意生效前提：目标 clip 不能有遗留的 per-clip RetimeProcess/MotionEstimation
+      SetProperty 覆盖，否则工程级设置不生效。
 
 # ─────────────────────────────────────────────────────────────
 # 方法已确认存在，待 Phase 1/6 实测（这些是本次探测最大的收获）
@@ -237,7 +273,7 @@ capabilities:
       （第一版探测曾误取 780s 之外的黑场画面，导致对照组也"无差异"。
         黑场上任何重构图都不可见 —— 视觉验证必须先确认画面有内容。）
 
-      影响：横屏→4:5 的主体感知重构图无法依赖 Resolve 原生能力，
+      影响：横屏→默认 1:1 画布的主体感知重构图无法依赖 Resolve 原生能力，
       改为在 Phase 3 用自研主体检测产出 Pan/ZoomX 参数，
       再经已验证的 transform 通道写入。可控性反而更好，但工作量增加。
 

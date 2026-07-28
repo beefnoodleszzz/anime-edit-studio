@@ -34,3 +34,6 @@ output/
 .playwright-mcp/
 .DS_Store
 docs/probes/fusion_motion_out/
+docs/probes/fusion_spline_out/
+cache/
+预览文件：projects/

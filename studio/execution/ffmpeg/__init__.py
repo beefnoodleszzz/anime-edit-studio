@@ -1,6 +1,7 @@
 """Tool-level FFmpeg helpers (probe/extract/QA only; never a renderer backend)."""
 
 from studio.execution.ffmpeg.media import (
+    DELIVERY_TARGET_LUFS,
     MediaProbe,
     create_proxy,
     create_shot_preview,
@@ -13,6 +14,7 @@ from studio.execution.ffmpeg.media import (
 )
 
 __all__ = [
+    "DELIVERY_TARGET_LUFS",
     "MediaProbe",
     "create_proxy",
     "create_shot_preview",

@@ -30,7 +30,7 @@ from studio.editing.sequence import (
 )
 from studio.editing.timing import apply_action_sync
 from studio.editing.sound import apply_sound_design
-from studio.editspec.schema import AudioLayer, EditSpec, Marker
+from studio.editspec.schema import AudioLayer, EditSpec, Marker, Timebase
 from studio.execution.ffmpeg import DELIVERY_TARGET_LUFS, measure_integrated_lufs
 
 REPO = Path(__file__).resolve().parents[2]
@@ -71,6 +71,36 @@ def _load_action_peaks(conn, *, shot_ids: list[str]) -> tuple[dict, dict]:
         if peaks:
             peaks_by_shot[row["id"]] = peaks
     return peaks_by_shot, shot_starts
+
+
+def _reference_timebase(reference_path: Path | None) -> Timebase | None:
+    """Deliver at the reference's native frame rate.
+
+    A whip edit's fluidity and motion blur read differently at 30fps than at
+    23.976; matching the reference (a.mp4 is 30fps) is part of learning its
+    method, not a cosmetic choice.  ``r_frame_rate`` is an exact rational, so the
+    timebase stays precise (30/1, 24000/1001, 30000/1001, …).
+    """
+    if reference_path is None:
+        return None
+    try:
+        import subprocess
+
+        raw = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=r_frame_rate", "-of",
+                "default=noprint_wrappers=1:nokey=1", str(reference_path),
+            ],
+            capture_output=True, text=True, timeout=20,
+        ).stdout.strip()
+        num_s, _, den_s = raw.partition("/")
+        num, den = int(num_s), int(den_s or "1")
+        if num <= 0 or den <= 0:
+            return None
+        return Timebase(num=num, den=den)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _tone_allows_menacing_expression(tone: list[str] | None) -> bool:
@@ -365,12 +395,17 @@ def create_first_cut(
                 (project_id,),
             )
         }
+        delivery_timebase = _reference_timebase(reference_path)
+        plan_kwargs = {}
+        if delivery_timebase is not None:
+            plan_kwargs["timebase"] = delivery_timebase
         spec = plan_sequence(
             conn,
             plan=plan,
             music=music,
             candidates_by_role=candidates_by_role,
             selected_by_role=selected_by_role,
+            **plan_kwargs,
         )
         spec.audio.append(
             AudioLayer(

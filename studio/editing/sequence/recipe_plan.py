@@ -144,26 +144,63 @@ def apply_recipe_plan(
             ]
         starts: list[int] = []
         grammar_available = any(clip.incoming_cut is not None for clip in clips)
-        for peak_time in peak_times:
-            start = min(
-                range(max(1, len(clips) - 3)),
-                key=lambda index: abs(
-                    clips[index + 1].timeline.in_sec - peak_time
-                ),
-            )
-            if (
-                clips[start].timeline.in_sec < plan.duration_sec - 1.8
-                and all(abs(start - existing) >= 4 for existing in starts)
-                and (
-                    not grammar_available
-                    or sum(
-                        clip.incoming_cut is not None
-                        and clip.incoming_cut.kind == "match_action"
-                        for clip in clips[start + 1:start + 4]
-                    ) >= 2
+        # A whip-driven reference (a.mp4: p75≈5.9, change-ratio≈0.9) carries the
+        # motion *through* the cut — the join is hidden by movement, so it is the
+        # motion/visual continuity that motivates the phrase, not a literal
+        # match-action.  Requiring match_action here left whip references with
+        # zero phrases (a plain hard-cut slideshow).  For such references admit a
+        # phrase where the span is dominated by motion-continuous joins.
+        whip_reference = (
+            style.motion_p75_target >= 3.0 or style.motion_change_ratio >= 0.6
+        )
+        motion_link_kinds = {
+            "match_action", "graphic_match", "continuation", "carry",
+        }
+        if whip_reference:
+            # a.mp4 rides continuous whip phrases end to end — the motion never
+            # dies between accents.  Tile adjacent 4-clip phrases across the body
+            # so nearly every shot is carried by movement, not just isolated
+            # peaks.  Skip a span only if it lacks any motion-continuous join.
+            cursor = 0
+            while cursor + 4 <= len(clips):
+                if clips[cursor].timeline.in_sec >= plan.duration_sec - 1.8:
+                    break
+                span = clips[cursor + 1:cursor + 4]
+                motion_joins = sum(
+                    clip.incoming_cut is not None
+                    and clip.incoming_cut.kind in motion_link_kinds
+                    for clip in span
                 )
-            ):
-                starts.append(start)
+                contrast_joins = sum(
+                    clip.incoming_cut is not None
+                    and clip.incoming_cut.kind == "contrast"
+                    for clip in span
+                )
+                # A span that is all reversal/contrast is a deliberate hard-cut
+                # accent; leave it un-whipped for kinetic relief.
+                if not grammar_available or motion_joins >= 1 or contrast_joins < 3:
+                    starts.append(cursor)
+                cursor += 4
+        else:
+            for peak_time in peak_times:
+                start = min(
+                    range(max(1, len(clips) - 3)),
+                    key=lambda index: abs(
+                        clips[index + 1].timeline.in_sec - peak_time
+                    ),
+                )
+                span = clips[start + 1:start + 4]
+                motivated = sum(
+                    clip.incoming_cut is not None
+                    and clip.incoming_cut.kind == "match_action"
+                    for clip in span
+                ) >= 2
+                if (
+                    clips[start].timeline.in_sec < plan.duration_sec - 1.8
+                    and all(abs(start - existing) >= 4 for existing in starts)
+                    and (not grammar_available or motivated)
+                ):
+                    starts.append(start)
         starts.sort()
         absolute_scale = min(2.2, max(0.65, style.motion_p75_target / 2.4))
         for phrase_index, cursor in enumerate(starts):
@@ -231,15 +268,23 @@ def apply_recipe_plan(
                         ),
                     ],
                     direction=direction,
+                    # A whip reference wants a *visible* drag, not micro-motion:
+                    # widen the displacement/scale/blur envelope so the cut is
+                    # carried by movement (a.mp4 rides ×2.7 motion through cuts).
                     translation=min(
-                        0.16,
-                        (0.012 + 0.032 * peak) * absolute_scale * tail_scale,
+                        0.32 if whip_reference else 0.16,
+                        (0.012 + 0.032 * peak) * absolute_scale * tail_scale
+                        * (1.9 if whip_reference else 1.0),
                     ),
                     scale_delta=min(
-                        0.12,
-                        (0.008 + 0.024 * peak) * absolute_scale * tail_scale,
+                        0.26 if whip_reference else 0.12,
+                        (0.008 + 0.024 * peak) * absolute_scale * tail_scale
+                        * (1.9 if whip_reference else 1.0),
                     ),
-                    blur_strength=0.06 + 0.3 * peak,
+                    blur_strength=min(
+                        0.5,
+                        (0.06 + 0.3 * peak) * (1.5 if whip_reference else 1.0),
+                    ),
                     cut_window_sec=min(
                         0.24,
                         min(clip.timeline.duration_sec for clip in group) / 3,

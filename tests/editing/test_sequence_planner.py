@@ -12,6 +12,7 @@ from studio.editing.sequence import (
     planned_rhythm_metrics,
     role_source_duration_requirements,
 )
+from studio.editing.sequence.planner import MIN_REPEAT_GAP
 
 
 def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
@@ -101,6 +102,76 @@ def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
     assert conn.execute("SELECT count(*) FROM edit_specs").fetchone()[0] == 1
     requirements = role_source_duration_requirements(plan, music)
     assert requirements["build"] >= 1
+
+
+def test_thin_pool_holds_rhythm_by_reuse_not_long_shots(tmp_path):
+    """A thin pool must keep the beat-locked cut density by reusing shots on
+    later beats, never by hanging one shot across many beats (the slideshow bug).
+    """
+    conn = connect(tmp_path / "v2.sqlite")
+    with conn:
+        conn.execute(
+            "INSERT INTO assets(id,path,sha256,fps_num,fps_den,duration_sec) "
+            "VALUES ('a','x','hash',24,1,40)"
+        )
+        # Only 6 distinct shots, each long enough to satisfy any short slot.
+        conn.executemany(
+            """
+            INSERT INTO shots(
+              id,asset_id,idx,start_sec,end_sec,character,motion_dir,
+              shot_scale,visual_energy,motion_mag
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            [
+                (
+                    f"s{i}", "a", i, i * 4, i * 4 + 3.5, "akaza",
+                    "right" if i % 2 else "left", 0.3 + i * 0.08,
+                    0.4 + i * 0.08, 0.5 + i * 0.05,
+                )
+                for i in range(6)
+            ],
+        )
+    plan = DirectorPlan(
+        project_id="thin", revision=1, duration_sec=8,
+        primary_characters=["akaza"], tone=["aggressive"],
+        structure=[
+            DirectorSection(
+                role="drop", start=0, end=8, energy=0.8, average_shot_length=0.5,
+            )
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=2, flash_max=2, shake_max=2),
+        generation={"llm_used": False},
+    )
+    beats = [round(0.5 * i, 2) for i in range(16)]
+    music = MusicMap(
+        duration_sec=8, bpm=120, beats=beats, bars=[0], downbeats=[0, 2, 4, 6],
+        onsets=[], beat_energy=[],
+        sections=[MusicSection(type="drop", start=0, end=8, energy=0.8)],
+        impact_points=[2, 4, 6], risers=[], breaks=[], silences=[],
+        spectral_change_points=[],
+    )
+    candidates = [
+        RankedCandidate(
+            shot_id=f"s{i}", intrinsic=0.7, contextual=0.8 - i * 0.02,
+            total=0.75 - i * 0.01, intrinsic_components={}, contextual_components={},
+        )
+        for i in range(6)
+    ]
+    spec = plan_sequence(
+        conn, plan=plan, music=music, candidates_by_role={"impact": candidates}
+    )
+    # Density is held: far more clips than the 6-shot pool, not collapsed to it.
+    assert len(spec.clips) >= 10
+    # No slideshow: every shot stays short (the bug hung shots at 5.5s).
+    assert all(clip.timeline.duration_sec <= 1.5 for clip in spec.clips)
+    # Reuse happened, but never within the repeat gap.
+    ordered = sorted(spec.clips, key=lambda c: c.timeline.in_sec)
+    ids = [c.shot_id for c in ordered]
+    assert len(ids) > len(set(ids))
+    for i, shot in enumerate(ids):
+        assert shot not in ids[max(0, i - MIN_REPEAT_GAP):i]
 
 
 def test_forced_role_shot_is_not_consumed_by_an_earlier_role(tmp_path):

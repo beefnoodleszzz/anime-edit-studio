@@ -35,11 +35,19 @@ from studio.editspec.schema import (
     TimelinePlacement,
 )
 
-SEQUENCE_PLANNER_VERSION = "sequence-planner-3.0.0"
+SEQUENCE_PLANNER_VERSION = "sequence-planner-3.1.0"
 _ROLE = {
     "buildup": "build",
     "drop": "impact",
 }
+
+# When the candidate pool is thinner than the beat-locked cut count, keeping the
+# rhythm matters more than never repeating a shot: a燃-cut edit reuses its
+# strongest shots on later beats rather than hanging one shot across many beats.
+# A shot may reappear only after this many other clips, and each reuse is
+# penalized so fresh shots always win when they exist.
+MIN_REPEAT_GAP = 4
+REPEAT_PENALTY = 0.6
 
 
 def canonical_role(role: str) -> str:
@@ -440,8 +448,20 @@ def _fit_slots_to_unique_coverage(
     music: MusicMap,
     candidates_by_role: dict[str, list[RankedCandidate]],
     row_by_id: dict[str, sqlite3.Row],
+    max_shot_length: float,
 ) -> list[_Slot]:
-    """Remove the weakest cuts when unique candidate coverage is insufficient."""
+    """Keep the beat-locked cut density; only intervene if reuse can't cover it.
+
+    Beam search now reuses shots on non-adjacent beats (see ``MIN_REPEAT_GAP``),
+    so a thin pool no longer forces cuts to be merged into long shots — that
+    merge is exactly what turned a 33-cut plan into an 11-shot slideshow.  With
+    reuse available, any cut count is fillable as long as the pool can sustain
+    the repeat gap, so the common case returns the slots untouched.
+
+    Only a genuinely tiny pool (fewer distinct shots than the repeat gap needs)
+    still requires dropping cuts, and even then a merged shot may never exceed
+    ``max_shot_length`` — rhythm is preserved over shot variety.
+    """
     unique_ids = {
         item.shot_id
         for values in candidates_by_role.values()
@@ -449,14 +469,10 @@ def _fit_slots_to_unique_coverage(
         if item.shot_id in row_by_id
     }
     fitted = list(slots)
+    if len(unique_ids) >= MIN_REPEAT_GAP + 1:
+        return fitted
     anchors = [*music.beats, *music.impact_points]
-    # Sparse pools need headroom for role and duration constraints; a raw
-    # one-id-per-slot count is not a feasible matching guarantee.
-    target_count = (
-        max(1, int(len(unique_ids) * 0.82))
-        if len(unique_ids) < len(fitted) * 2
-        else len(fitted)
-    )
+    target_count = max(1, len(unique_ids))
     while len(fitted) > target_count:
         choices: list[tuple[float, float, int, _Slot]] = []
         for index in range(len(fitted) - 1):
@@ -464,6 +480,9 @@ def _fit_slots_to_unique_coverage(
             if left.role != right.role:
                 continue
             duration = left.duration + right.duration
+            # Never let a merge produce a long, rhythm-breaking shot.
+            if duration > max_shot_length + 1e-6:
+                continue
             pool = candidates_by_role.get(left.role, [])
             if not any(
                 (
@@ -865,16 +884,24 @@ def plan_sequence(
         music=music,
         candidates_by_role=candidates_by_role,
         row_by_id=row_by_id,
+        max_shot_length=max(1.2, plan.editing_style.max_shot_length),
     )
     forced_used: set[str] = set()
     reserved_for_role = {
         shot_id: role
         for role, shot_id in (selected_by_role or {}).items()
     }
+    global_pool = [
+        item for values in candidates_by_role.values() for item in values
+    ]
     for slot_index, slot in enumerate(slots):
         pool = candidates_by_role.get(slot.role, [])
-        if not pool:
-            pool = [item for values in candidates_by_role.values() for item in values]
+        # Guarantee enough distinct candidates to sustain the reuse gap even for
+        # a run of same-role slots on a thin character; role-appropriate shots
+        # still score higher, the global tail is only feasibility headroom.
+        if len({item.shot_id for item in pool}) < MIN_REPEAT_GAP + 1:
+            seen = {item.shot_id for item in pool}
+            pool = [*pool, *(item for item in global_pool if item.shot_id not in seen)]
         expansions = []
         for state in states:
             prior = state.rows[-1] if state.rows else None
@@ -887,8 +914,13 @@ def plan_sequence(
                 if reserved_role is not None and reserved_role != slot.role:
                     continue
                 row = row_by_id.get(candidate.shot_id)
-                if row is None or row["id"] in state.shot_ids:
+                if row is None:
                     continue
+                # Reuse is allowed, but never within MIN_REPEAT_GAP clips — a
+                # shot must not reappear adjacently or in the same phrase.
+                if row["id"] in state.shot_ids[-MIN_REPEAT_GAP:]:
+                    continue
+                reuse_count = state.shot_ids.count(row["id"])
                 source_duration = row["end_sec"] - row["start_sec"]
                 # Extremely long "shots" in anime sources are almost always
                 # undetected credit/title sequences or static production cards.
@@ -966,6 +998,7 @@ def plan_sequence(
                     + 0.08 * _sequence_novelty(row, state.rows)
                     + 0.10 * duration_conservation
                     + 0.12 * intent_motion_fit
+                    - REPEAT_PENALTY * reuse_count
                 )
                 viable.append((value, row))
             viable.sort(key=lambda item: (-item[0], item[1]["id"]))
@@ -981,7 +1014,8 @@ def plan_sequence(
                 )
         if not expansions:
             raise ValueError(
-                f"slot {slot.role}@{slot.start:.3f}s 无满足时长且不重复的候选"
+                f"slot {slot.role}@{slot.start:.3f}s 无满足时长的候选"
+                "（含重复兜底后仍无解）"
             )
         expansions.sort(key=lambda state: (-state.score, state.shot_ids))
         states = expansions[:beam_width]

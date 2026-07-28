@@ -304,6 +304,21 @@ capabilities:
     verified: false
     note: "可把调好的 grade 导成 LUT，作为 recipe 产物存档"
 
+  per_clip_color_match:
+    path: native_api
+    api: "PostClip Graph.SetLUT (per-TimelineItem) / SetCDL"
+    probed: false
+    verified: false
+    priority: high
+    note: |
+      W3 Color Shot-Match：studio/editing/color 已确定性完成「测量→解算→生成 per-clip
+      .cube→ColorMatch QA」。执行侧复用已验证的 color_recipe LUT 挂载机制，但
+      「每个 TimelineItem 各自挂一张校正 LUT」这条 per-clip 路径尚未做渲染对照实测
+      （现有 color_recipe 证据是 ColorGroup 级整体 LUT，非逐镜）。
+      按 R3，在实测确认逐镜 SetLUT 生效且不串扰之前，不得把 color_match 校正写入可执行
+      EditSpec。探测计划：对相邻两镜分别挂不同校正 LUT，渲染后比对各自帧统计是否按各自
+      校正移动、且不影响对方帧。
+
   scene_cut_detection:
     path: native_api
     api: "Timeline.DetectSceneCuts"

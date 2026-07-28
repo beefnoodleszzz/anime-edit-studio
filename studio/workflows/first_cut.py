@@ -8,7 +8,11 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from studio.core.database import DEFAULT_V2_DB, connect
-from studio.critic.creative import evaluate_edit_grammar, evaluate_rhythm
+from studio.critic.creative import (
+    evaluate_edit_grammar,
+    evaluate_rhythm,
+    evaluate_sound_design,
+)
 from studio.creative.director import DirectorBrief, generate_director_plan
 from studio.creative.preference import PreferenceModel, preference_signal
 from studio.creative.reference import analyze_reference
@@ -25,6 +29,7 @@ from studio.editing.sequence import (
     plan_visual_phrases,
 )
 from studio.editing.timing import apply_action_sync
+from studio.editing.sound import apply_sound_design
 from studio.editspec.schema import AudioLayer, EditSpec, Marker
 from studio.execution.ffmpeg import DELIVERY_TARGET_LUFS, measure_integrated_lufs
 
@@ -42,6 +47,7 @@ class FirstCutResult(BaseModel):
     edit_grammar_qa_path: str
     visual_phrase_path: str
     cut_accuracy_path: str
+    sound_design_path: str | None = None
     candidate_group_ids: list[str]
     clip_count: int
     duration_sec: float
@@ -410,6 +416,18 @@ def create_first_cut(
         )
         cut_accuracy_path = root / "cut_accuracy_report.json"
         _write_atomic(cut_accuracy_path, cut_accuracy.model_dump_json(indent=2))
+        # Sound design: lay a designed three-piece SFX layer on the drum
+        # targets, then score it.  Runs after Action Sync so cues key off the
+        # final cut/retime timing.
+        if not naked_cut:
+            spec, sound_design = apply_sound_design(spec, music=music, plan=plan)
+            sound_design_path = root / "sound_design.json"
+            _write_atomic(sound_design_path, sound_design.model_dump_json(indent=2))
+            sound_qa = evaluate_sound_design(spec, music)
+            sound_qa_path = root / "sound_qa.json"
+            _write_atomic(sound_qa_path, sound_qa.model_dump_json(indent=2))
+        else:
+            sound_design_path = None
         # Revalidate after attaching the external audio layer.
         spec = EditSpec.model_validate(spec.model_dump(mode="python", by_alias=True))
         with conn:
@@ -437,6 +455,7 @@ def create_first_cut(
             edit_grammar_qa_path=str(edit_grammar_qa_path),
             visual_phrase_path=str(visual_phrase_path),
             cut_accuracy_path=str(cut_accuracy_path),
+            sound_design_path=str(sound_design_path) if sound_design_path else None,
             candidate_group_ids=group_ids,
             clip_count=len(spec.clips),
             duration_sec=spec.duration_sec,

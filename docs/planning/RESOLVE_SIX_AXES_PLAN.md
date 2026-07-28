@@ -9,6 +9,24 @@
 
 ---
 
+## 交付状态（2026-07-28 更新）
+
+W1–W4 的**确定性代码层已全部落地并测试通过**（新增 37 项测试，全套 237 通过）。
+需要实机 Resolve 探测 / GUI 搭 comp / 人工验收的部分，按 R3/R4 保持 unverified，
+这是规则下的正确完成态，不是遗漏。
+
+| 工作项 | 已交付（可测试/已测试） | 仍 gated（需实机/人工） |
+|---|---|---|
+| **W1 Action Sync** | action-peak 检测（10Hz 光流，migration 010）、speed-ramp 解算器（复用 compiler 源时曲线）、apply_action_sync 后处理 pass、`cut_accuracy_report.json` 验收表 | 无——全部走已 verified 的 timespeed 通道 |
+| **W2 Sound Design** | 三件套 SoundDesign 生成器（budget/silence 约束）、per-clip at_sec 映射、`evaluate_sound_design` QA、first-cut 接线 | sfx Recipe 已 verified；无新 gated 项 |
+| **W3 Color Shot-Match** | 逐镜测量、bounded 校正解算、.cube LUT 烘焙、`evaluate_color_match` QA | `per_clip_color_match` 逐镜 SetLUT 渲染对照未做 → 不进 EditSpec |
+| **W4 Fusion 分层** | W4a rembg 前景遮罩分析（migration 011）、`detect_layering_opportunities` 动机检测 | `parallax_25d_v1` / `occlusion_cut_v1` 需 GUI 搭 comp + 渲染对照 → 保持 verified:false |
+
+落地模块：`studio/editing/timing/`（W1）、`studio/editing/sound/` + `studio/critic/creative/sound.py`（W2）、
+`studio/editing/color/`（W3）、`studio/execution/external_ai/subject_mask.py` + `studio/editing/sequence/layering.py`（W4）。
+
+---
+
 ## 0. 结论先行
 
 | 备忘录方向 | v2 现状 | 差距定性 | 优先级 |

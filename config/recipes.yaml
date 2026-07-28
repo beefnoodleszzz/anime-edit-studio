@@ -330,3 +330,26 @@ recipes:
   preview: recipes/color/signature_teal_orange_v1/preview.mp4
   acceptance: recipes/color/signature_teal_orange_v1/ACCEPTANCE.md
   parameters: {}
+- id: parallax_25d_v1
+  version: 0.1.0
+  kind: effect
+  engine: resolve_fusion
+  capability: parallax_25d
+  verified: false
+  artifact: recipes/effects/parallax_25d_v1/parallax_25d_v1.comp
+  preview: recipes/effects/parallax_25d_v1/preview.mp4
+  acceptance: recipes/effects/parallax_25d_v1/ACCEPTANCE.md
+  parameters:
+    subject_push: {type: float, min: 0.0, max: 0.2, default: 0.08}
+    background_push: {type: float, min: 0.0, max: 0.1, default: 0.02}
+- id: occlusion_cut_v1
+  version: 0.1.0
+  kind: transition
+  engine: resolve_fusion
+  capability: occlusion_cut
+  verified: false
+  artifact: recipes/effects/occlusion_cut_v1/occlusion_cut_v1.comp
+  preview: recipes/effects/occlusion_cut_v1/preview.mp4
+  acceptance: recipes/effects/occlusion_cut_v1/ACCEPTANCE.md
+  parameters:
+    wipe_frames: {type: int, min: 2, max: 16, default: 6}

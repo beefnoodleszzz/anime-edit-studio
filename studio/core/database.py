@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
@@ -425,6 +425,24 @@ def _migration_010(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE shots ADD COLUMN action_peaks_version TEXT")
 
 
+def _migration_011(conn: sqlite3.Connection) -> None:
+    """Persist self-hosted per-shot subject foreground layers (W4a)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subject_layers (
+            shot_id TEXT NOT NULL REFERENCES shots(id) ON DELETE CASCADE,
+            version TEXT NOT NULL,
+            sample_fps REAL NOT NULL,
+            mean_coverage REAL NOT NULL,
+            horizontal_sweep REAL NOT NULL,
+            samples_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            PRIMARY KEY(shot_id, version)
+        )
+        """
+    )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -436,6 +454,7 @@ MIGRATIONS = (
     (8, _migration_008),
     (9, _migration_009),
     (10, _migration_010),
+    (11, _migration_011),
 )
 
 

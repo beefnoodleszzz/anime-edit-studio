@@ -372,6 +372,28 @@ capabilities:
       Resolve 21.0.3.7 实渲：6 秒 144 帧完整；动态范围 2.11、hold 21.7%，
       跨切点运动连续性由基线 0.00 提升至 0.90。
 
+  parallax_25d:
+    path: fusion_recipe
+    api: "one-comp subject/background dual Transform on measured matte"
+    probed: false
+    verified: false
+    priority: medium
+    note: |
+      W4b 2.5D 视差。分析侧 subject_layers（W4a rembg 前景遮罩）已确定性完成。
+      执行 Recipe parallax_25d_v1 需 GUI 搭单 comp（主体 Transform 快于背景）+ Export +
+      代码注参 + 渲染对照（视差可见、无边缘撕裂、帧数不变）。未实测前按 R3 不进 EditSpec。
+
+  occlusion_cut:
+    path: fusion_recipe
+    api: "two-sided bridge (out on left clip, in on right clip)"
+    probed: false
+    verified: false
+    priority: medium
+    note: |
+      W4c 遮挡式切镜。用主体横向扫过（subject_layers.horizontal_sweep）遮挡硬切点。
+      必须双侧 bridge，禁止 CreateFusionClip 合并（会毁掉 per-clip 身份、阻断连续切点）。
+      Recipe occlusion_cut_v1 需 GUI 双侧 comp + 渲染对照后才能 verified。
+
   fairlight_automation:
     path: unsupported
     probed: true

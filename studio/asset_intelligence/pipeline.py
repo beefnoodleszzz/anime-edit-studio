@@ -5,7 +5,10 @@ from pathlib import Path
 
 from studio.asset_intelligence.audio import analyze_pending_audio
 from studio.asset_intelligence.embeddings import OpenClipBackend, encode_pending
-from studio.asset_intelligence.motion import analyze_pending_motion
+from studio.asset_intelligence.motion import (
+    analyze_pending_action_peaks,
+    analyze_pending_motion,
+)
 from studio.asset_intelligence.visual import (
     WDTaggerBackend,
     analyze_cutability,
@@ -31,6 +34,10 @@ def analyze_assets(
     try:
         report["legacy_tags"] = hydrate_legacy_tags(conn) if asset_id is None else 0
         report["motion"] = analyze_pending_motion(
+            conn, cache_root=cache_root, asset_id=asset_id
+        )
+        # Action peaks depend on motion_mag being populated first.
+        report["action_peaks"] = analyze_pending_action_peaks(
             conn, cache_root=cache_root, asset_id=asset_id
         )
         if include_models:

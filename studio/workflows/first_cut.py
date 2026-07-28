@@ -16,6 +16,7 @@ from studio.editing.candidates import create_group, generate_review_assets
 from studio.editing.music import analyze_music
 from studio.editing.ranking import CandidateContext, rank_candidates
 from studio.editing.retrieval import RetrievalQuery, retrieve
+from studio.asset_intelligence.motion import load_action_peaks
 from studio.editing.sequence import (
     canonical_role,
     apply_recipe_plan,
@@ -23,6 +24,7 @@ from studio.editing.sequence import (
     role_source_duration_requirements,
     plan_visual_phrases,
 )
+from studio.editing.timing import apply_action_sync
 from studio.editspec.schema import AudioLayer, EditSpec, Marker
 from studio.execution.ffmpeg import DELIVERY_TARGET_LUFS, measure_integrated_lufs
 
@@ -39,9 +41,30 @@ class FirstCutResult(BaseModel):
     rhythm_qa_path: str
     edit_grammar_qa_path: str
     visual_phrase_path: str
+    cut_accuracy_path: str
     candidate_group_ids: list[str]
     clip_count: int
     duration_sec: float
+
+
+def _load_action_peaks(conn, *, shot_ids: list[str]) -> tuple[dict, dict]:
+    """Fetch measured action peaks and shot starts for the planned clips."""
+    peaks_by_shot: dict[str, list] = {}
+    shot_starts: dict[str, float] = {}
+    unique = sorted(set(shot_ids))
+    if not unique:
+        return peaks_by_shot, shot_starts
+    placeholders = ",".join("?" for _ in unique)
+    rows = conn.execute(
+        f"SELECT id,start_sec,action_peaks FROM shots WHERE id IN ({placeholders})",
+        unique,
+    ).fetchall()
+    for row in rows:
+        shot_starts[row["id"]] = float(row["start_sec"])
+        peaks = load_action_peaks(row["action_peaks"])
+        if peaks:
+            peaks_by_shot[row["id"]] = peaks
+    return peaks_by_shot, shot_starts
 
 
 def _tone_allows_menacing_expression(tone: list[str] | None) -> bool:
@@ -373,6 +396,20 @@ def create_first_cut(
         )
         if not naked_cut:
             spec = apply_recipe_plan(spec, plan=plan)
+        # Action Sync: land measured action peaks on musical targets and emit a
+        # deterministic acceptance table.  Runs after recipe planning so it can
+        # override the style-density speed ramp with a peak-anchored one.
+        peaks_by_shot, shot_starts = _load_action_peaks(
+            conn, shot_ids=[clip.shot_id for clip in spec.clips]
+        )
+        spec, cut_accuracy = apply_action_sync(
+            spec,
+            music=music,
+            peaks_by_shot=peaks_by_shot,
+            shot_starts=shot_starts,
+        )
+        cut_accuracy_path = root / "cut_accuracy_report.json"
+        _write_atomic(cut_accuracy_path, cut_accuracy.model_dump_json(indent=2))
         # Revalidate after attaching the external audio layer.
         spec = EditSpec.model_validate(spec.model_dump(mode="python", by_alias=True))
         with conn:
@@ -399,6 +436,7 @@ def create_first_cut(
             rhythm_qa_path=str(rhythm_qa_path),
             edit_grammar_qa_path=str(edit_grammar_qa_path),
             visual_phrase_path=str(visual_phrase_path),
+            cut_accuracy_path=str(cut_accuracy_path),
             candidate_group_ids=group_ids,
             clip_count=len(spec.clips),
             duration_sec=spec.duration_sec,

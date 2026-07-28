@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
@@ -416,6 +416,15 @@ def _migration_009(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_010(conn: sqlite3.Connection) -> None:
+    """Persist measured frame-exact action peaks per shot (Action Sync)."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(shots)")}
+    if "action_peaks" not in existing:
+        conn.execute("ALTER TABLE shots ADD COLUMN action_peaks TEXT")
+    if "action_peaks_version" not in existing:
+        conn.execute("ALTER TABLE shots ADD COLUMN action_peaks_version TEXT")
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -426,6 +435,7 @@ MIGRATIONS = (
     (7, _migration_007),
     (8, _migration_008),
     (9, _migration_009),
+    (10, _migration_010),
 )
 
 

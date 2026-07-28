@@ -190,9 +190,12 @@ def create_first_cut(
                 project_id=project_id,
                 character=character,
                 subtitle_allowed=False,
-                # A high face threshold over-selects distressed close-ups and
-                # suppresses the stronger medium/wide action compositions.
-                min_face=0.30 if zenitsu else 0.40,
+                # A high face threshold over-selects face-forward close-ups and
+                # suppresses the stronger medium/wide action compositions.  This
+                # starves the impact role for action-forward characters whose
+                # dynamic footage is framed wide (Zenitsu's speed, an action
+                # villain's fights), so relax the gate for those.
+                min_face=0.30 if (zenitsu or menacing_expression) else 0.40,
                 min_pose=0.30,
                 min_eye=0.10,
                 min_image_quality=0.72,

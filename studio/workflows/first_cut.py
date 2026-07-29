@@ -29,6 +29,10 @@ from studio.editing.sequence import (
     plan_visual_phrases,
 )
 from studio.editing.camera import assign_camera_moves
+from studio.editing.readiness import (
+    ProductionNotReady,
+    evaluate_production_readiness,
+)
 from studio.editing.timing import apply_action_sync
 from studio.editing.sound import apply_sound_design
 from studio.editspec.schema import AudioLayer, EditSpec, Marker, Timebase
@@ -387,6 +391,27 @@ def create_first_cut(
             )
             group_ids.append(group.id)
             generate_review_assets(conn, group, output_dir=root / "previews")
+        # R11 gate: refuse before planning, not after rendering.  This runs on
+        # the assembled candidate pool because that is where the failure it
+        # guards against is visible — a name that resolved to nothing, or a pool
+        # that spans several works because the query matched a look.
+        readiness = evaluate_production_readiness(
+            conn,
+            project_id=project_id,
+            character=(primary_characters or [None])[0],
+            candidate_shot_ids=sorted(
+                {
+                    item.shot_id
+                    for ranked in candidates_by_role.values()
+                    for item in ranked
+                }
+            ),
+        )
+        _write_atomic(
+            root / "production_readiness.json", readiness.model_dump_json(indent=2)
+        )
+        if not readiness.ready:
+            raise ProductionNotReady(readiness)
         selected_by_role = {
             row["role"]: row["selected_shot_id"]
             for row in conn.execute(

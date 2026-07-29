@@ -12,6 +12,12 @@ from pathlib import Path
 
 import typer
 
+from studio.creative.director.plan import (
+    HOOK_RANGE_SEC,
+    HOUSE_DURATION_RANGE,
+    HOUSE_DURATION_SEC,
+)
+
 app = typer.Typer(
     add_completion=False,
     help="Anime Edit Studio —— AI 导演 / EditSpec IR / DaVinci Resolve 执行",
@@ -192,7 +198,16 @@ def review_cmd(
 def first_cut_cmd(
     project_id: str = typer.Argument(...),
     music: Path = typer.Option(..., "--music", exists=True, dir_okay=False),
-    duration: float = typer.Option(25.0, "--duration", min=1),
+    duration: float = typer.Option(
+        HOUSE_DURATION_SEC,
+        "--duration",
+        min=1,
+        help=(
+            f"成片时长，默认走 house 版式 {HOUSE_DURATION_RANGE[0]:.0f}–"
+            f"{HOUSE_DURATION_RANGE[1]:.0f}s（{HOOK_RANGE_SEC[0]:.0f}–"
+            f"{HOOK_RANGE_SEC[1]:.0f}s 钩子 + 其余踩鼓点）。"
+        ),
+    ),
     reference: Path | None = typer.Option(
         None, "--reference", exists=True, dir_okay=False
     ),

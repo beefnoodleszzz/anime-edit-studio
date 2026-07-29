@@ -20,6 +20,18 @@ from studio.editing.music import MusicMap
 
 DIRECTOR_PLAN_VERSION = "1"
 
+# ── House cut format ────────────────────────────────────────────────────────
+# The standing delivery shape for this studio: a 16–20s piece that opens with a
+# 3–5s hook and spends everything after it on beat-locked cutting.  This is a
+# format, not a rule about content — which shots, which character, which tone
+# still come from the brief and the footage.  It lives here rather than in the
+# CLI default because every entry point (CLI, review API, scheduled runs) must
+# land on the same shape; a default that only one caller honours is not a house
+# format.
+HOUSE_DURATION_SEC = 18.0
+HOUSE_DURATION_RANGE = (16.0, 20.0)
+HOOK_RANGE_SEC = (3.0, 5.0)
+
 
 class DirectorBrief(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -119,6 +131,79 @@ def _fallback_arc(
     ]
 
 
+def _musical_boundary(music: MusicMap, low: float, high: float) -> float | None:
+    """Best musical event to end the hook on, inside ``[low, high]``.
+
+    The hook must end *on* something the ear already hears — a section change,
+    an impact, a downbeat — otherwise the handover into the beat-locked body is
+    an arbitrary timestamp and reads as a stumble.  Preference order follows how
+    strongly each event is felt.
+    """
+    for candidates in (
+        [section.start for section in music.sections],
+        list(music.impact_points),
+        list(music.downbeats),
+        list(music.beats),
+    ):
+        inside = [value for value in candidates if low <= value <= high]
+        if inside:
+            return min(inside, key=lambda value: abs(value - sum((low, high)) / 2))
+    return None
+
+
+def _shape_hook(
+    structure: list[DirectorSection],
+    music: MusicMap,
+    duration: float,
+    reference_asl: float,
+) -> list[DirectorSection]:
+    """Force the opening to be a 3–5s hook, then hand off to the beat-locked body.
+
+    Music-section boundaries do not care about our delivery format: on an 18s
+    window they routinely put the first change at 2.1s or 7.4s, which is either
+    too short to establish anything or long enough to bore.  So the head is
+    reshaped to land inside the hook window, snapped to a musical event, and
+    whatever section it displaced keeps the remainder of its span.
+    """
+    if not structure or duration <= HOOK_RANGE_SEC[1] + 1.0:
+        return structure
+    low, high = HOOK_RANGE_SEC
+    high = min(high, duration * 0.35)
+    low = min(low, high)
+    head = structure[0]
+    if low <= head.end <= high:
+        return structure
+    hook_end = _musical_boundary(music, low, high) or (low + high) / 2
+    reshaped = [
+        head.model_copy(
+            update={
+                "end": hook_end,
+                # The hook is the one place a longer shot earns its keep: it has
+                # to establish who and where before the body starts cutting.
+                "average_shot_length": max(
+                    head.average_shot_length, min(2.2, reference_asl * 1.35)
+                ),
+            }
+        )
+    ]
+    for section in structure[1:]:
+        if section.end <= hook_end:
+            continue
+        reshaped.append(
+            section.model_copy(update={"start": max(section.start, hook_end)})
+            if section.start < hook_end else section
+        )
+    if len(reshaped) == 1:
+        reshaped.append(
+            DirectorSection(
+                role="impact", start=hook_end, end=duration,
+                energy=max(0.6, head.energy),
+                average_shot_length=max(0.4, min(2.2, reference_asl)),
+            )
+        )
+    return reshaped
+
+
 def _write_yaml_atomic(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -203,6 +288,7 @@ def generate_director_plan(
                 average_shot_length=min(2.2, reference_asl * 1.4),
             )
         )
+    structure = _shape_hook(structure, music, duration, reference_asl)
     if conn is not None:
         revision = (
             conn.execute(

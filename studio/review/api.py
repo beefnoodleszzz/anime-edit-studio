@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from studio.core.database import DEFAULT_V2_DB, connect
 from studio.core.state import WorkflowState, current_state, fail, transition
+from studio.creative.director.plan import HOUSE_DURATION_SEC
 from studio.editing.candidates import choose_candidate, precision_metrics
 
 REPO = Path(__file__).resolve().parents[2]
@@ -33,7 +34,9 @@ class ProjectCreateRequest(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=120)
     intent: str = Field(..., min_length=1, max_length=4000)
-    duration_sec: float = Field(25.0, ge=5, le=180)
+    # House format default: 16–20s with a 3–5s hook.  Longer stays allowed —
+    # some pieces need it — but it has to be an explicit choice, not the default.
+    duration_sec: float = Field(HOUSE_DURATION_SEC, ge=5, le=180)
     platform: str = Field("douyin", max_length=40)
     primary_characters: list[str] = Field(default_factory=list, max_length=8)
     tone: list[str] = Field(default_factory=list, max_length=12)

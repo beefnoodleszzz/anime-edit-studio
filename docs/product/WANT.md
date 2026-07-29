@@ -2966,6 +2966,25 @@ docs/planning/MIGRATION_PLAN.md
 
 # 通用作品制作流程与首剪就绪门禁
 
+## House 版式（默认交付形态）
+
+除非项目显式指定，所有成片走同一个版式：
+
+- **总时长 16–20s**（默认 18s）。
+- **开头 3–5s 是钩子**，切点落在音乐事件上（section 变化 / impact / downbeat），
+  不落在任意时间戳；钩子的平均镜长高于正片，因为它要先把"谁、在哪"立住。
+- **钩子之后全部踩鼓点剪**，交给 VisualPhrasePlan 与 Action Sync 按鼓点排切。
+
+这是**版式**，不是内容规则。用哪些镜头、什么角色、什么情绪、钩子里放什么，
+每次都按主题和人物重新设计；固定下来的只有时长和结构比例。
+
+实现落点：`studio/creative/director/plan.py` 的 `HOUSE_DURATION_SEC` /
+`HOUSE_DURATION_RANGE` / `HOOK_RANGE_SEC` 与 `_shape_hook`。所有入口
+（CLI `aes first-cut`、Review API 建项目）共用同一组常量——只有一个调用方遵守的
+默认值不算版式。更长的片子仍然允许，但必须是显式选择。
+
+---
+
 本流程适用于任意动漫、角色和音乐：
 
 `Director Contract → Source Scope → Appearance Catalog（按需联网）`

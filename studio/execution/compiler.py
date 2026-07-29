@@ -346,6 +346,13 @@ class ResolveCompiler:
         """
         requested = {c.retime.interpolation for c in spec.clips} - {"nearest"}
         if not requested:
+            # No explicit speed change, but a frame-rate conform (source fps !=
+            # timeline fps, e.g. 23.976 anime → 30fps delivery) still resamples
+            # every clip.  Default that conform to optical flow so limited-anime
+            # frames are interpolated instead of repeated (nearest) — repeated
+            # frames are exactly what made the 30fps delivery judder.  With no
+            # conform (source == timeline fps) this triggers no interpolation.
+            self.rv.set_retime_interpolation("opticalFlow")
             return
         if len(requested) > 1:
             raise ValueError(

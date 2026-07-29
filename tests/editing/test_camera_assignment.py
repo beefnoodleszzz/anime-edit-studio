@@ -13,6 +13,8 @@ from studio.editspec.schema import (
     Clip,
     CutRelation,
     EditSpec,
+    MotionBeat,
+    MotionPhrase,
     RecipeRef,
     SourceRange,
     Timebase,
@@ -126,6 +128,47 @@ def test_occupied_fusion_slot_is_skipped_not_silently_overwritten():
     assert updated.clips[1].camera.move == "pan_right"
     assert report.skipped_occupied == 1
     assert report.assigned == 1
+
+
+def test_motion_phrase_clip_is_skipped_not_silently_overwritten():
+    """A MotionPhrase beat also occupies the one Fusion comp slot.
+
+    Regression: _apply_recipes (compiler.py) builds the MotionPhrase comp
+    first, then unconditionally deletes *all* comps on the item before
+    building a camera curve (_fresh_transform_comp) — so a camera move
+    written onto a phrase clip silently overwrote the phrase's own comp at
+    render time. Confirmed on a real spec: all 32 clips carrying a
+    MotionPhrase beat also had camera.move set, meaning none of that
+    project's 8 computed whip/zoom/blur phrases ever actually rendered.
+    """
+    spec = _spec([_clip("s0", 0.0), _clip("s1", 0.5), _clip("s2", 1.0), _clip("s3", 1.5)])
+    spec.motion_phrases.append(
+        MotionPhrase(
+            id="phrase-0",
+            beats=[
+                MotionBeat(clip_id="s1", stage="accelerate", intensity=0.6),
+                MotionBeat(clip_id="s2", stage="reverse", intensity=0.6),
+            ],
+            direction="left",
+        )
+    )
+    conn = _conn([
+        ("s0", "left", 3.0), ("s1", "left", 3.0),
+        ("s2", "left", 3.0), ("s3", "left", 3.0),
+    ])
+    updated, report = assign_camera_moves(spec, conn=conn, music=_music())
+    by_id = {clip.id: clip for clip in updated.clips}
+    assert by_id["s1"].camera.move == "none"
+    assert by_id["s2"].camera.move == "none"
+    assert by_id["s0"].camera.move != "none"
+    assert by_id["s3"].camera.move != "none"
+    skipped_reasons = {
+        item.clip_id: item.reason
+        for item in report.decisions if item.basis == "skipped"
+    }
+    assert "motion_phrase" in skipped_reasons["s1"]
+    assert "motion_phrase" in skipped_reasons["s2"]
+    assert report.skipped_occupied == 2
 
 
 def test_impact_points_move_further_than_off_beat_cuts():

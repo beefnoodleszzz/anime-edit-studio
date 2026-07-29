@@ -110,16 +110,26 @@ class CameraAssignment(BaseModel):
     decisions: list[CameraDecision]
 
 
-def _fusion_slot_occupied(clip) -> bool:
+def _fusion_slot_occupied(clip, *, phrase_clip_ids: frozenset[str] = frozenset()) -> bool:
     """The compiler allows exactly one Fusion comp per clip.
 
-    Effects, speed ramps and motion-blur transitions all claim it, and they
-    already carry their own movement, so writing a camera move onto those clips
-    would be a silent no-op in the render and a lie in the spec.
+    Effects, speed ramps, motion-blur transitions, and MotionPhrase beats all
+    claim it, and they already carry their own movement, so writing a camera
+    move onto those clips would be a silent no-op in the render and a lie in
+    the spec — worse, it is not even a no-op: ``_apply_recipes`` builds the
+    MotionPhrase's Fusion comp first, then unconditionally deletes *all*
+    comps on the item before building the camera curve (see
+    ``_fresh_transform_comp``), so a camera move written onto a phrase clip
+    silently overwrites the phrase's own comp at render time. Confirmed on a
+    real spec: every one of 32 clips carrying a MotionPhrase beat also had a
+    non-"none" camera.move, meaning none of the 8 computed whip/zoom/blur
+    phrases were ever actually rendered — camera assignment ran after
+    recipe planning and clobbered all of them.
     """
     return bool(
         clip.effects
         or clip.retime.type == "speed_ramp"
+        or clip.id in phrase_clip_ids
         or any(
             end.recipe not in {"hard_cut", "none"}
             for end in (clip.transition.in_, clip.transition.out)
@@ -178,19 +188,28 @@ def assign_camera_moves(
     motion_by_shot = _load_shot_motion(
         conn, [clip.shot_id for clip in updated.clips]
     )
+    phrase_clip_ids = frozenset(
+        beat.clip_id
+        for phrase in updated.motion_phrases
+        for beat in phrase.beats
+    )
     decisions: list[CameraDecision] = []
     histogram: dict[str, int] = {}
     carried = broken = skipped = 0
     previous_move: str | None = None
 
     for index, clip in enumerate(updated.clips):
-        if _fusion_slot_occupied(clip):
+        if _fusion_slot_occupied(clip, phrase_clip_ids=phrase_clip_ids):
             skipped += 1
             decisions.append(
                 CameraDecision(
                     clip_id=clip.id, move="none", magnitude=0.0, curve="linear",
                     basis="skipped",
-                    reason="Fusion 槽位已被 effect/speed_ramp/transition 占用",
+                    reason=(
+                        "Fusion 槽位已被 motion_phrase 占用"
+                        if clip.id in phrase_clip_ids
+                        else "Fusion 槽位已被 effect/speed_ramp/transition 占用"
+                    ),
                 )
             )
             # A motion-phrase clip still moves, so the next clip may carry from

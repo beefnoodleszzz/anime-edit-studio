@@ -244,7 +244,21 @@ def generate_director_plan(
         editing_style = editing_style.model_copy(
             update={"normalized_cut_positions": []}
         )
-    if "vibe" in {item.strip().lower() for item in brief.tone}:
+    # House format: "spends everything after [the hook] on beat-locked
+    # cutting" (see module docstring). That only actually happens in
+    # _slots() when beat_grid_subdivision == "section_1_2_4" — the
+    # "adaptive" default follows the reference's own cut *pattern* instead,
+    # which snaps loosely to nearby beats but does not guarantee every beat
+    # in a high-energy section gets its own cut. That gap was previously
+    # only closed for tone == "vibe". A reference whose own measured
+    # beat_sync_target is already high (this project: 0.65, comfortably
+    # above the 0.55 default) has demonstrated the same beat-locked
+    # character the "vibe" case exists for, so it earns the same grid —
+    # not just chill/ambient content asked for it by name.
+    if (
+        "vibe" in {item.strip().lower() for item in brief.tone}
+        or editing_style.beat_sync_target >= 0.6
+    ):
         editing_style = editing_style.model_copy(
             update={"beat_grid_subdivision": "section_1_2_4"}
         )

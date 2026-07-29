@@ -27,6 +27,54 @@ W1–W4 的**确定性代码层已全部落地并测试通过**（新增 37 项�
 
 ---
 
+## 目的收敛（2026-07-29）
+
+分支立项时的目标是备忘录的六个方向。用猗窝座实战之后，真正的验收目标收敛为一句：
+**让系统自动剪出 a.mp4 那个水平的踩鼓点甩镜**——每个鼓点换新镜、切点踩准鼓点、
+镜头之间用运动曲线连成"被拖向下一镜"的甩感。猗窝座不是产品，是试金石。
+
+W1–W4 是骨架；此后逐项补的是骨架之外仍与 a.mp4 有差的地方（幻灯片式大长镜、
+30fps 交付、光流补帧、whip 短语铺满、每镜运镜曲线）。**W5 是其中最后一块：
+运镜方向的智能配向。**
+
+### W5 · Camera Assignment —— 每镜配向（2026-07-29 交付）
+
+上一步（camera-curve commit）打通了"能不能动"，但没人写 `clip.camera`，
+first-cut 出来的 spec 全是 `move=none`，能力只在探针手灌统一 pan 时才亮。
+
+先量后改。新增 `studio/critic/technical/camera_flow.py`：对任意成片测逐镜光流方向、
+跨切点方向延续率、方向熵。**a.mp4 实测结果推翻了原设计假设**：
+
+| 指标 | a.mp4 | b.mp4 | 统一 pan |
+|---|---|---|---|
+| carry_rate（方向跨切点延续） | 0.175 | 0.241 | 1.000 |
+| reversal_rate（跨切点反向） | 0.450 | 0.138 | 0.000 |
+| direction_entropy（8 向归一化熵） | 0.909 | 0.546 | 0.000 |
+| directional_shot_frac | 0.829 | 0.633 | 1.000 |
+| median_magnitude | 1.647 | 0.848 | — |
+
+a.mp4 的"拖拽感"**不是**每镜同向滑动堆出来的：它只有 17.5% 的切点延续方向，
+45% 直接反向，方向近乎均匀铺满八个象限。真正的来源是**每镜运动都强、方向变化大、
+在切点上硬翻**。所以配向规则是"顺素材自身实测运动而动"，同向承接只在素材本身
+无方向可骑时才由 CutRelation 决定——**恰好与直觉相反**。
+
+落地：`studio/editing/camera.py::assign_camera_moves`，接在 first-cut 的
+Action Sync 之后（这样能看见哪些 clip 的 Fusion 槽位已被 effect/ramp/transition 占用，
+跳过而不是写一个渲染时静默失效的假值），产出 `camera_assignment.json`。
+`CameraMove.move` 补 `pan_up` / `pan_down`（Transform 纵轴分支本已支持，缺的是 IR 枚举；
+素材中约 19% 主导运动是上下向）。
+
+验收门 `compare_camera_flow` 对 entropy / reversal / carry / directional_frac / magnitude
+五项与 a.mp4 基线比对，**统一 pan 会在其中三项同时判负**——这正是这道门存在的理由。
+基线落盘 `docs/probes/camera_flow_reference_a.json`（+ `_b.json`）。
+
+猗窝座 33 镜实跑：全部配到位，方向分布 pan_right 10 / pan_up 8 / pan_left 6 /
+pan_down 5 / push_in 4，18 镜顺素材实测方向、8 镜承接、3 镜反向、4 镜推镜。
+
+仍 gated：成片渲染后的 `measure_camera_flow` 对照需实机 Resolve 出片，未做不得声称达标。
+
+---
+
 ## 0. 结论先行
 
 | 备忘录方向 | v2 现状 | 差距定性 | 优先级 |

@@ -117,7 +117,14 @@ class Framing(_Base):
 
 
 class CameraMove(_Base):
-    move: Literal["none", "push_in", "push_out", "pan_left", "pan_right"] = "none"
+    # Vertical pans are not decoration: measured footage is ~19% up/down
+    # dominant, and forcing those shots onto a horizontal pan fights the
+    # subject's own movement instead of riding it.  The Fusion Transform curve
+    # already drives either axis, so the IR must be able to name both.
+    move: Literal[
+        "none", "push_in", "push_out",
+        "pan_left", "pan_right", "pan_up", "pan_down",
+    ] = "none"
     from_scale: float = Field(1.0, gt=0)
     to_scale: float = Field(1.0, gt=0)
     curve: Literal["linear", "ease_in", "ease_out", "ease_in_out"] = "linear"

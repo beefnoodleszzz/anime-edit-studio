@@ -238,6 +238,12 @@ capabilities:
       （push/pan），由 ResolveAdapter.build_camera_curve_comp 执行。2026-07-29 渲染
       对照实测：pan 方向的水平光流分量随曲线单调增长、帧数守恒、相邻同向镜头
       运动跨切点连续。静态 SetProperty(transform) 不可冒充动画。
+      2026-07-29 补：move 增加 pan_up / pan_down（Transform 的纵轴分支本已支持，
+      仅 IR 缺少枚举），素材中约 19% 的主导运动是上下向，横向 pan 会与之相剪。
+      运镜方向不再由探针手灌统一 pan，改由 studio/editing/camera.py 按素材实测
+      motion_dir 逐镜配向，接在 first-cut 内；参考基线见
+      docs/probes/camera_flow_reference_a.json（carry 0.175 / reversal 0.450 /
+      entropy 0.909），统一 pan 会在 entropy / reversal / carry 三项同时判负。
 
   subject_tracking:
     path: unsupported

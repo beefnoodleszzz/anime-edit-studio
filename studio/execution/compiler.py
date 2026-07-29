@@ -584,7 +584,7 @@ class ResolveCompiler:
                     direction = "in" if clip.camera.move == "push_in" else "out"
                     magnitude = abs(zoom_span) or 0.1
                 else:
-                    direction = "left" if clip.camera.move == "pan_left" else "right"
+                    direction = clip.camera.move.removeprefix("pan_")
                     magnitude = abs(zoom_span) or 0.12
                 self.rv.build_camera_curve_comp(
                     item,

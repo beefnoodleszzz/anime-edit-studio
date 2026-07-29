@@ -28,6 +28,7 @@ from studio.editing.sequence import (
     role_source_duration_requirements,
     plan_visual_phrases,
 )
+from studio.editing.camera import assign_camera_moves
 from studio.editing.timing import apply_action_sync
 from studio.editing.sound import apply_sound_design
 from studio.editspec.schema import AudioLayer, EditSpec, Marker, Timebase
@@ -47,6 +48,7 @@ class FirstCutResult(BaseModel):
     edit_grammar_qa_path: str
     visual_phrase_path: str
     cut_accuracy_path: str
+    camera_assignment_path: str | None = None
     sound_design_path: str | None = None
     candidate_group_ids: list[str]
     clip_count: int
@@ -454,6 +456,20 @@ def create_first_cut(
         )
         cut_accuracy_path = root / "cut_accuracy_report.json"
         _write_atomic(cut_accuracy_path, cut_accuracy.model_dump_json(indent=2))
+        # Camera assignment: give every shot that still owns its Fusion slot a
+        # move derived from its own measured flow.  Runs last among the motion
+        # stages so it can see which clips recipe planning and Action Sync
+        # already claimed, and skip those instead of writing a silent no-op.
+        camera_assignment_path = None
+        if not naked_cut:
+            spec, camera_assignment = assign_camera_moves(
+                spec, conn=conn, music=music
+            )
+            camera_assignment_path = root / "camera_assignment.json"
+            _write_atomic(
+                camera_assignment_path,
+                camera_assignment.model_dump_json(indent=2),
+            )
         # Sound design: lay a designed three-piece SFX layer on the drum
         # targets, then score it.  Runs after Action Sync so cues key off the
         # final cut/retime timing.
@@ -493,6 +509,9 @@ def create_first_cut(
             edit_grammar_qa_path=str(edit_grammar_qa_path),
             visual_phrase_path=str(visual_phrase_path),
             cut_accuracy_path=str(cut_accuracy_path),
+            camera_assignment_path=(
+                str(camera_assignment_path) if camera_assignment_path else None
+            ),
             sound_design_path=str(sound_design_path) if sound_design_path else None,
             candidate_group_ids=group_ids,
             clip_count=len(spec.clips),

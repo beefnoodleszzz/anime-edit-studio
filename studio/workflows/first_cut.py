@@ -234,7 +234,18 @@ def create_first_cut(
                 min_face=0.30 if (zenitsu or menacing_expression) else 0.40,
                 min_pose=0.30,
                 min_eye=0.10,
-                min_image_quality=0.72,
+                # image_quality is 25% exposure = 1 - |mean_brightness/255 -
+                # 0.5| * 1.7 (see analyzer.py): a scene whose average
+                # brightness sits far from mid-gray scores low regardless of
+                # real sharpness. A villain's fight is lit dark and moody by
+                # design, not poorly shot, and that alone was enough to fail
+                # 0.72 — spot-checked 5 of the excluded Akaza shots across
+                # the full 0.30-0.72 range (keyframes read directly) and
+                # every one was a clean, usable, correctly-identified frame.
+                # 20 of 65 confirmed Akaza shots were blocked by this gate
+                # alone, which was starving the candidate pool down to 12-26
+                # of 65 shots and forcing heavy reuse in a 32-clip cut.
+                min_image_quality=0.30 if (zenitsu or menacing_expression) else 0.72,
                 min_cutability=0.42,
                 min_aesthetic=4.5,
                 required_any_tags=[],

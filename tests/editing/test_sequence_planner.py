@@ -12,7 +12,7 @@ from studio.editing.sequence import (
     planned_rhythm_metrics,
     role_source_duration_requirements,
 )
-from studio.editing.sequence.planner import MIN_REPEAT_GAP
+from studio.editing.sequence.planner import MIN_REPEAT_GAP, _slots
 
 
 def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
@@ -320,6 +320,66 @@ def test_source_window_is_centered_on_scored_keyframe(tmp_path):
     )
     assert spec.clips[0].source.in_sec == 17.5
     assert spec.clips[0].source.out_sec == 19.5
+
+
+def test_density_prune_does_not_reopen_a_max_shot_length_gap():
+    """A section whose pattern cuts all sit off-anchor must not be starved.
+
+    Regression for the "踩点失败" bug: the global density-budget prune in
+    ``_slots`` ranks every candidate cut by proximity to a beat/impact anchor
+    and keeps only the top ``target_cut_count``. If one section's candidates
+    are all farther from an anchor than another section's, the prune can keep
+    zero cuts from it — silently reopening a gap far past
+    ``max_shot_length``, even though the earlier gap-subdivision loop closed
+    it. Here every "carry" cut sits exactly on a beat (distance 0) and every
+    "impact" cut sits 1s+ from the nearest anchor, so a tiny cut budget
+    starves "impact" entirely unless the prune step repairs the gap it opens.
+    """
+    profile = EditingStyleProfile(
+        source="reference",
+        target_cut_density=0.3,
+        max_shot_length=1.5,
+        min_shot_length=0.3,
+        duration_pattern=[1.0],
+        hook_event_count=1,
+        ending_duration_ratio=0.08,
+        ending_deceleration_pattern=[1.0, 1.0],
+        beat_sync_target=0.0,
+        beat_grid_subdivision="adaptive",
+    )
+    plan = DirectorPlan(
+        project_id="gap-repro", revision=1, duration_sec=20,
+        primary_characters=[], tone=[],
+        structure=[
+            DirectorSection(
+                role="carry", start=0, end=10, energy=.5,
+                average_shot_length=0.3,
+            ),
+            DirectorSection(
+                role="impact", start=10, end=20, energy=.8,
+                average_shot_length=0.3,
+            ),
+        ],
+        visual_rules={"prefer": [], "avoid": []}, sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+        editing_style=profile,
+    )
+    music = MusicMap(
+        duration_sec=20, bpm=120,
+        beats=[1, 2, 3, 4, 5, 6, 7, 8, 9], bars=[0], downbeats=[0],
+        onsets=[], beat_energy=[],
+        sections=[
+            MusicSection(type="carry", start=0, end=10, energy=.5),
+            MusicSection(type="impact", start=10, end=20, energy=.8),
+        ],
+        impact_points=[15.4], risers=[], breaks=[], silences=[],
+        spectral_change_points=[],
+    )
+    slots = _slots(plan, music)
+    maximum = min(1.2, profile.max_shot_length)
+    assert max(slot.duration for slot in slots) <= maximum + 1e-6
+    assert any(slot.role == "impact" for slot in slots)
 
 
 def test_editing_styles_create_distinct_reusable_rhythm_grammars():

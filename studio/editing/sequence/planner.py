@@ -258,6 +258,7 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
     anchors = sorted(set([*music.beats, *music.onsets, *music.impact_points]))
     maximum = min(1.2, profile.max_shot_length)
     changed = True
+    gap_fill_cuts: list[float] = []
     while changed and anchors and profile.source == "reference":
         changed = False
         boundaries = [0.0, *sorted(set(cuts)), plan.duration_sec]
@@ -269,10 +270,19 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
                 if left + 0.2 < value < right - 0.2
             ]
             if options:
-                cuts.append(min(options, key=lambda value: abs(value - (left + right) / 2)))
+                choice = min(options, key=lambda value: abs(value - (left + right) / 2))
+                cuts.append(choice)
+                gap_fill_cuts.append(choice)
                 changed = True
                 break
-    protected: list[float] = []
+    # These cuts exist to enforce the hard max-shot-length ceiling, not merely
+    # to chase density — the later density-budget prune (below) sorts by
+    # proximity to the nearest beat/impact anchor and can otherwise drop a
+    # gap-fill cut in favour of a cut elsewhere in the timeline that happens
+    # to sit closer to its own anchor, silently reopening the long gap this
+    # loop just closed (observed: a 2.6s hold surviving straight through the
+    # impact section because its gap-fill cut lost the global proximity sort).
+    protected: list[float] = list(gap_fill_cuts)
     if profile.source == "reference" and not profile.normalized_cut_positions:
         hook_end = min(
             plan.duration_sec * profile.hook_duration_ratio,
@@ -346,16 +356,53 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
         for key, value in unique_cuts.items()
         if key not in protected_keys
     ]
-    anchors = [*music.beats, *music.impact_points]
+    rank_anchors = [*music.beats, *music.impact_points]
     remaining.sort(
         key=lambda item: (
-            min(abs(item[1] - anchor) for anchor in anchors)
-            if anchors else 0.0,
+            min(abs(item[1] - anchor) for anchor in rank_anchors)
+            if rank_anchors else 0.0,
             item[1],
         )
     )
     for key, value in remaining[: max(0, target_cut_count - len(keep))]:
         keep[key] = value
+    # The prune above ranks every candidate globally by proximity to a beat or
+    # impact point. A section that happens to have several less-on-anchor
+    # candidates (e.g. onset-driven gap fills, which score against the wider
+    # beats+onsets+impacts anchor set above but not against this narrower one)
+    # can lose all of them to unrelated cuts elsewhere in the timeline, quietly
+    # reopening a gap the earlier max-shot-length subdivision had already
+    # closed. Repair any such gap by pulling the best still-available
+    # candidate for it back in, even past the density budget: a shot held far
+    # longer than the reference's own maximum is a worse rhythm failure than
+    # slightly exceeding the target cut count.
+    dropped = {key: value for key, value in remaining if key not in keep}
+    changed = True
+    while changed and dropped:
+        changed = False
+        kept_values = sorted(keep.values())
+        span_boundaries = [0.0, *kept_values, plan.duration_sec]
+        for left, right in zip(span_boundaries, span_boundaries[1:]):
+            if right - left <= maximum:
+                continue
+            pool = [
+                (key, value) for key, value in dropped.items()
+                if left < value < right
+            ]
+            if not pool:
+                continue
+            best_key, best_value = min(
+                pool,
+                key=lambda item: (
+                    min(abs(item[1] - anchor) for anchor in anchors)
+                    if anchors else 0.0,
+                    item[1],
+                ),
+            )
+            keep[best_key] = best_value
+            del dropped[best_key]
+            changed = True
+            break
     cuts = list(keep.values())
     minimum = max(0.08, min(profile.min_shot_length * 0.72, 0.32))
     boundaries = _dedupe_boundaries(

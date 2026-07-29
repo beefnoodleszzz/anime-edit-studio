@@ -242,8 +242,15 @@ capabilities:
       仅 IR 缺少枚举），素材中约 19% 的主导运动是上下向，横向 pan 会与之相剪。
       运镜方向不再由探针手灌统一 pan，改由 studio/editing/camera.py 按素材实测
       motion_dir 逐镜配向，接在 first-cut 内；参考基线见
-      docs/probes/camera_flow_reference_a.json（carry 0.175 / reversal 0.450 /
-      entropy 0.909），统一 pan 会在 entropy / reversal / carry 三项同时判负。
+      docs/probes/camera_flow_reference_a.json（carry 0.150 / reversal 0.200 /
+      entropy 0.901），统一 pan 会在 entropy / reversal / carry 三项同时判负。
+      2026-07-29 实机验收：akaza-camera-v1（house 版式 18s / 28 镜）由 Resolve
+      构建渲染，28 个 clip 全部建上 camera curve comp，成片实测
+      docs/probes/camera_flow_akaza_camera_v1.json —— carry 0.107 / reversal 0.143 /
+      entropy 0.843 / directional 0.690，对 a.mp4 五项容差全过。最弱项是
+      median_magnitude 比值 0.69（下限 0.65），运动量仍是与参考的主要差距。
+      测量口径 v1.1.0：分析帧按高度等比缩放，早前固定 320×180 会在非 16:9 成片上
+      压扁纵轴、低估纵向运镜。
 
   subject_tracking:
     path: unsupported

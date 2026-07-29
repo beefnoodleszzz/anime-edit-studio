@@ -1,5 +1,5 @@
 {
-  "version": "camera-flow-measure-1.0.0",
+  "version": "camera-flow-measure-1.1.0",
   "source": "study-center/a.mp4",
   "duration_sec": 26.933333333333334,
   "shot_count": 41,
@@ -8,49 +8,49 @@
       "index": 0,
       "start_sec": 0.0,
       "end_sec": 1.9,
-      "vx": -0.02933332818793133,
-      "vy": 0.008836237403253714,
-      "magnitude": 1.6375095049540203,
-      "direction": "right",
+      "vx": -0.002485624749776131,
+      "vy": 0.004499224616059412,
+      "magnitude": 1.2454669376214345,
+      "direction": "up-right",
       "directional": true
     },
     {
       "index": 1,
       "start_sec": 1.9,
       "end_sec": 2.5,
-      "vx": 0.1303209774196148,
-      "vy": 0.026318972930312157,
-      "magnitude": 1.2736457586288452,
-      "direction": "left",
-      "directional": true
+      "vx": 0.04293191048782319,
+      "vy": 0.0019085784636748333,
+      "magnitude": 0.39070770144462585,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 2,
       "start_sec": 2.5,
       "end_sec": 2.766667,
-      "vx": -0.006586720119230449,
-      "vy": 0.0010238347264627616,
-      "magnitude": 0.6998833616574606,
-      "direction": "right",
-      "directional": true
+      "vx": -0.001191177065872277,
+      "vy": 0.0006945964996702969,
+      "magnitude": 0.2494035263856252,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 3,
       "start_sec": 2.766667,
       "end_sec": 3.333333,
-      "vx": -0.1137391179775955,
-      "vy": 0.3525655232366988,
-      "magnitude": 3.895517636960411,
-      "direction": "up",
+      "vx": -0.020541247601310413,
+      "vy": 0.027106900078554947,
+      "magnitude": 2.0775261640670144,
+      "direction": "up-right",
       "directional": true
     },
     {
       "index": 4,
       "start_sec": 3.333333,
       "end_sec": 3.8,
-      "vx": 0.0006077314610593021,
-      "vy": -0.0004434239041681091,
-      "magnitude": 0.38922124604384106,
+      "vx": 0.000060617070024212204,
+      "vy": -0.00037706201934876543,
+      "magnitude": 0.12330521643161774,
       "direction": "static",
       "directional": false
     },
@@ -58,19 +58,19 @@
       "index": 5,
       "start_sec": 3.8,
       "end_sec": 4.366667,
-      "vx": -0.004481123954368134,
-      "vy": -0.053675840298334755,
-      "magnitude": 1.1310825943946838,
-      "direction": "down",
-      "directional": true
+      "vx": -0.0013498562620952725,
+      "vy": -0.015361956631143888,
+      "magnitude": 0.28319548567136127,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 6,
       "start_sec": 4.366667,
       "end_sec": 4.633333,
-      "vx": -0.004135062297185262,
-      "vy": -0.21708684662977853,
-      "magnitude": 2.3908894062042236,
+      "vx": -0.0016987894972165425,
+      "vy": -0.026370500524838764,
+      "magnitude": 1.6742884715398152,
       "direction": "down",
       "directional": true
     },
@@ -78,9 +78,9 @@
       "index": 7,
       "start_sec": 4.633333,
       "end_sec": 5.233333,
-      "vx": -0.0006829436557988325,
-      "vy": 0.00018126935901818797,
-      "magnitude": 0.32285521924495697,
+      "vx": 0.00015465497078063586,
+      "vy": 0.0000789199450916082,
+      "magnitude": 0.13345530132452646,
       "direction": "static",
       "directional": false
     },
@@ -88,9 +88,9 @@
       "index": 8,
       "start_sec": 5.233333,
       "end_sec": 5.666667,
-      "vx": -0.281848535562555,
-      "vy": 0.1675636370976766,
-      "magnitude": 1.4451828102270763,
+      "vx": -0.3102933870007594,
+      "vy": 0.18454977373282114,
+      "magnitude": 1.827945073445638,
       "direction": "up-right",
       "directional": true
     },
@@ -98,19 +98,19 @@
       "index": 9,
       "start_sec": 5.666667,
       "end_sec": 6.133333,
-      "vx": -0.056572893876395226,
-      "vy": 0.004893809988667878,
-      "magnitude": 2.8112232287724814,
-      "direction": "right",
+      "vx": -0.00005032052347028338,
+      "vy": 0.0000551963804961512,
+      "magnitude": 2.622566342353821,
+      "direction": "up-right",
       "directional": true
     },
     {
       "index": 10,
       "start_sec": 6.133333,
       "end_sec": 6.6,
-      "vx": -0.007185119592274229,
-      "vy": 0.00004815219532853613,
-      "magnitude": 0.9567120062808195,
+      "vx": -0.0016613533565153678,
+      "vy": 0.00014438667252155332,
+      "magnitude": 0.8470090553164482,
       "direction": "right",
       "directional": true
     },
@@ -118,9 +118,9 @@
       "index": 11,
       "start_sec": 6.6,
       "end_sec": 7.233333,
-      "vx": -0.00281773724903663,
-      "vy": 0.18178382453819117,
-      "magnitude": 2.5176116029421487,
+      "vx": -0.000933908682782203,
+      "vy": 0.05040797855084141,
+      "magnitude": 1.3458242416381836,
       "direction": "up",
       "directional": true
     },
@@ -128,19 +128,19 @@
       "index": 12,
       "start_sec": 7.233333,
       "end_sec": 7.466667,
-      "vx": -0.1771805362853532,
-      "vy": -0.34796614448229474,
-      "magnitude": 4.669459859530131,
-      "direction": "down-right",
+      "vx": -0.01891989171417663,
+      "vy": -0.005964319338090718,
+      "magnitude": 4.800595045089722,
+      "direction": "right",
       "directional": true
     },
     {
       "index": 13,
       "start_sec": 7.466667,
       "end_sec": 8.033333,
-      "vx": -0.00018689669135104245,
-      "vy": 0.01640600711107254,
-      "magnitude": 0.10546135157346725,
+      "vx": 0.000015036661807243945,
+      "vy": 0.004336393011423449,
+      "magnitude": 0.038069537530342736,
       "direction": "static",
       "directional": false
     },
@@ -148,9 +148,9 @@
       "index": 14,
       "start_sec": 8.033333,
       "end_sec": 8.466667,
-      "vx": -0.0017072282953449758,
-      "vy": -0.0012402281669589381,
-      "magnitude": 1.1625013550122578,
+      "vx": -0.0002600447681591807,
+      "vy": -0.00030150903876347,
+      "magnitude": 1.2414454221725464,
       "direction": "down-right",
       "directional": true
     },
@@ -158,29 +158,29 @@
       "index": 15,
       "start_sec": 8.466667,
       "end_sec": 8.933333,
-      "vx": 2.545493651656887e-19,
-      "vy": -3.703656671958608e-15,
-      "magnitude": 0.8574788649760497,
-      "direction": "down",
-      "directional": true
+      "vx": -8.498176941603956e-22,
+      "vy": 1.9045244114574355e-22,
+      "magnitude": 0.2819911456936097,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 16,
       "start_sec": 8.933333,
       "end_sec": 9.433333,
-      "vx": 0.0002728645895331283,
-      "vy": -0.00022017673957937708,
-      "magnitude": 0.4861228944112857,
-      "direction": "down-left",
-      "directional": true
+      "vx": 0.00006848328166061031,
+      "vy": 0.0000681090302047475,
+      "magnitude": 0.13417580855699876,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 17,
       "start_sec": 9.433333,
       "end_sec": 9.966667,
-      "vx": 0.019372821601185326,
-      "vy": 0.003412241581827402,
-      "magnitude": 2.354800502459208,
+      "vx": 0.002120074389191965,
+      "vy": -0.0005565925966948271,
+      "magnitude": 1.320490539073944,
       "direction": "left",
       "directional": true
     },
@@ -188,19 +188,19 @@
       "index": 18,
       "start_sec": 9.966667,
       "end_sec": 10.2,
-      "vx": 0.18197496514767408,
-      "vy": 0.05626051841924588,
-      "magnitude": 2.9040777360399566,
-      "direction": "left",
+      "vx": 0.01945942461801072,
+      "vy": 0.014047964165608088,
+      "magnitude": 3.3925849397977195,
+      "direction": "up-left",
       "directional": true
     },
     {
       "index": 19,
       "start_sec": 10.2,
       "end_sec": 11.4,
-      "vx": -0.3581719920039177,
-      "vy": 0.23078471080710491,
-      "magnitude": 6.268986701965332,
+      "vx": -0.014198783474663893,
+      "vy": 0.01756647845468251,
+      "magnitude": 3.7258833249409995,
       "direction": "up-right",
       "directional": true
     },
@@ -208,9 +208,9 @@
       "index": 20,
       "start_sec": 11.4,
       "end_sec": 11.666667,
-      "vx": 0.12386449178059895,
-      "vy": -0.006098192806045215,
-      "magnitude": 2.221986691157023,
+      "vx": 0.1630193293094635,
+      "vy": -0.0030907964489112296,
+      "magnitude": 2.331852356592814,
       "direction": "left",
       "directional": true
     },
@@ -218,19 +218,19 @@
       "index": 21,
       "start_sec": 11.666667,
       "end_sec": 12.4,
-      "vx": 0.0029217904278387627,
-      "vy": -0.006151392978305618,
-      "magnitude": 1.1346330245335896,
-      "direction": "down-left",
+      "vx": 0.0006219869246706367,
+      "vy": -0.0002553579203474025,
+      "magnitude": 0.4619724949200948,
+      "direction": "left",
       "directional": true
     },
     {
       "index": 22,
       "start_sec": 12.4,
       "end_sec": 12.666667,
-      "vx": -0.16711053488931307,
-      "vy": 0.20162176713347435,
-      "magnitude": 2.625460942586263,
+      "vx": -0.04306516225430338,
+      "vy": 0.027790188246096175,
+      "magnitude": 1.4837847153345745,
       "direction": "up-right",
       "directional": true
     },
@@ -238,9 +238,9 @@
       "index": 23,
       "start_sec": 12.666667,
       "end_sec": 13.2,
-      "vx": 0.6585111876071702,
-      "vy": -0.026102741559346516,
-      "magnitude": 6.873779535293579,
+      "vx": 0.5515361863508588,
+      "vy": -0.07329535484313965,
+      "magnitude": 8.202759583791098,
       "direction": "left",
       "directional": true
     },
@@ -248,9 +248,9 @@
       "index": 24,
       "start_sec": 13.2,
       "end_sec": 13.633333,
-      "vx": -0.000052239113014588647,
-      "vy": -0.00030656723538413644,
-      "magnitude": 0.026818855976065,
+      "vx": -0.000011566125840708116,
+      "vy": -0.00010906917062432815,
+      "magnitude": 0.008954375050961971,
       "direction": "static",
       "directional": false
     },
@@ -258,9 +258,9 @@
       "index": 25,
       "start_sec": 13.633333,
       "end_sec": 14.133333,
-      "vx": 0.02884226090585192,
-      "vy": -0.8100026350536306,
-      "magnitude": 5.153546730677287,
+      "vx": 0.015154949311787883,
+      "vy": -0.5434277822108319,
+      "magnitude": 5.00676042586565,
       "direction": "down",
       "directional": true
     },
@@ -268,9 +268,9 @@
       "index": 26,
       "start_sec": 14.133333,
       "end_sec": 14.533333,
-      "vx": -0.0016229429747909307,
-      "vy": 0.11400104189912479,
-      "magnitude": 2.377795696258545,
+      "vx": -0.0006445937275808925,
+      "vy": 0.032545494536558785,
+      "magnitude": 2.0625532070795694,
       "direction": "up",
       "directional": true
     },
@@ -278,9 +278,9 @@
       "index": 27,
       "start_sec": 14.533333,
       "end_sec": 15.166667,
-      "vx": 0.018308903062158304,
-      "vy": -0.48883317577201524,
-      "magnitude": 2.591951906681061,
+      "vx": 0.004169586207657024,
+      "vy": -0.0620331571396188,
+      "magnitude": 1.3260865608851116,
       "direction": "down",
       "directional": true
     },
@@ -288,9 +288,9 @@
       "index": 28,
       "start_sec": 15.166667,
       "end_sec": 15.433333,
-      "vx": -0.0032252211152202412,
-      "vy": -1.1382215023040771,
-      "magnitude": 2.2034472624460855,
+      "vx": -0.0014610692400820469,
+      "vy": -1.3590240478515625,
+      "magnitude": 2.7122711737950644,
       "direction": "down",
       "directional": true
     },
@@ -298,19 +298,19 @@
       "index": 29,
       "start_sec": 15.433333,
       "end_sec": 16.0,
-      "vx": -0.0007724206128235286,
-      "vy": 0.005682206169391672,
-      "magnitude": 0.768552839756012,
-      "direction": "up",
-      "directional": true
+      "vx": 0.00015089587638309845,
+      "vy": 0.0018609124526847154,
+      "magnitude": 0.2178060362736384,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 30,
       "start_sec": 16.0,
       "end_sec": 16.333333,
-      "vx": 0.02173601184040308,
-      "vy": -0.07046643962773184,
-      "magnitude": 1.6469204028447468,
+      "vx": 0.009436981888332715,
+      "vy": -0.025262930430471897,
+      "magnitude": 1.6027513047059376,
       "direction": "down",
       "directional": true
     },
@@ -318,9 +318,9 @@
       "index": 31,
       "start_sec": 16.333333,
       "end_sec": 17.033333,
-      "vx": -0.011435634767015776,
-      "vy": 0.09748461555379133,
-      "magnitude": 2.6493317981561026,
+      "vx": -0.0013654581271111965,
+      "vy": 0.013103428141524395,
+      "magnitude": 1.1280163129170735,
       "direction": "up",
       "directional": true
     },
@@ -328,19 +328,19 @@
       "index": 32,
       "start_sec": 17.033333,
       "end_sec": 17.266667,
-      "vx": 0.018966649969418842,
-      "vy": -0.017847221344709396,
-      "magnitude": 3.2863651116689048,
-      "direction": "down-left",
+      "vx": 0.07533019594848156,
+      "vy": -0.021565889318784077,
+      "magnitude": 3.9505344231923423,
+      "direction": "left",
       "directional": true
     },
     {
       "index": 33,
       "start_sec": 17.266667,
       "end_sec": 18.366667,
-      "vx": -0.13051611681779227,
-      "vy": 0.039333753287792206,
-      "magnitude": 3.5207201639811196,
+      "vx": -0.6074743736535311,
+      "vy": -0.00018926446015636125,
+      "magnitude": 3.2910603880882263,
       "direction": "right",
       "directional": true
     },
@@ -348,9 +348,9 @@
       "index": 34,
       "start_sec": 18.366667,
       "end_sec": 18.733333,
-      "vx": -0.032191479268173374,
-      "vy": -0.00039021053817123175,
-      "magnitude": 1.1037301023801167,
+      "vx": -0.006660801513741414,
+      "vy": -0.00007820192937894414,
+      "magnitude": 0.9881532589594523,
       "direction": "right",
       "directional": true
     },
@@ -358,9 +358,9 @@
       "index": 35,
       "start_sec": 18.733333,
       "end_sec": 19.266667,
-      "vx": 0.6624636968287329,
-      "vy": 0.00907185396014635,
-      "magnitude": 3.3888462111353874,
+      "vx": 0.07017567583049338,
+      "vy": 0.0008075430108268241,
+      "magnitude": 1.3689604500929515,
       "direction": "left",
       "directional": true
     },
@@ -368,9 +368,9 @@
       "index": 36,
       "start_sec": 19.266667,
       "end_sec": 19.666667,
-      "vx": -0.0015354263693249475,
-      "vy": -0.0012011812068521976,
-      "magnitude": 0.2439318522810936,
+      "vx": -0.0005180765874683857,
+      "vy": -0.0002203647648760428,
+      "magnitude": 0.13474576671918234,
       "direction": "static",
       "directional": false
     },
@@ -378,19 +378,19 @@
       "index": 37,
       "start_sec": 19.666667,
       "end_sec": 22.6,
-      "vx": -0.023838625561135512,
-      "vy": 0.019215261660671484,
-      "magnitude": 0.6384115715821584,
-      "direction": "up-right",
-      "directional": true
+      "vx": -0.0019393095089981216,
+      "vy": 0.0011248227189450215,
+      "magnitude": 0.16137512835363546,
+      "direction": "static",
+      "directional": false
     },
     {
       "index": 38,
       "start_sec": 22.6,
       "end_sec": 22.933333,
-      "vx": 0.00031291303942756105,
-      "vy": -0.0006028864770920942,
-      "magnitude": 1.7950650254885356,
+      "vx": 0.0009754917652268583,
+      "vy": -0.0005411525295736935,
+      "magnitude": 1.7954058448473613,
       "direction": "down-left",
       "directional": true
     },
@@ -398,9 +398,9 @@
       "index": 39,
       "start_sec": 22.933333,
       "end_sec": 23.933333,
-      "vx": 5.3103259821987934e-24,
-      "vy": 6.051879762780864e-31,
-      "magnitude": 0.000011223680355480306,
+      "vx": 3.5508189828733797e-29,
+      "vy": -3.762209694041476e-27,
+      "magnitude": 9.384864520315302e-7,
       "direction": "static",
       "directional": false
     },
@@ -408,9 +408,9 @@
       "index": 40,
       "start_sec": 23.933333,
       "end_sec": 26.933333,
-      "vx": -5.036446000276877e-38,
-      "vy": 1.677832071409077e-36,
-      "magnitude": 4.000466245929043e-10,
+      "vx": -2.335497440541362e-45,
+      "vy": -9.341989762165447e-46,
+      "magnitude": 6.024674732440077e-13,
       "direction": "static",
       "directional": false
     }
@@ -418,19 +418,19 @@
   "cuts": [
     {
       "sec": 1.9,
-      "angle_delta_deg": 151.818,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 2.5,
-      "angle_delta_deg": 159.747,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 2.766667,
-      "angle_delta_deg": 63.285,
+      "angle_delta_deg": null,
       "carried": false,
       "reversed_": false
     },
@@ -448,8 +448,8 @@
     },
     {
       "sec": 4.366667,
-      "angle_delta_deg": 3.681,
-      "carried": true,
+      "angle_delta_deg": null,
+      "carried": false,
       "reversed_": false
     },
     {
@@ -466,27 +466,27 @@
     },
     {
       "sec": 5.666667,
-      "angle_delta_deg": 25.788,
+      "angle_delta_deg": 16.903,
       "carried": true,
       "reversed_": false
     },
     {
       "sec": 6.133333,
-      "angle_delta_deg": 4.56,
+      "angle_delta_deg": 42.679,
       "carried": true,
       "reversed_": false
     },
     {
       "sec": 6.6,
-      "angle_delta_deg": 88.728,
+      "angle_delta_deg": 83.972,
       "carried": false,
       "reversed_": false
     },
     {
       "sec": 7.233333,
-      "angle_delta_deg": 152.127,
+      "angle_delta_deg": 106.436,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 7.466667,
@@ -502,55 +502,55 @@
     },
     {
       "sec": 8.466667,
-      "angle_delta_deg": 180.0,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 8.933333,
-      "angle_delta_deg": 180.0,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 9.433333,
-      "angle_delta_deg": 48.89,
-      "carried": true,
+      "angle_delta_deg": null,
+      "carried": false,
       "reversed_": false
     },
     {
       "sec": 9.966667,
-      "angle_delta_deg": 7.19,
+      "angle_delta_deg": 50.536,
       "carried": true,
       "reversed_": false
     },
     {
       "sec": 10.2,
-      "angle_delta_deg": 130.025,
+      "angle_delta_deg": 93.122,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 11.4,
-      "angle_delta_deg": 150.023,
+      "angle_delta_deg": 130.034,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 11.666667,
-      "angle_delta_deg": 61.775,
-      "carried": false,
+      "angle_delta_deg": 21.235,
+      "carried": true,
       "reversed_": false
     },
     {
       "sec": 12.4,
-      "angle_delta_deg": 165.754,
+      "angle_delta_deg": 169.486,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 12.666667,
-      "angle_delta_deg": 131.923,
+      "angle_delta_deg": 154.735,
       "carried": false,
       "reversed_": true
     },
@@ -568,61 +568,61 @@
     },
     {
       "sec": 14.133333,
-      "angle_delta_deg": 178.776,
+      "angle_delta_deg": 179.537,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 14.533333,
-      "angle_delta_deg": 178.671,
+      "angle_delta_deg": 177.289,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 15.166667,
-      "angle_delta_deg": 2.307,
+      "angle_delta_deg": 3.907,
       "carried": true,
       "reversed_": false
     },
     {
       "sec": 15.433333,
-      "angle_delta_deg": 172.096,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 16.0,
-      "angle_delta_deg": 170.598,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 16.333333,
-      "angle_delta_deg": 169.548,
+      "angle_delta_deg": 165.466,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 17.033333,
-      "angle_delta_deg": 139.949,
+      "angle_delta_deg": 111.925,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 17.266667,
-      "angle_delta_deg": 153.513,
+      "angle_delta_deg": 164.007,
       "carried": false,
       "reversed_": true
     },
     {
       "sec": 18.366667,
-      "angle_delta_deg": 17.466,
+      "angle_delta_deg": 0.655,
       "carried": true,
       "reversed_": false
     },
     {
       "sec": 18.733333,
-      "angle_delta_deg": 179.91,
+      "angle_delta_deg": 179.987,
       "carried": false,
       "reversed_": true
     },
@@ -640,9 +640,9 @@
     },
     {
       "sec": 22.6,
-      "angle_delta_deg": 156.301,
+      "angle_delta_deg": null,
       "carried": false,
-      "reversed_": true
+      "reversed_": false
     },
     {
       "sec": 22.933333,
@@ -657,10 +657,10 @@
       "reversed_": false
     }
   ],
-  "directional_shot_frac": 0.8292682926829268,
-  "carry_rate": 0.175,
-  "reversal_rate": 0.45,
-  "direction_entropy": 0.9087555065197807,
-  "median_magnitude": 1.6469204028447468,
-  "mean_abs_vx": 0.08013188153457582
+  "directional_shot_frac": 0.6585365853658537,
+  "carry_rate": 0.15,
+  "reversal_rate": 0.2,
+  "direction_entropy": 0.9012084515204877,
+  "median_magnitude": 1.320490539073944,
+  "mean_abs_vx": 0.04858795795922217
 }

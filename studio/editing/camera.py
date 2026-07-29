@@ -21,13 +21,13 @@ So the direction of each move is *derived*, from three measured things:
 3. Musical energy at the cut, which sets amplitude — impacts move further.
 
 Measuring the reference first (``docs/probes/camera_flow_reference_a.json``)
-overturned the obvious design.  a.mp4 carries direction through only 17.5% of
-its cuts and *reverses* across 45%, with direction entropy 0.91 — near-uniform
-across all eight bins.  Its pull does not come from every shot sliding the same
-way; it comes from strong, highly varied per-shot movement whose direction flips
-hard at the join.  So riding the footage is the rule and same-direction carry is
-the exception, not the reverse — which is also what keeps a uniform pan (entropy
-0.0, carry rate 1.0) from ever scoring as a pass.
+overturned the obvious design.  a.mp4 carries direction through only 15% of its
+cuts and reverses across 20%, with direction entropy 0.90 — near-uniform across
+all eight bins.  Its pull does not come from every shot sliding the same way; it
+comes from strong, highly varied per-shot movement, and the join turns at least
+as often as it continues.  So riding the footage is the rule and same-direction
+carry is the exception, not the reverse — which is also what keeps a uniform pan
+(entropy 0.0, carry rate 1.0) from ever scoring as a pass.
 
 Deterministic, no LLM (AGENTS.md R6): every decision traces to a measured field.
 """
@@ -49,10 +49,10 @@ MIN_RIDEABLE_MOTION = 1.2
 #: Cut kinds that positively assert the motion continues across the join.
 #: ``continuation`` is deliberately excluded: it is ``CutRelation.kind``'s
 #: default, so an unmarked join lands there and treating it as a carry claim
-#: made 40% of adjacent shots move identically — far past the reference's 17.5%.
+#: made 40% of adjacent shots move identically — far past the reference's 15%.
 _CARRY_KINDS = {"match_action", "graphic_match", "parallel"}
 #: Cut kinds that exist to break the flow — reversing reads as the accent.
-#: Unmarked joins fall here too: the reference reverses 2.6× more often than it
+#: Unmarked joins fall here too: the reference reverses more often than it
 #: carries, so reversal is the honest default when nothing claims continuity.
 _BREAK_KINDS = {
     "contrast", "reveal", "reaction", "ellipsis", "continuation", "establish",
@@ -199,8 +199,8 @@ def assign_camera_moves(
             reason = (
                 f"素材自身运动 {direction} (mag {magnitude_measured:.2f})，顺其而动"
             )
-            # Deliberately no carry override here.  The reference reverses across
-            # 45% of its cuts and carries across 17.5%; overriding measured
+            # Deliberately no carry override here.  The reference reverses
+            # across 20% of its cuts and carries across 15%; overriding measured
             # footage direction to match the previous shot would both shear
             # against the subject and collapse direction variety.
         elif previous_move is not None and kind in _BREAK_KINDS:

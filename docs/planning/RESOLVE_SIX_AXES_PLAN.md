@@ -45,18 +45,23 @@ first-cut 出来的 spec 全是 `move=none`，能力只在探针手灌统一 pan
 先量后改。新增 `studio/critic/technical/camera_flow.py`：对任意成片测逐镜光流方向、
 跨切点方向延续率、方向熵。**a.mp4 实测结果推翻了原设计假设**：
 
-| 指标 | a.mp4 | b.mp4 | 统一 pan |
-|---|---|---|---|
-| carry_rate（方向跨切点延续） | 0.175 | 0.241 | 1.000 |
-| reversal_rate（跨切点反向） | 0.450 | 0.138 | 0.000 |
-| direction_entropy（8 向归一化熵） | 0.909 | 0.546 | 0.000 |
-| directional_shot_frac | 0.829 | 0.633 | 1.000 |
-| median_magnitude | 1.647 | 0.848 | — |
+| 指标 | a.mp4 | b.mp4 | 统一 pan | **本次成片** |
+|---|---|---|---|---|
+| carry_rate（方向跨切点延续） | 0.150 | 0.207 | 1.000 | 0.107 |
+| reversal_rate（跨切点反向） | 0.200 | 0.138 | 0.000 | 0.143 |
+| direction_entropy（8 向归一化熵） | 0.901 | 0.628 | 0.000 | 0.843 |
+| directional_shot_frac | 0.659 | 0.633 | 1.000 | 0.690 |
+| median_magnitude | 1.320 | 0.744 | — | 0.914 |
 
-a.mp4 的"拖拽感"**不是**每镜同向滑动堆出来的：它只有 17.5% 的切点延续方向，
-45% 直接反向，方向近乎均匀铺满八个象限。真正的来源是**每镜运动都强、方向变化大、
-在切点上硬翻**。所以配向规则是"顺素材自身实测运动而动"，同向承接只在素材本身
-无方向可骑时才由 CutRelation 决定——**恰好与直觉相反**。
+a.mp4 的"拖拽感"**不是**每镜同向滑动堆出来的：它只有 15% 的切点延续方向，
+20% 直接反向，方向近乎均匀铺满八个象限。真正的来源是**每镜运动都强、方向变化大**，
+切点上转向至少和延续一样频繁。所以配向规则是"顺素材自身实测运动而动"，
+同向承接只在素材本身无方向可骑时才由 CutRelation 决定——**恰好与直觉相反**。
+
+> 测量口径修正（v1.1.0）：首版把分析帧统一缩到 320×180，对非 16:9 的成片
+> （本片 1080×1080）会把纵轴多压 1.8 倍，纵向运镜因此测得偏弱、方向直方图向横轴倾斜。
+> 改为按高度等比缩放后两轴同尺度，a.mp4 自身的 reversal 从 0.450 修正为 0.200。
+> 上表与代码注释均为修正后的数值。
 
 落地：`studio/editing/camera.py::assign_camera_moves`，接在 first-cut 的
 Action Sync 之后（这样能看见哪些 clip 的 Fusion 槽位已被 effect/ramp/transition 占用，
@@ -68,10 +73,20 @@ Action Sync 之后（这样能看见哪些 clip 的 Fusion 槽位已被 effect/r
 五项与 a.mp4 基线比对，**统一 pan 会在其中三项同时判负**——这正是这道门存在的理由。
 基线落盘 `docs/probes/camera_flow_reference_a.json`（+ `_b.json`）。
 
-猗窝座 33 镜实跑：全部配到位，方向分布 pan_right 10 / pan_up 8 / pan_left 6 /
-pan_down 5 / push_in 4，18 镜顺素材实测方向、8 镜承接、3 镜反向、4 镜推镜。
+### W5 实机验收（2026-07-29，`akaza-camera-v1`）
 
-仍 gated：成片渲染后的 `measure_camera_flow` 对照需实机 Resolve 出片，未做不得声称达标。
+house 版式 18s / 28 镜，Resolve 实机构建并渲染（14.6s，28 clip 全部建上 camera curve comp），
+成片 `projects/renders/akaza-camera-v1-r1-resolve-execution-2.1.0-preview.mov`，
+实测落盘 `docs/probes/camera_flow_akaza_camera_v1.json`。
+
+配向分布：pan_up 9 / pan_left 7 / pan_down 6 / pan_right 5 / push_in 1；
+13 镜顺素材实测方向、9 镜反向、5 镜承接、1 镜推镜。
+
+**五项门禁全过**（见上表"本次成片"列）。其中最弱的一项是 median_magnitude：
+0.914 / 1.320 = 0.69，只比 0.65 的下限高一点点——**运动量仍是与 a.mp4 的主要差距**，
+下一步该往这里使劲，而不是再调方向。
+
+`camera_move_recipe` 由此转为"配向层亦已实测"，证据同时记 curve 与 flow 两份 probe。
 
 ---
 

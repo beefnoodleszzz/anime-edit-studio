@@ -24,7 +24,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 from scenedetect import ContentDetector, SceneManager, open_video
 
-CAMERA_FLOW_VERSION = "camera-flow-measure-1.0.0"
+CAMERA_FLOW_VERSION = "camera-flow-measure-1.1.0"
 
 #: Below this median flow magnitude a shot reads as static, so its direction is
 #: noise and must not be counted as a carry or a reversal.
@@ -34,7 +34,14 @@ CARRY_ANGLE_DEG = 60.0
 #: Beyond this angle the cut reads as a deliberate reversal, not a carry.
 REVERSAL_ANGLE_DEG = 120.0
 
-_ANALYSIS_SIZE = (320, 180)
+#: Analysis frames are scaled *isotropically* to this height.  A fixed WxH box
+#: would squash one axis on anything that is not 16:9 — a 1080x1080 delivery
+#: forced into 320x180 compresses vertical motion 1.8x more than horizontal, so
+#: vertical camera moves measure as weaker than they are and the direction
+#: histogram tilts sideways.  Scaling by height keeps both axes on one scale and
+#: keeps flow comparable across sources, since every frame ends up the same
+#: number of pixels tall.
+_ANALYSIS_HEIGHT = 240
 _DIRECTION_BINS = (
     "right", "down-right", "down", "down-left",
     "left", "up-left", "up", "up-right",
@@ -85,7 +92,15 @@ def _frame(capture: cv2.VideoCapture, sec: float) -> np.ndarray | None:
     ok, image = capture.read()
     if not ok:
         return None
-    return cv2.resize(image, _ANALYSIS_SIZE, interpolation=cv2.INTER_AREA)
+    height, width = image.shape[:2]
+    if height <= 0 or width <= 0:
+        return None
+    scale = _ANALYSIS_HEIGHT / height
+    return cv2.resize(
+        image,
+        (max(2, round(width * scale)), _ANALYSIS_HEIGHT),
+        interpolation=cv2.INTER_AREA,
+    )
 
 
 def _flow(first: np.ndarray, second: np.ndarray) -> tuple[float, float, float]:
@@ -263,17 +278,20 @@ class CameraFlowComparison(BaseModel):
 
 
 #: Tolerances are asymmetric on purpose, and the asymmetry follows the measured
-#: reference rather than intuition.  a.mp4 scores carry 0.175 / reversal 0.450 /
-#: entropy 0.909: it does *not* slide every shot the same way.  So carry rate is
+#: reference rather than intuition.  a.mp4 scores carry 0.150 / reversal 0.200 /
+#: entropy 0.901: it does *not* slide every shot the same way.  So carry rate is
 #: banded on both sides (too low is a slideshow, too high is a conveyor belt),
 #: while entropy and reversal only have floors — a uniform pan lands at entropy
 #: 0.0, carry 1.0, reversal 0.0 and fails three checks at once, which is exactly
 #: the failure this gate exists to catch.  Being *more* directional or moving
 #: *more* than the reference is not a defect, so those have floors only.
+#: The reversal floor is tighter than the reference's own value so that zero
+#: reversals cannot squeak through: an edit that never turns is the conveyor
+#: belt again, just measured from the other side.
 _TOLERANCES: dict[str, tuple[float | None, float | None]] = {
     "directional_shot_frac": (-0.15, None),
     "carry_rate": (-0.15, 0.20),
-    "reversal_rate": (-0.20, None),
+    "reversal_rate": (-0.12, None),
     "direction_entropy": (-0.15, None),
 }
 #: Magnitude is compared as a ratio, not a difference: an absolute delta is

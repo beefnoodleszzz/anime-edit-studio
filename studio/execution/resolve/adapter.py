@@ -706,6 +706,7 @@ class ResolveAdapter:
         distance = translation * intensity
         scale = scale_delta * intensity
         rotation = rotation_deg * intensity
+        blur = blur_strength * intensity
         curves = {
             "center_x": {
                 float(points[0]): 0.5 - sign * distance,
@@ -730,6 +731,14 @@ class ResolveAdapter:
                 float(points[4]): sign * rotation,
             },
         }
+        if blur > 0:
+            curves["blur"] = {
+                float(points[0]): blur,
+                float(points[1]): blur / 8,
+                float(points[2]): 0.0,
+                float(points[3]): blur / 8,
+                float(points[4]): blur,
+            }
         return curves
 
     @staticmethod
@@ -819,9 +828,15 @@ class ResolveAdapter:
         sign = 1.0 if direction in {"left", "up", "out"} else -1.0
         mag = max(0.0, min(0.4, magnitude))
         if push:
-            # Pure push-in/out: zoom only.
-            base = 1.0 + (mag if direction == "in" else 0.0)
-            size = f"{base:.6f} + ({sign * -mag:.6f})*({e})"
+            # Pure push-in/out: zoom only. Both directions stay at or above
+            # the fill baseline. A pull starts enlarged and settles to 1.0;
+            # a push starts at 1.0 and grows. The former implementation drove
+            # push_out below 1.0 (exposing canvas) and made push_in start
+            # already enlarged before growing a second magnitude.
+            if direction == "in":
+                size = f"1.000000 + ({mag:.6f})*({e})"
+            else:
+                size = f"{1.0 + mag:.6f} - ({mag:.6f})*({e})"
             center = "Point(0.5, 0.5)"
         else:
             offset = f"({sign * mag:.6f})*({e})"
@@ -943,7 +958,23 @@ class ResolveAdapter:
             self._connect_scalar_spline(
                 comp, transform.Angle, "BeatShakeAngle", beat_curves["angle"]
             )
-            if not media_out.ConnectInput("Input", transform):
+            output_tool = transform
+            if "blur" in beat_curves:
+                blur = comp.AddTool("DirectionalBlur")
+                blur.SetAttrs({"TOOLS_Name": "MotionBlur"})
+                blur.SetInput(
+                    "Angle",
+                    0.0 if direction in {"left", "right"} else 90.0,
+                )
+                if not blur.ConnectInput("Input", transform):
+                    raise ResolveOperationError(
+                        "BeatShake DirectionalBlur 连接失败"
+                    )
+                self._connect_scalar_spline(
+                    comp, blur.Length, "BeatShakeBlur", beat_curves["blur"]
+                )
+                output_tool = blur
+            if not media_out.ConnectInput("Input", output_tool):
                 raise ResolveOperationError("BeatShake MediaOut 连接失败")
             names = item.GetFusionCompNameList() or []
             current_name = names[-1] if names else None
@@ -1042,6 +1073,155 @@ class ResolveAdapter:
         if current_name and current_name != comp_name:
             if not item.RenameFusionCompByName(current_name, comp_name):
                 raise ResolveOperationError(f"MotionPhrase comp 重命名失败: {comp_name}")
+        return comp
+
+    def build_zoom_defocus_probe_comp(
+        self,
+        item,
+        *,
+        comp_name: str,
+        duration_frames: int,
+        settle_frames: int,
+        start_scale: float,
+        start_blur: float,
+    ):
+        """Author an unverified reference-effect probe on one TimelineItem."""
+        if duration_frames < 2:
+            raise ValueError("Zoom Defocus probe clip 至少需要 2 帧")
+        width = max(1, min(settle_frames, duration_frames - 1))
+        progress = f"min(1,max(0,time/({width})))"
+        decay = f"(1-({progress}))*(1-({progress}))*(1-({progress}))"
+        comp, media_in, media_out = self._fresh_transform_comp(item)
+        transform = comp.AddTool("Transform")
+        transform.SetAttrs({"TOOLS_Name": "ZoomDefocusTransform"})
+        if not transform.ConnectInput("Input", media_in):
+            raise ResolveOperationError("Zoom Defocus Transform 连接失败")
+        size_expression = f"1 + ({start_scale - 1:.9f})*({decay})"
+        transform.Size.SetExpression(size_expression)
+        if transform.Size.GetExpression() != size_expression:
+            raise ResolveOperationError("Zoom Defocus Size 表达式回读不一致")
+        blur = comp.AddTool("Blur")
+        blur.SetAttrs({"TOOLS_Name": "ZoomDefocusBlur"})
+        if not blur.ConnectInput("Input", transform):
+            raise ResolveOperationError("Zoom Defocus Blur 连接失败")
+        blur_expression = f"({start_blur:.9f})*({decay})"
+        for name in ("XBlurSize", "YBlurSize"):
+            input_object = getattr(blur, name, None)
+            if input_object is None:
+                raise ResolveOperationError(f"Zoom Defocus Blur 缺少 {name}")
+            input_object.SetExpression(blur_expression)
+            if input_object.GetExpression() != blur_expression:
+                raise ResolveOperationError(
+                    f"Zoom Defocus {name} 表达式回读不一致"
+                )
+        if not media_out.ConnectInput("Input", blur):
+            raise ResolveOperationError("Zoom Defocus MediaOut 连接失败")
+        names = item.GetFusionCompNameList() or []
+        current_name = names[-1] if names else None
+        if current_name and current_name != comp_name:
+            if not item.RenameFusionCompByName(current_name, comp_name):
+                raise ResolveOperationError(
+                    f"Zoom Defocus comp 重命名失败: {comp_name}"
+                )
+        return comp
+
+    def build_amv_velocity_probe_comp(
+        self,
+        item,
+        *,
+        comp_name: str,
+        duration_frames: int,
+        direction: str,
+        entry_frames: int,
+        exit_frames: int,
+        entry_scale: float,
+        exit_scale: float,
+        entry_blur: float,
+        exit_blur: float,
+        translation: float,
+    ):
+        """Author one unverified, unified AMV velocity phrase clip."""
+        if duration_frames < 4:
+            raise ValueError("AMV velocity probe clip 至少需要 4 帧")
+        last = duration_frames - 1
+        entry_width = max(1, min(entry_frames, last))
+        exit_width = max(1, min(exit_frames, last))
+        entry_progress = f"min(1,max(0,time/({entry_width})))"
+        exit_progress = (
+            f"min(1,max(0,(time-({last - exit_width}))/({exit_width})))"
+        )
+        entry_decay = (
+            f"(1-({entry_progress}))*(1-({entry_progress}))"
+            f"*(1-({entry_progress}))"
+        )
+        exit_rise = (
+            f"({exit_progress})*({exit_progress})*({exit_progress})"
+        )
+        sign = 1.0 if direction in {"left", "up"} else -1.0
+        axis_x = direction in {"left", "right"}
+
+        comp, media_in, media_out = self._fresh_transform_comp(item)
+        transform = comp.AddTool("Transform")
+        transform.SetAttrs({"TOOLS_Name": "AMVVelocityTransform"})
+        if not transform.ConnectInput("Input", media_in):
+            raise ResolveOperationError("AMV Velocity Transform 连接失败")
+        offset = (
+            f"({sign * translation:.9f})"
+            f"*(({entry_decay})+({exit_rise}))"
+        )
+        center_expression = (
+            f"Point(0.5 + ({offset}), 0.5)"
+            if axis_x
+            else f"Point(0.5, 0.5 + ({offset}))"
+        )
+        size_expression = (
+            f"1 + ({entry_scale - 1:.9f})*({entry_decay})"
+            f" + ({exit_scale - 1:.9f})*({exit_rise})"
+        )
+        transform.Center.SetExpression(center_expression)
+        transform.Size.SetExpression(size_expression)
+        for input_object, expected, label in (
+            (transform.Center, center_expression, "Center"),
+            (transform.Size, size_expression, "Size"),
+        ):
+            if input_object.GetExpression() != expected:
+                raise ResolveOperationError(
+                    f"AMV Velocity {label} 表达式回读不一致"
+                )
+
+        defocus = comp.AddTool("Blur")
+        defocus.SetAttrs({"TOOLS_Name": "AMVEntryDefocus"})
+        if not defocus.ConnectInput("Input", transform):
+            raise ResolveOperationError("AMV Entry Defocus 连接失败")
+        defocus_expression = f"({entry_blur:.9f})*({entry_decay})"
+        for name in ("XBlurSize", "YBlurSize"):
+            input_object = getattr(defocus, name, None)
+            if input_object is None:
+                raise ResolveOperationError(f"AMV Entry Defocus 缺少 {name}")
+            input_object.SetExpression(defocus_expression)
+            if input_object.GetExpression() != defocus_expression:
+                raise ResolveOperationError(
+                    f"AMV Entry Defocus {name} 表达式回读不一致"
+                )
+
+        whip = comp.AddTool("DirectionalBlur")
+        whip.SetAttrs({"TOOLS_Name": "AMVExitWhip"})
+        whip.SetInput("Angle", 0.0 if axis_x else 90.0)
+        if not whip.ConnectInput("Input", defocus):
+            raise ResolveOperationError("AMV Exit Whip 连接失败")
+        whip_expression = f"({exit_blur:.9f})*({exit_rise})"
+        whip.Length.SetExpression(whip_expression)
+        if whip.Length.GetExpression() != whip_expression:
+            raise ResolveOperationError("AMV Exit Whip 表达式回读不一致")
+        if not media_out.ConnectInput("Input", whip):
+            raise ResolveOperationError("AMV Velocity MediaOut 连接失败")
+        names = item.GetFusionCompNameList() or []
+        current_name = names[-1] if names else None
+        if current_name and current_name != comp_name:
+            if not item.RenameFusionCompByName(current_name, comp_name):
+                raise ResolveOperationError(
+                    f"AMV Velocity comp 重命名失败: {comp_name}"
+                )
         return comp
 
     def build_fusion_comp(

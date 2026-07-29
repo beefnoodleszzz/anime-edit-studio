@@ -193,11 +193,15 @@ def apply_sound_design(
                 ))
         if not cues_here:
             continue
-        # Enforce the total budget without splitting a designed hit oddly.
+        # Enforce the total budget atomically: a target's cues are a single
+        # designed hit (riser pulling in, optional whoosh, impact landing).
+        # Slicing that list to fit leftover budget can keep the riser and drop
+        # the impact it was pulling into — a promise with no landing, which is
+        # exactly the "orphan riser" sound_qa exists to catch. Skip the whole
+        # target instead and let a smaller downstream target use the budget.
         room = budget - len(placements)
-        cues_here = cues_here[:room]
-        if not cues_here:
-            break
+        if len(cues_here) > room:
+            continue
         placements.extend(cues_here)
         designed += 1
 

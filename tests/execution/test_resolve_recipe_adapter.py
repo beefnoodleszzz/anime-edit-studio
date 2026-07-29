@@ -75,6 +75,22 @@ class _Item:
         return self.comp
 
 
+def test_short_beat_locked_curve_keeps_blur_at_both_cut_edges():
+    curves = ResolveAdapter._velocity_smooth_shake_curves(
+        duration_frames=10,
+        sign=1.0,
+        translation=0.1,
+        scale_delta=0.14,
+        rotation_deg=0.0,
+        blur_strength=0.5,
+        intensity=1.0,
+    )
+
+    assert curves["blur"][0.0] == 0.5
+    assert curves["blur"][4.0] == 0.0
+    assert curves["blur"][9.0] == 0.5
+
+
 def test_fusion_recipe_parameters_are_injected_and_read_back(tmp_path):
     artifact = tmp_path / "effect.comp"
     artifact.write_text("composition")
@@ -283,5 +299,18 @@ def test_camera_curve_push_in_grows_size_only():
     center = item.comp.transform.Center.GetExpression()
     size = item.comp.transform.Size.GetExpression()
     assert center == "Point(0.5, 0.5)"      # push does not pan
-    assert size.startswith("1.150000 + ")   # zoom grows from the pushed-in base
+    assert size.startswith("1.000000 + ")   # zoom grows from the fill baseline
     assert "(1-(1-(time/20))*(1-(time/20)))" in size  # ease_out curve
+
+
+def test_camera_curve_push_out_settles_to_fill_without_exposing_canvas():
+    adapter = ResolveAdapter(_Resolve())
+    item = _CurveItem()
+    adapter.build_camera_curve_comp(
+        item, comp_name="aes:camera:c3", direction="out",
+        magnitude=0.18, curve="ease_in", duration_frames=16,
+    )
+    center = item.comp.transform.Center.GetExpression()
+    size = item.comp.transform.Size.GetExpression()
+    assert center == "Point(0.5, 0.5)"
+    assert size == "1.180000 - (0.180000)*(((time/15))*((time/15)))"

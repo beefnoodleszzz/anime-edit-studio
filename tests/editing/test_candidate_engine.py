@@ -122,6 +122,39 @@ def test_retrieval_enforces_cutability_and_maximum_duration(tmp_path):
     assert ids == ["s1", "s0"]
 
 
+def test_subtitle_gate_ignores_narrow_false_positive_boxes(tmp_path):
+    """A `present` flag from a tiny box (a facial-mark/logo misread) must not
+    exclude the shot; a box wide enough to plausibly be a real subtitle line
+    still does, and a `present` flag with no box geometry at all still does
+    too (unknown width defaults to "assume real", not "assume noise").
+
+    Regression for a real pool starvation: of 26 Akaza shots that otherwise
+    passed every retrieval gate, 14 were being thrown out by a subtitle
+    detector whose boxes covered under 2% of the frame (max width
+    0.086-0.172) and shared one fixed confidence value across all 4086
+    "present" rows in the library — not a usable per-shot signal. 78% of all
+    "present" detections library-wide sit under width 0.2.
+    """
+    conn = connect(tmp_path / "v2.sqlite")
+    _seed(conn)
+    with conn:
+        conn.execute(
+            "UPDATE shots SET subtitle_region=? WHERE id='s1'",
+            (json.dumps({"present": True, "boxes": [[0.4, 0.9, 0.15, 0.05]]}),),
+        )
+        conn.execute(
+            "UPDATE shots SET subtitle_region=? WHERE id='s2'",
+            (json.dumps({"present": True, "boxes": [[0.1, 0.9, 0.6, 0.08]]}),),
+        )
+    ids = retrieve(
+        conn,
+        RetrievalQuery(character="gojou", subtitle_allowed=False, limit=100),
+    )
+    assert "s1" in ids  # narrow box: false positive, kept
+    assert "s2" not in ids  # wide box: plausibly a real subtitle, excluded
+    assert "s0" not in ids  # present=True, no box data: still excluded
+
+
 def test_contaminated_candidate_gets_intrinsic_penalty(tmp_path):
     conn = connect(tmp_path / "v2.sqlite")
     _seed(conn)

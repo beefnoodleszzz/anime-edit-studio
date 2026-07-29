@@ -68,7 +68,28 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
         where.append("coalesce(s.subject_motion,s.motion_mag,0)<=?")
         params.append(query.max_motion)
     if not query.subtitle_allowed:
-        where.append("coalesce(json_extract(s.subtitle_region,'$.present'),0)=0")
+        # `present` alone is too noisy to gate on directly: across the library,
+        # 3209/4086 (78%) of "present" detections have a max box width under
+        # 0.2 (measured on the Akaza pool: 14 shots were excluded this way,
+        # every one of them a facial-mark/tattoo false read with max box width
+        # 0.086-0.172 and identical confidence 0.68 — a fixed model constant,
+        # not a per-shot signal, so it can't discriminate). A genuine burned-in
+        # subtitle line spans a meaningful fraction of frame width; a narrower
+        # box is characteristic of this detector's false-positive mode. Keep
+        # the shot when either no subtitle was detected, or the widest
+        # detected box is narrower than a real subtitle line would be. A
+        # "present" flag with no recoverable box geometry defaults to 1
+        # (wide) here, not 0, so a shot is never admitted just because box
+        # data is missing — only a *measured* narrow box overrides the flag.
+        where.append(
+            "("
+            "coalesce(json_extract(s.subtitle_region,'$.present'),0)=0 "
+            "OR coalesce("
+            "(SELECT MAX(CAST(json_extract(je.value,'$[2]') AS REAL)) "
+            "FROM json_each(s.subtitle_region,'$.boxes') je),1"
+            ") < 0.2"
+            ")"
+        )
         # OCR is intentionally conservative and can miss stylised/burned text.
         # Tagger evidence is therefore a second deterministic cleanliness gate.
         for tag in (

@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from studio.creative.director.plan import DirectorPlan, DirectorSection, ImpactBudget
 from studio.editing.camera import (
     CAMERA_ASSIGNMENT_VERSION,
     assign_camera_moves,
@@ -134,6 +135,36 @@ def test_impact_points_move_further_than_off_beat_cuts():
         spec, conn=conn, music=_music(impact_points=[0.0])
     )
     assert updated.clips[0].camera.to_scale > updated.clips[1].camera.to_scale
+
+
+def test_section_energy_shapes_a_calm_to_climax_arc():
+    """An on-beat cut in a quiet section must move less than one in a loud
+    section, even though local beat proximity is identical for both.
+
+    Regression: before this, magnitude only looked at proximity to a
+    beat/impact point, so an opening establishing shot snapped to a beat
+    moved exactly as much as the climax — the whole cut read as one flat
+    shake regardless of where it sat in the DirectorPlan's own energy arc.
+    """
+    spec = _spec([_clip("s0", 0.0), _clip("s1", 4.0)])
+    conn = _conn([("s0", "left", 3.0), ("s1", "left", 3.0)])
+    music = _music(impact_points=[0.0, 4.0])
+    plan = DirectorPlan(
+        project_id="arc", revision=1, duration_sec=8,
+        primary_characters=[], tone=[],
+        structure=[
+            DirectorSection(role="opening", start=0, end=3, energy=0.3, average_shot_length=1),
+            DirectorSection(role="impact", start=3, end=8, energy=0.95, average_shot_length=1),
+        ],
+        visual_rules={"prefer": [], "avoid": []}, sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+    )
+    updated, _ = assign_camera_moves(spec, conn=conn, music=music, plan=plan)
+    quiet_scale, loud_scale = (
+        updated.clips[0].camera.to_scale, updated.clips[1].camera.to_scale,
+    )
+    assert loud_scale > quiet_scale
 
 
 def test_assignment_is_deterministic():

@@ -488,7 +488,7 @@ def create_first_cut(
         camera_assignment_path = None
         if not naked_cut:
             spec, camera_assignment = assign_camera_moves(
-                spec, conn=conn, music=music
+                spec, conn=conn, music=music, plan=plan
             )
             camera_assignment_path = root / "camera_assignment.json"
             _write_atomic(

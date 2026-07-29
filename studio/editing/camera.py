@@ -18,7 +18,10 @@ So the direction of each move is *derived*, from three measured things:
    only where the footage offers no direction of its own: a match-action or
    continuation join continues the previous move, a contrast or reveal join
    reverses it.
-3. Musical energy at the cut, which sets amplitude — impacts move further.
+3. Musical energy at the cut, which sets amplitude — impacts move further —
+   scaled by the DirectorPlan section's own energy, so the same on-beat cut
+   carries less in a 0.35-energy opening than in a 0.95-energy impact
+   section instead of moving the same amount everywhere in the piece.
 
 Measuring the reference first (``docs/probes/camera_flow_reference_a.json``)
 overturned the obvious design.  a.mp4 carries direction through only 15% of its
@@ -38,6 +41,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from studio.creative.director import DirectorPlan
 from studio.editing.music import MusicMap
 from studio.editspec.schema import EditSpec
 
@@ -148,11 +152,22 @@ def _energy_at(music: MusicMap, sec: float, *, window: float = 0.12) -> float:
     return 0.3
 
 
+def _section_energy_at(plan: DirectorPlan | None, sec: float) -> float | None:
+    """The narrative arc's energy ceiling at this timeline position, 0..1."""
+    if plan is None or not plan.structure:
+        return None
+    for section in plan.structure:
+        if section.start <= sec < section.end:
+            return section.energy
+    return plan.structure[-1].energy
+
+
 def assign_camera_moves(
     spec: EditSpec,
     *,
     conn: sqlite3.Connection,
     music: MusicMap,
+    plan: DirectorPlan | None = None,
     min_magnitude: float = 0.06,
     max_magnitude: float = 0.24,
 ) -> tuple[EditSpec, CameraAssignment]:
@@ -223,6 +238,17 @@ def assign_camera_moves(
             )
 
         energy = _energy_at(music, clip.timeline.in_sec)
+        arc_energy = _section_energy_at(plan, clip.timeline.in_sec)
+        if arc_energy is not None:
+            # A cut's local proximity to a beat/impact only ever produced
+            # 0.114/0.168/0.24 everywhere in the piece, regardless of section
+            # — an opening establishing shot snapped to a beat moved exactly
+            # as much as the climax, so the whole cut read as one flat
+            # intensity. Scale local energy by how loud the *section* is:
+            # a floor of 0.3 keeps quiet sections from freezing outright,
+            # but the ceiling now actually separates a 0.35-energy opening
+            # from a 0.95-energy impact section.
+            energy = energy * (0.3 + 0.7 * max(0.0, min(1.0, arc_energy)))
         magnitude = round(
             min_magnitude + (max_magnitude - min_magnitude) * energy, 6
         )

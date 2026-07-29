@@ -203,3 +203,85 @@ def test_curve_flow_has_fast_settle_stable_and_anticipation_points():
     assert curves["size"][6.0] == pytest.approx(1.04)
     assert curves["size"][12.0] == pytest.approx(1.09)
     assert "blur" not in curves
+
+
+class _CurveTool(_Tool):
+    def __init__(self, regid="Control", name="Control"):
+        super().__init__()
+        self._regid = regid
+        self._name = name
+        self.Center = _Expression()
+        self.Size = _Expression()
+
+    def GetAttrs(self):
+        return {"TOOLS_RegID": self._regid, "TOOLS_Name": self._name}
+
+    def SetAttrs(self, _attrs):
+        return None
+
+    def ConnectInput(self, _name, _src):
+        return True
+
+
+class _CurveComp:
+    def __init__(self):
+        self.media_in = _CurveTool("MediaIn", "MediaIn")
+        self.media_out = _CurveTool("MediaOut", "MediaOut")
+        self.transform = _CurveTool("Transform", "CameraCurve")
+
+    def GetToolList(self, _selected):
+        return {"MediaIn": self.media_in, "MediaOut": self.media_out}
+
+    def AddTool(self, _kind):
+        return self.transform
+
+
+class _CurveItem:
+    def __init__(self):
+        self.comp = _CurveComp()
+        self.renamed = None
+
+    def GetFusionCompNameList(self):
+        return ["Comp1"]
+
+    def DeleteFusionCompByName(self, _name):
+        return True
+
+    def AddFusionComp(self):
+        return self.comp
+
+    def RenameFusionCompByName(self, _old, new):
+        self.renamed = new
+        return True
+
+
+def test_camera_curve_pan_uses_eased_signed_offset_with_base_zoom():
+    adapter = ResolveAdapter(_Resolve())
+    item = _CurveItem()
+    adapter.build_camera_curve_comp(
+        item, comp_name="aes:camera:c1", direction="pan_right"
+        if False else "right",
+        magnitude=0.2, curve="ease_in", duration_frames=13,
+    )
+    center = item.comp.transform.Center.GetExpression()
+    size = item.comp.transform.Size.GetExpression()
+    # right pans content negative; ease_in is t*t over the clip length.
+    assert "(-0.200000)*(((time/12))*((time/12)))" in center
+    assert center.startswith("Point(0.5 + (")
+    # A base zoom keeps the pan from exposing the canvas edge.
+    assert size == "1.160000"
+    assert item.renamed == "aes:camera:c1"
+
+
+def test_camera_curve_push_in_grows_size_only():
+    adapter = ResolveAdapter(_Resolve())
+    item = _CurveItem()
+    adapter.build_camera_curve_comp(
+        item, comp_name="aes:camera:c2", direction="in",
+        magnitude=0.15, curve="ease_out", duration_frames=21,
+    )
+    center = item.comp.transform.Center.GetExpression()
+    size = item.comp.transform.Size.GetExpression()
+    assert center == "Point(0.5, 0.5)"      # push does not pan
+    assert size.startswith("1.150000 + ")   # zoom grows from the pushed-in base
+    assert "(1-(1-(time/20))*(1-(time/20)))" in size  # ease_out curve

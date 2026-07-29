@@ -756,6 +756,96 @@ class ResolveAdapter:
             raise ResolveOperationError(f"{name}: BezierSpline 连接失败")
         return spline
 
+    def _fresh_transform_comp(self, item, previous_name_hint: str = ""):
+        """Delete stale comps, add one, and return (comp, media_in, media_out)."""
+        for existing in item.GetFusionCompNameList() or []:
+            if not item.DeleteFusionCompByName(existing):
+                raise ResolveOperationError(f"无法删除旧 Fusion comp: {existing}")
+        comp = item.AddFusionComp()
+        if not comp:
+            raise ResolveOperationError("AddFusionComp 失败")
+        tools = comp.GetToolList(False) or {}
+        media_in = next(
+            (t for t in tools.values()
+             if (t.GetAttrs() or {}).get("TOOLS_RegID") == "MediaIn"), None)
+        media_out = next(
+            (t for t in tools.values()
+             if (t.GetAttrs() or {}).get("TOOLS_RegID") == "MediaOut"), None)
+        if media_in is None or media_out is None:
+            raise ResolveOperationError("comp 缺 MediaIn/MediaOut")
+        return comp, media_in, media_out
+
+    def build_camera_curve_comp(
+        self,
+        item,
+        *,
+        comp_name: str,
+        direction: str,
+        magnitude: float,
+        curve: str,
+        duration_frames: int,
+    ) -> str:
+        """Render one clip's virtual camera move as an eased Transform curve.
+
+        This is the missing per-shot movement: the compiler previously only set a
+        static zoom and never read ``clip.camera``, so every shot was frozen.
+        Here the whole shot pans/pushes along ``direction`` following ``curve``
+        (ease-in = accelerate out toward the cut, ease-out = decelerate in from
+        it), so adjacent shots whose directions match carry motion *through* the
+        cut — the "被拖向下一镜" feel.  A base zoom keeps pans from exposing canvas.
+        """
+        if duration_frames < 2:
+            raise ValueError("camera curve clip 至少需要 2 帧")
+        comp, media_in, media_out = self._fresh_transform_comp(item)
+        transform = comp.AddTool("Transform")
+        transform.SetAttrs({"TOOLS_Name": "CameraCurve"})
+        if not transform.ConnectInput("Input", media_in):
+            raise ResolveOperationError("CameraCurve Transform 连接失败")
+        if not media_out.ConnectInput("Input", transform):
+            raise ResolveOperationError("CameraCurve MediaOut 连接失败")
+        last = duration_frames - 1
+        t = f"(time/{last})"
+        if curve == "ease_in":
+            e = f"({t})*({t})"
+        elif curve == "ease_out":
+            e = f"(1-(1-{t})*(1-{t}))"
+        elif curve == "ease_in_out":
+            e = f"({t})*({t})*(3-2*({t}))"
+        else:
+            e = t
+        axis_x = direction in {"left", "right"}
+        push = direction in {"in", "out"}
+        # Transform.Center moves content opposite to the visual direction.
+        sign = 1.0 if direction in {"left", "up", "out"} else -1.0
+        mag = max(0.0, min(0.4, magnitude))
+        if push:
+            # Pure push-in/out: zoom only.
+            base = 1.0 + (mag if direction == "in" else 0.0)
+            size = f"{base:.6f} + ({sign * -mag:.6f})*({e})"
+            center = "Point(0.5, 0.5)"
+        else:
+            offset = f"({sign * mag:.6f})*({e})"
+            # Base zoom so the pan never reveals the canvas edge.
+            size = f"{1.0 + mag * 0.8:.6f}"
+            center = (
+                f"Point(0.5 + ({offset}), 0.5)" if axis_x
+                else f"Point(0.5, 0.5 + ({offset}))"
+            )
+        transform.Center.SetExpression(center)
+        transform.Size.SetExpression(size)
+        for input_object, expected, label in (
+            (transform.Center, center, "Center"),
+            (transform.Size, size, "Size"),
+        ):
+            if input_object.GetExpression() != expected:
+                raise ResolveOperationError(
+                    f"CameraCurve Transform.{label} 表达式回读不一致"
+                )
+        current = item.GetFusionCompNameList() or []
+        if current and current[0] != comp_name:
+            item.RenameFusionCompByName(current[0], comp_name)
+        return center if not push else size
+
     def build_motion_phrase_comp(
         self,
         item,

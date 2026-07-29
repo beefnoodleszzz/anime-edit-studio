@@ -228,11 +228,16 @@ capabilities:
 
   camera_move_recipe:
     path: fusion_api
-    api: "Fusion Transform keyframes Recipe"
-    probed: false
-    verified: false
+    api: "Fusion Transform.Center/Size time-expression curve (build_camera_curve_comp)"
+    probed: true
+    verified: true
     priority: high
-    note: "push/pan 动画须由已验收 Recipe 执行；静态 SetProperty(transform) 不可冒充动画。"
+    evidence: "docs/probes/camera_curve_acceptance.json"
+    note: |
+      每镜运镜曲线：Fusion Transform 的 Center/Size 用 time 表达式做 ease 曲线
+      （push/pan），由 ResolveAdapter.build_camera_curve_comp 执行。2026-07-29 渲染
+      对照实测：pan 方向的水平光流分量随曲线单调增长、帧数守恒、相邻同向镜头
+      运动跨切点连续。静态 SetProperty(transform) 不可冒充动画。
 
   subject_tracking:
     path: unsupported

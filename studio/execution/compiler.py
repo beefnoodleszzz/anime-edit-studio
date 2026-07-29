@@ -567,6 +567,34 @@ class ResolveCompiler:
                     params=end.params,
                 )
                 report.recipes_applied += 1
+            # Per-shot camera curve: only when this clip has no other Fusion op
+            # (effects/speed-ramp/transition all occupy the single comp slot).
+            has_transition = any(
+                end.recipe not in {"hard_cut", "none"}
+                for end in (clip.transition.in_, clip.transition.out)
+            )
+            if (
+                clip.camera.move != "none"
+                and not clip.effects
+                and clip.retime.type != "speed_ramp"
+                and not has_transition
+            ):
+                zoom_span = clip.camera.to_scale - clip.camera.from_scale
+                if clip.camera.move in {"push_in", "push_out"}:
+                    direction = "in" if clip.camera.move == "push_in" else "out"
+                    magnitude = abs(zoom_span) or 0.1
+                else:
+                    direction = "left" if clip.camera.move == "pan_left" else "right"
+                    magnitude = abs(zoom_span) or 0.12
+                self.rv.build_camera_curve_comp(
+                    item,
+                    comp_name=f"aes:camera:{clip.id}",
+                    direction=direction,
+                    magnitude=magnitude,
+                    curve=clip.camera.curve,
+                    duration_frames=int(item.GetDuration() or 0),
+                )
+                report.recipes_applied += 1
             if clip.color is not None:
                 color_groups.setdefault(clip.color.recipe, []).append(item)
         for recipe_id, items in color_groups.items():

@@ -113,6 +113,15 @@ EditSpec 用秒 + 显式 `timebase`，帧数由 compiler 换算。
 一边临时放宽质量门槛。角色高频剧集可由结构化 appearance catalog 提供；需要联网
 研究时必须保存来源与置信度，禁止把剧集知识硬编码进 Planner。
 
+### R12 · 每个项目只保留一条预览
+
+作品迭代不得通过 `r7`、`r8`、`v2` 等文件名堆积预览、EditSpec 副本或接触表。
+每个项目只允许一个可覆盖的 `<project-id>-preview.mov`；内部 revision 只用于数据库
+追踪与可恢复状态，不得进入用户可见产物文件名。
+
+用户明确确认当前预览前，禁止生成发布版。确认后只生成一个可覆盖的
+`<project-id>-release.mov`。Recipe 自身的 `preview.mp4` 是能力验收物，不受本条限制。
+
 ---
 
 ## 3. 新增任何 Feature 前必须回答

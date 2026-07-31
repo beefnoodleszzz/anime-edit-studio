@@ -389,6 +389,23 @@ capabilities:
       TimelineItem 的单个 Fusion comp，解决 Resolve 多 comp 仅为版本、不可串联的问题。
       Resolve 21.0.3.7 实渲：6 秒 144 帧完整；动态范围 2.11、hold 21.7%，
       跨切点运动连续性由基线 0.00 提升至 0.90。
+      2026-07-30 产品验收修正：旧主链的 beat_locked_curve 被写死为 false，实际
+      Transform 走 min/max 分段表达式而非 Spline。现已接入参考测量 21 点位置轮廓，
+      重采样为逐帧 BezierSpline；Center/Size/Angle 共用进度，DirectionalBlur
+      跟随曲线导数。祢豆子项目 Resolve 覆盖实渲 14.767s，Technical QA 13/13 通过。
+
+  transform_native_motion_blur:
+    path: fusion_api
+    api: "Fusion Transform MotionBlur / Quality / ShutterAngle / CenterBias / SampleSpread"
+    probed: true
+    verified: true
+    priority: high
+    evidence: "docs/probes/transform_motion_blur_acceptance.json"
+    note: |
+      Resolve 21.0.3.7 隔离实渲：Transform 的原生亚帧 Motion Blur 可写入、回读并
+      改变 98.3% 的运动帧；60/60 帧守恒，锐度中位数保留 97.1%。这是 AE Transform
+      Motion Blur 的对应执行路径。Fusion OpticalFlow 无法由 AddTool 创建，因此
+      不得假称 OpticalFlow → VectorMotionBlur 自动链已验证。
 
   parallax_25d:
     path: fusion_recipe

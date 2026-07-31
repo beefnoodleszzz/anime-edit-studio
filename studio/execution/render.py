@@ -95,13 +95,20 @@ def render_spec(
             (render_id, spec.id, spec.revision, "resolve", preset or PRESETS[kind]),
         )
     try:
+        mark_in, mark_out = adapter.timeline_frame_range(
+            duration_sec=spec.duration_sec,
+            timebase=Timebase(
+                spec.timebase.num,
+                spec.timebase.den,
+                drop_frame=spec.timebase.drop_frame,
+            ),
+        )
         result = adapter.render(
             output_dir=output_dir,
-            name=(
-                f"{spec.id}-r{spec.revision}-"
-                f"{EXECUTION_PIPELINE_VERSION}-{kind}"
-            ),
+            name=f"{spec.id}-{'preview' if kind == 'preview' else 'release'}",
             preset=preset or PRESETS[kind],
+            mark_in=mark_in,
+            mark_out=mark_out,
         )
         with conn:
             conn.execute(

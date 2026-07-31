@@ -19,7 +19,7 @@ from studio.core.cache import JsonCache
 from studio.core.contracts import ConfidenceValue, ShotAnalysis, SubjectBox
 from studio.core.hashing import analysis_cache_key, file_sha256
 
-PIPELINE_VERSION = "visual-1.2.0"
+PIPELINE_VERSION = "visual-1.3.0"
 MODEL = "opencv+wdtag-derived"
 MODEL_VERSION = f"opencv-{cv2.__version__}"
 
@@ -112,7 +112,10 @@ class VisualAnalyzer:
         }
         face_tags = {"face", "close-up", "close_up", "portrait", "1boy", "1girl", "solo"}
         eye_tags = {"eyes", "eye", "looking_at_viewer", "glowing_eyes", "eyewear"}
-        pose_bad = {"bad_anatomy", "cropped", "out_of_frame", "motion_blur"}
+        # "motion_blur" is a drawn/rendered speed cue, not a composition
+        # failure like the others here — action editing wants it at cut
+        # points, so it must not drag pose_quality below the retrieval gate.
+        pose_bad = {"bad_anatomy", "cropped", "out_of_frame"}
         pose_good = {"full_body", "upper_body", "standing", "running", "fighting_stance"}
 
         tag_scale = (
@@ -134,7 +137,10 @@ class VisualAnalyzer:
         motion = 1.0 - math.exp(-max(0.0, motion_mag) / 4.0)
         energy = _clamp(0.45 * motion + 0.3 * contrast + 0.25 * saturation)
         blur = _clamp(math.exp(-sharpness / 180.0))
-        exposure = 1.0 - min(1.0, abs(float(gray.mean()) / 255 - 0.5) * 1.7)
+        # Dark dramatic lighting is not a technical defect. Penalise actual
+        # black/white clipping instead of distance from middle grey.
+        clipped = float(np.mean((gray <= 3) | (gray >= 252)))
+        exposure = 1.0 - min(1.0, clipped / 0.38)
         image_quality = _clamp(
             0.45 * (1.0 - blur) + 0.3 * (1.0 - compression) + 0.25 * exposure
         )

@@ -13,6 +13,7 @@ from studio.editing.candidates import (
     create_group,
     precision_metrics,
     generate_review_assets,
+    replace_with_slot_groups,
 )
 from studio.editing.candidates import CandidateGroup
 
@@ -79,6 +80,34 @@ def test_retrieval_and_contextual_ranking_are_separate(tmp_path):
     assert retrieve(
         conn, RetrievalQuery(min_duration_sec=1.01, limit=100)
     ) == []
+
+
+def test_editor_driven_camera_ranking_prefers_cleaner_low_motion_plate(tmp_path):
+    conn = connect(tmp_path / "v2.sqlite")
+    _seed(conn)
+    normal = rank_candidates(
+        conn,
+        ["s0", "s1", "s2"],
+        CandidateContext(project_id="p", role="impact", target_energy=0.9),
+        limit=3,
+    )
+    editor_driven = rank_candidates(
+        conn,
+        ["s0", "s1", "s2"],
+        CandidateContext(
+            project_id="p",
+            role="impact",
+            target_energy=0.9,
+            prefer_low_motion=True,
+        ),
+        limit=3,
+    )
+    assert normal[0].shot_id == "s2"
+    assert editor_driven[0].shot_id == "s1"
+    assert (
+        editor_driven[0].contextual_components["source_stillness"]
+        > editor_driven[1].contextual_components["source_stillness"]
+    )
 
 
 def test_production_retrieval_rejects_text_and_contaminated_tags(tmp_path):
@@ -155,6 +184,26 @@ def test_subtitle_gate_ignores_narrow_false_positive_boxes(tmp_path):
     assert "s0" not in ids  # present=True, no box data: still excluded
 
 
+def test_strict_subtitle_gate_rejects_even_narrow_text_for_clean_portraits(tmp_path):
+    conn = connect(tmp_path / "v2.sqlite")
+    _seed(conn)
+    with conn:
+        conn.execute(
+            "UPDATE shots SET subtitle_region=? WHERE id='s1'",
+            (json.dumps({"present": True, "boxes": [[0.8, 0.4, 0.08, 0.03]]}),),
+        )
+    ids = retrieve(
+        conn,
+        RetrievalQuery(
+            character="gojou",
+            subtitle_allowed=False,
+            strict_subtitle_clean=True,
+            limit=100,
+        ),
+    )
+    assert "s1" not in ids
+
+
 def test_contaminated_candidate_gets_intrinsic_penalty(tmp_path):
     conn = connect(tmp_path / "v2.sqlite")
     _seed(conn)
@@ -207,6 +256,43 @@ def test_abc_selection_writes_pairwise_preferences(tmp_path):
     assert chosen.selected_shot_id == group.shot_ids[1]
     assert conn.execute("SELECT count(*) FROM preference_pairs").fetchone()[0] == 2
     assert precision_metrics(conn, "p")["candidate_precision"] == 1.0
+
+
+def test_slot_groups_are_one_to_one_with_preview_timeline(tmp_path):
+    conn = connect(tmp_path / "v2.sqlite")
+    _seed(conn)
+    create_group(
+        conn,
+        project_id="p",
+        role="opening",
+        ranked=rank_candidates(
+            conn,
+            ["s0", "s1", "s2"],
+            CandidateContext(project_id="p", role="opening", target_energy=0.4),
+            limit=3,
+        ),
+    )
+    groups = replace_with_slot_groups(
+        conn,
+        project_id="p",
+        plan_revision=2,
+        slots=[
+            {
+                "role": "opening",
+                "timeline_in_sec": 0.0,
+                "timeline_duration_sec": 1.0,
+                "shot_ids": ["s1", "s0", "s2"],
+            }
+        ],
+    )
+    assert len(groups) == 1
+    assert groups[0].slot_key == "000"
+    assert groups[0].selected_shot_id == "s1"
+    row = conn.execute(
+        "SELECT count(*),selected_shot_id,timeline_in_sec "
+        "FROM candidate_groups WHERE project_id='p' AND active=1"
+    ).fetchone()
+    assert tuple(row) == (1, "s1", 0.0)
 
 
 def test_replan_exposes_only_current_groups_and_preserves_compatible_choice(tmp_path):

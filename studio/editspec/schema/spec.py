@@ -222,6 +222,19 @@ class MotionBeat(_Base):
     clip_id: str
     stage: MotionStage
     intensity: float = Field(..., ge=0, le=1)
+    direction: Literal[
+        "left", "right", "up", "down",
+        "up-left", "up-right", "down-left", "down-right",
+    ] | None = None
+    zoom_direction: Literal["in", "out"] | None = None
+    accent_at_sec: float | None = Field(None, ge=0)
+    anticipation_sec: float | None = Field(None, gt=0, le=0.5)
+    release_sec: float | None = Field(None, gt=0, le=0.6)
+    entry_intensity: float | None = Field(None, ge=0, le=1)
+    translation: float | None = Field(None, ge=0, le=0.35)
+    scale_delta: float | None = Field(None, ge=0, le=0.9)
+    entry_velocity: float = Field(0.0, ge=0, le=1.0)
+    exit_velocity: float = Field(0.0, ge=0, le=1.0)
 
 
 class MotionPhrase(_Base):
@@ -229,9 +242,13 @@ class MotionPhrase(_Base):
 
     id: str
     beats: list[MotionBeat] = Field(..., min_length=2, max_length=4)
-    direction: Literal["left", "right", "up", "down"]
+    direction: Literal[
+        "left", "right", "up", "down",
+        "up-left", "up-right", "down-left", "down-right",
+    ]
+    zoom_direction: Literal["in", "out"] = "in"
     translation: float = Field(0.12, ge=0, le=0.35)
-    scale_delta: float = Field(0.12, ge=0, le=0.4)
+    scale_delta: float = Field(0.12, ge=0, le=0.9)
     rotation_deg: float = Field(0.0, ge=-12, le=12)
     blur_strength: float = Field(0.24, ge=0, le=0.5)
     cut_window_sec: float = Field(0.24, gt=0, le=0.5)

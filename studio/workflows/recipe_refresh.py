@@ -13,6 +13,7 @@ from studio.core.assets import DatabaseResolver, DatabaseShotResolver
 from studio.creative.director import DirectorPlan
 from studio.creative.preference import record_diff_feedback
 from studio.editing.sequence import apply_recipe_plan
+from studio.editing.music import MusicMotionMap
 from studio.editspec.diff import apply_diff, diff_specs
 from studio.editspec.schema import EditSpec
 from studio.editspec.validator import validate
@@ -53,7 +54,16 @@ def refresh_recipe_plan(
     plan = DirectorPlan.model_validate(
         yaml.safe_load(plan_path.read_text(encoding="utf-8"))
     )
-    proposed = apply_recipe_plan(before, plan=plan)
+    motion_path = spec_path.parent / "music_motion_map.json"
+    music_motion = (
+        MusicMotionMap.model_validate_json(motion_path.read_text(encoding="utf-8"))
+        if motion_path.is_file() else None
+    )
+    proposed = apply_recipe_plan(
+        before,
+        plan=plan,
+        music_motion=music_motion,
+    )
     patch = diff_specs(before, proposed, source="critic")
     if not patch.ops:
         return RecipeRefreshResult(
@@ -67,8 +77,6 @@ def refresh_recipe_plan(
     )
     validation.raise_if_failed()
     content = revised.model_dump_json(by_alias=True, indent=2)
-    revision_path = spec_path.with_name(f"editspec.r{revised.revision}.json")
-    _atomic_write(revision_path, content)
     with conn:
         conn.execute(
             """
@@ -107,7 +115,7 @@ def refresh_recipe_plan(
     )
     return RecipeRefreshResult(
         before.id, before.revision, revised.revision,
-        len(patch.ops), changed, revision_path,
+        len(patch.ops), changed, spec_path,
     )
 
 

@@ -16,6 +16,16 @@ PROXY_DIR = REPO / "library" / "proxies"
 VIDEO_SUFFIXES = (".mov", ".mp4", ".mkv", ".m4v")
 
 
+def _is_ready_video(path: Path) -> bool:
+    """Exclude hidden/in-progress proxy writes from deterministic discovery."""
+    return (
+        path.is_file()
+        and not path.name.startswith(".")
+        and ".partial" not in path.stem
+        and path.suffix.lower() in VIDEO_SUFFIXES
+    )
+
+
 class AssetResolver(Protocol):
     def __call__(self, asset_id: str) -> Path | None: ...
 
@@ -51,7 +61,7 @@ class FilesystemResolver:
             # 前缀匹配（v1 的 asset_id 是 sha256 前 12 位，允许简写）
             matches = sorted(
                 p for p in directory.iterdir()
-                if p.suffix.lower() in VIDEO_SUFFIXES and p.stem.startswith(asset_id)
+                if _is_ready_video(p) and p.stem.startswith(asset_id)
             )
             if matches:
                 return matches[0]
@@ -63,7 +73,7 @@ class FilesystemResolver:
             if directory.exists():
                 ids.update(
                     p.stem for p in directory.iterdir()
-                    if p.suffix.lower() in VIDEO_SUFFIXES
+                    if _is_ready_video(p)
                 )
         return sorted(ids)
 

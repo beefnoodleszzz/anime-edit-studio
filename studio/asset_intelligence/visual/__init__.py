@@ -5,6 +5,7 @@ from studio.asset_intelligence.visual.analyzer import VisualAnalyzer
 __all__ = ["VisualAnalyzer"]
 from .analyzer import PIPELINE_VERSION as VISUAL_PIPELINE_VERSION
 from .analyzer import VisualAnalyzer, analyze_pending
+from .temporal_quality import analyze_temporal_quality, gate_candidates
 from .boundary import PIPELINE_VERSION as CUTABILITY_PIPELINE_VERSION
 from .boundary import analyze_cutability
 from .tagger import (
@@ -21,6 +22,8 @@ __all__ = [
     "CUTABILITY_PIPELINE_VERSION",
     "TagResult",
     "VisualAnalyzer",
+    "analyze_temporal_quality",
+    "gate_candidates",
     "WDTaggerBackend",
     "hydrate_legacy_tags",
     "analyze_pending",

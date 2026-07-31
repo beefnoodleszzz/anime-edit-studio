@@ -2490,6 +2490,26 @@ Picture locked.
 新作品默认采用 `1:1` 方形画布：首剪与预览为 1080×1080，正式超分交付为
 3072×3072。旧项目保持自身已声明的 Canvas；只有用户明确要求时才派生新的比例版本。
 
+候选镜头进入 contextual ranking 前，必须通过与交付画幅一致的多帧质量硬门槛。
+默认 `1:1` 项目至少检查候选窗口的质量下限、坏帧比例和中央方形裁切后的主体保留率；
+结果按素材哈希、分析版本、采样参数和目标画幅缓存。剧情、音乐、参考风格、连续性或
+用户偏好分不得把未通过该门槛的镜头加权救回。暗调画面本身不视为低质量，曝光检查以
+实际黑白截断为准。
+
+候选审核以最终时间线槽位为权威，不以宽泛 narrative role 代替。每个预览 clip 必须
+对应且只对应一个 A/B/C 组：A 是当前预览实际使用的镜头，B/C 是同一时间线位置、
+时长与角色约束下可替换的镜头。当前预览中的所有 clip 必须等于所有 active slot group
+的 selected shot 集合；审核集合之外的镜头不得进入预览。旧的“一个段落一组候选”
+不得作为用户审核口径。
+
+对于高运动变化的参考剪辑，Reference Intelligence 必须把成片光流解释为“素材运动 +
+编辑生成运动”的混合结果，禁止直接把参考成片的运动强度转换成“优先召回高运动素材”。
+当参考 `motion_change_ratio` 或运动分位数证明其属于 editor-driven motion 时，
+Motion Plan 必须连续覆盖时间线，以音乐/参考相位编排 accelerate、carry、settle、
+reverse，并在同一个已验证 MotionPhrase Fusion 图中统一执行 retime、translation、
+scale、rotation 与 directional blur。不得用互不相关的逐镜 `ease_in_out` 运镜冒充
+跨切律动；验收必须同时比较运动覆盖率、跨切 carry/reversal、方向分布和运动包络。
+
 Running:
 high quality retime
 final Fusion

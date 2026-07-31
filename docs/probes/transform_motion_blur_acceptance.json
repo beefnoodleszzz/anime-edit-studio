@@ -1,0 +1,15 @@
+{
+  "resolve_version": "21.0.3.7",
+  "baseline": "docs/probes/transform_motion_blur_out/transform-no-motion-blur.mov",
+  "effect": "docs/probes/transform_motion_blur_out/transform-native-motion-blur.mov",
+  "frames": 60,
+  "mean_frame_difference": 1.4609679904513888,
+  "changed_frame_ratio": 0.9833333333333333,
+  "sharpness_ratio": 0.9708344321030515,
+  "checks": {
+    "duration_preserved": true,
+    "render_changes": true,
+    "localized_edge_softening": true
+  },
+  "verified": true
+}

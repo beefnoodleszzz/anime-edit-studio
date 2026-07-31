@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 14
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
@@ -443,6 +443,56 @@ def _migration_011(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_012(conn: sqlite3.Connection) -> None:
+    """Cache multi-frame delivery-crop quality for candidate hard gating."""
+    conn.executescript(
+        """
+        CREATE TABLE shot_temporal_quality (
+            shot_id TEXT NOT NULL REFERENCES shots(id) ON DELETE CASCADE,
+            version TEXT NOT NULL,
+            asset_hash TEXT NOT NULL,
+            target_aspect REAL NOT NULL,
+            sample_count INTEGER NOT NULL,
+            quality_floor REAL NOT NULL,
+            bad_frame_ratio REAL NOT NULL,
+            crop_fitness REAL NOT NULL,
+            details_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            PRIMARY KEY(shot_id, version, target_aspect)
+        );
+        CREATE INDEX idx_temporal_quality_gate
+          ON shot_temporal_quality(version,target_aspect,quality_floor,bad_frame_ratio,crop_fitness);
+        """
+    )
+
+
+def _migration_013(conn: sqlite3.Connection) -> None:
+    """Upgrade databases that applied the initial quality-cache schema."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(shot_temporal_quality)")}
+    if "asset_hash" not in columns:
+        conn.execute(
+            "ALTER TABLE shot_temporal_quality ADD COLUMN asset_hash TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _migration_014(conn: sqlite3.Connection) -> None:
+    """Make candidate review groups address exact timeline slots."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(candidate_groups)")}
+    for name, kind in (
+        ("slot_key", "TEXT"),
+        ("timeline_in_sec", "REAL"),
+        ("timeline_duration_sec", "REAL"),
+    ):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE candidate_groups ADD COLUMN {name} {kind}")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_candidate_groups_slot
+        ON candidate_groups(project_id,active,slot_key)
+        """
+    )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -455,6 +505,9 @@ MIGRATIONS = (
     (9, _migration_009),
     (10, _migration_010),
     (11, _migration_011),
+    (12, _migration_012),
+    (13, _migration_013),
+    (14, _migration_014),
 )
 
 

@@ -20,11 +20,92 @@ class CandidateGroup(BaseModel):
     id: str
     project_id: str
     role: str
+    slot_key: str | None = None
+    timeline_in_sec: float | None = None
+    timeline_duration_sec: float | None = None
     shot_ids: list[str] = Field(..., min_length=3, max_length=3)
     selected_shot_id: str | None = None
     selection_source: str | None = Field(default=None, pattern="^(human|ai)$")
     plan_revision: int = Field(default=1, ge=1)
     active: bool = True
+
+
+def replace_with_slot_groups(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    slots: list[dict],
+    plan_revision: int,
+) -> list[CandidateGroup]:
+    """Replace role-level review groups with exact A/B/C groups per edit slot."""
+    groups: list[CandidateGroup] = []
+    with conn:
+        conn.execute(
+            "UPDATE candidate_groups SET active=0 WHERE project_id=?",
+            (project_id,),
+        )
+        for index, slot in enumerate(slots):
+            shot_ids = list(dict.fromkeys(slot["shot_ids"]))
+            if len(shot_ids) != 3:
+                raise ValueError(
+                    f"slot {index} 必须有 3 个不重复候选，实际 {len(shot_ids)}"
+                )
+            slot_key = f"{index:03d}"
+            group_id = stable_hash(
+                {
+                    "project_id": project_id,
+                    "slot_key": slot_key,
+                    "timeline_in_sec": slot["timeline_in_sec"],
+                    "shots": shot_ids,
+                    "ranking_version": RANKING_VERSION,
+                }
+            )[:20]
+            conn.execute(
+                """
+                INSERT INTO candidate_groups(
+                  id,project_id,role,slot_key,timeline_in_sec,
+                  timeline_duration_sec,shot_ids_json,selected_shot_id,
+                  selection_source,plan_revision,active
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,1)
+                ON CONFLICT(id) DO UPDATE SET
+                  role=excluded.role,
+                  slot_key=excluded.slot_key,
+                  timeline_in_sec=excluded.timeline_in_sec,
+                  timeline_duration_sec=excluded.timeline_duration_sec,
+                  shot_ids_json=excluded.shot_ids_json,
+                  selected_shot_id=excluded.selected_shot_id,
+                  selection_source=excluded.selection_source,
+                  plan_revision=excluded.plan_revision,
+                  active=1
+                """,
+                (
+                    group_id,
+                    project_id,
+                    slot["role"],
+                    slot_key,
+                    slot["timeline_in_sec"],
+                    slot["timeline_duration_sec"],
+                    json.dumps(shot_ids),
+                    shot_ids[0],
+                    "ai",
+                    plan_revision,
+                ),
+            )
+            groups.append(
+                CandidateGroup(
+                    id=group_id,
+                    project_id=project_id,
+                    role=slot["role"],
+                    slot_key=slot_key,
+                    timeline_in_sec=slot["timeline_in_sec"],
+                    timeline_duration_sec=slot["timeline_duration_sec"],
+                    shot_ids=shot_ids,
+                    selected_shot_id=shot_ids[0],
+                    selection_source="ai",
+                    plan_revision=plan_revision,
+                )
+            )
+    return groups
 
 
 def create_group(
@@ -154,6 +235,9 @@ def choose_candidate(
         id=row["id"],
         project_id=row["project_id"],
         role=row["role"],
+        slot_key=row["slot_key"],
+        timeline_in_sec=row["timeline_in_sec"],
+        timeline_duration_sec=row["timeline_duration_sec"],
         shot_ids=shot_ids,
         selected_shot_id=shot_id,
         selection_source=selection_source,
@@ -267,4 +351,5 @@ __all__ = [
     "create_group",
     "generate_review_assets",
     "precision_metrics",
+    "replace_with_slot_groups",
 ]

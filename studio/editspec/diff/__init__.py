@@ -46,7 +46,7 @@ class PatchClip(_Op):
 
 class PatchSpec(_Op):
     op: Literal["patch_spec"] = "patch_spec"
-    path: Literal["audio", "markers", "captions", "meta"]
+    path: Literal["audio", "markers", "captions", "meta", "motion_phrases"]
     value: object
 
 
@@ -105,7 +105,7 @@ def diff_specs(
     for clip_id in old.keys() & new.keys():
         if old[clip_id] != new[clip_id]:
             ops.append(ReplaceClip(clip_id=clip_id, new=deepcopy(new[clip_id])))
-    for path in ("audio", "markers", "captions", "meta"):
+    for path in ("audio", "markers", "captions", "meta", "motion_phrases"):
         if getattr(before, path) != getattr(after, path):
             value = after.model_dump(mode="python", by_alias=True)[path]
             ops.append(PatchSpec(path=path, value=deepcopy(value)))

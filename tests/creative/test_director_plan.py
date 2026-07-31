@@ -157,3 +157,38 @@ def test_vibe_tone_still_forces_the_beat_grid_regardless_of_measured_sync():
         _fingerprint(beat_sync_ratio=0.3),
     )
     assert plan.editing_style.beat_grid_subdivision == "section_1_2_4"
+
+
+def test_low_cut_reference_end_card_does_not_discard_dense_body_skeleton():
+    style = _fingerprint(beat_sync_ratio=0.5).model_copy(
+        update={
+            "duration_sec": 13.0,
+            "cut_timestamps": [1.0, 2.0, 3.0, 4.0, 5.0, 9.0],
+        }
+    )
+    plan = generate_director_plan(
+        DirectorBrief(project_id="p", duration_sec=9.0),
+        _basic_music().model_copy(update={"duration_sec": 9.0}),
+        style,
+    )
+    assert plan.editing_style.normalized_cut_positions == [
+        1 / 9, 2 / 9, 3 / 9, 4 / 9, 5 / 9,
+    ]
+
+
+def test_different_dense_reference_drops_exact_skeleton():
+    style = _fingerprint(beat_sync_ratio=0.5).model_copy(
+        update={
+            "duration_sec": 13.0,
+            "cut_timestamps": [
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.5, 7.0, 8.0,
+                9.2, 9.8, 10.5, 11.2, 12.0,
+            ],
+        }
+    )
+    plan = generate_director_plan(
+        DirectorBrief(project_id="p", duration_sec=9.0),
+        _basic_music().model_copy(update={"duration_sec": 9.0}),
+        style,
+    )
+    assert plan.editing_style.normalized_cut_positions == []

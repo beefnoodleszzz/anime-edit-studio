@@ -6,6 +6,7 @@ from .service import (
     create_group,
     generate_review_assets,
     precision_metrics,
+    replace_with_slot_groups,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "create_group",
     "generate_review_assets",
     "precision_metrics",
+    "replace_with_slot_groups",
 ]

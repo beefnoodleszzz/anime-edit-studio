@@ -12,7 +12,14 @@ from studio.editing.sequence import (
     planned_rhythm_metrics,
     role_source_duration_requirements,
 )
-from studio.editing.sequence.planner import MIN_REPEAT_GAP, _slots
+from studio.editing.sequence.planner import (
+    MIN_REPEAT_GAP,
+    _cut_relation,
+    _source_intent,
+    _source_window,
+    _slots,
+    _snap_cuts_to_music,
+)
 
 
 def test_sequence_planner_uses_beam_and_emits_versioned_spec(tmp_path):
@@ -380,6 +387,481 @@ def test_density_prune_does_not_reopen_a_max_shot_length_gap():
     maximum = min(1.2, profile.max_shot_length)
     assert max(slot.duration for slot in slots) <= maximum + 1e-6
     assert any(slot.role == "impact" for slot in slots)
+
+
+def test_reference_positions_keep_measured_density_with_music_and_sections():
+    """A same-duration reference owns cadence, including its long opening hold."""
+    profile = EditingStyleProfile(
+        source="reference",
+        target_cut_density=0.4,
+        normalized_cut_positions=[0.25, 0.5, 0.75],
+        min_shot_length=0.4,
+        max_shot_length=0.8,
+        beat_sync_target=0.0,
+        beat_grid_subdivision="section_1_2_4",
+    )
+    plan = DirectorPlan(
+        project_id="reference-density",
+        revision=1,
+        duration_sec=10,
+        primary_characters=[],
+        tone=[],
+        structure=[
+            DirectorSection(
+                role="opening", start=0, end=3, energy=.4,
+                average_shot_length=1,
+            ),
+            DirectorSection(
+                role="impact", start=3, end=7, energy=.9,
+                average_shot_length=.5,
+            ),
+            DirectorSection(
+                role="ending", start=7, end=10, energy=.4,
+                average_shot_length=1,
+            ),
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+        editing_style=profile,
+    )
+    music = MusicMap(
+        duration_sec=10,
+        bpm=120,
+        beats=[value / 2 for value in range(20)],
+        bars=[0],
+        downbeats=[0],
+        onsets=[],
+        beat_energy=[],
+        sections=[MusicSection(type="drop", start=0, end=10, energy=.8)],
+        impact_points=[],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+
+    slots = _slots(plan, music)
+
+    # Comparable references own all measured boundaries. Director sections
+    # classify the resulting slots but do not inject new cuts into the cadence.
+    assert [slot.start for slot in slots] == [0.0, 2.5, 5.0, 7.5]
+    assert max(slot.duration for slot in slots) >= 2.0
+
+
+def test_music_snap_does_not_collapse_distinct_reference_cuts():
+    profile = EditingStyleProfile(
+        source="reference",
+        beat_sync_target=1.0,
+    )
+    plan = DirectorPlan(
+        project_id="snap-density",
+        revision=1,
+        duration_sec=3,
+        primary_characters=[],
+        tone=[],
+        structure=[
+            DirectorSection(
+                role="opening", start=0, end=3, energy=.5,
+                average_shot_length=1,
+            ),
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=0, flash_max=0, shake_max=0),
+        generation={"llm_used": False},
+        editing_style=profile,
+    )
+    music = MusicMap(
+        duration_sec=3,
+        bpm=120,
+        beats=[1.0, 1.5, 2.0],
+        bars=[],
+        downbeats=[],
+        onsets=[],
+        beat_energy=[],
+        sections=[MusicSection(type="build", start=0, end=3, energy=.5)],
+        impact_points=[],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+
+    snapped = _snap_cuts_to_music(
+        [0.9, 1.1, 1.9],
+        plan=plan,
+        music=music,
+        profile=profile,
+    )
+
+    assert len(set(snapped)) == 3
+
+
+def test_comparable_reference_preserves_exact_normalized_cut_skeleton():
+    """Measured reference boundaries own timing, including intentional microcuts."""
+    profile = EditingStyleProfile(
+        source="reference",
+        target_cut_density=0.4,
+        normalized_cut_positions=[0.2, 0.4, 0.42, 0.8],
+        min_shot_length=0.35,
+        max_shot_length=1.0,
+        beat_sync_target=1.0,
+        beat_grid_subdivision="section_1_2_4",
+    )
+    plan = DirectorPlan(
+        project_id="reference-skeleton",
+        revision=1,
+        duration_sec=10,
+        primary_characters=[],
+        tone=["vibe"],
+        structure=[
+            DirectorSection(
+                role="opening", start=0, end=3, energy=.4,
+                average_shot_length=1,
+            ),
+            DirectorSection(
+                role="impact", start=3, end=7, energy=.9,
+                average_shot_length=.5,
+            ),
+            DirectorSection(
+                role="ending", start=7, end=10, energy=.4,
+                average_shot_length=1,
+            ),
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+        editing_style=profile,
+    )
+    music = MusicMap(
+        duration_sec=10,
+        bpm=120,
+        beats=[value / 2 for value in range(20)],
+        bars=[0],
+        downbeats=[0],
+        onsets=[3.0, 7.0],
+        beat_energy=[],
+        sections=[
+            MusicSection(type="intro", start=0, end=3, energy=.4),
+            MusicSection(type="drop", start=3, end=7, energy=.9),
+            MusicSection(type="release", start=7, end=10, energy=.4),
+        ],
+        impact_points=[3.0, 7.0],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+
+    slots = _slots(plan, music)
+
+    assert [slot.start for slot in slots[1:]] == [2.0, 4.0, 4.2, 8.0]
+
+
+def test_reference_cut_vectors_become_carry_and_reverse_slot_intents():
+    profile = EditingStyleProfile(
+        source="reference",
+        normalized_cut_positions=[0.25, 0.5, 0.75],
+        cut_carry_vectors=[
+            {"same_direction": True},
+            {"same_direction": False},
+            {"same_direction": True},
+        ],
+    )
+    plan = DirectorPlan(
+        project_id="reference-intents",
+        revision=1,
+        duration_sec=4,
+        primary_characters=[],
+        tone=[],
+        structure=[
+            DirectorSection(
+                role="impact", start=0, end=4, energy=.8,
+                average_shot_length=1,
+            ),
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=0, flash_max=0, shake_max=0),
+        generation={"llm_used": False},
+        editing_style=profile,
+    )
+    music = MusicMap(
+        duration_sec=4,
+        bpm=0,
+        beats=[],
+        bars=[],
+        downbeats=[],
+        onsets=[],
+        beat_energy=[],
+        sections=[MusicSection(type="drop", start=0, end=4, energy=.8)],
+        impact_points=[],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+
+    assert [slot.intent for slot in _slots(plan, music)] == [
+        "establish", "carry", "reverse", "carry",
+    ]
+
+
+def _relation_row(**updates):
+    return {
+        "action": None,
+        "emotion": None,
+        "tags": None,
+        "motion_dir": "static",
+        "shot_scale": .5,
+        "brightness": .5,
+        "character": "nezuko",
+        **updates,
+    }
+
+
+def test_cut_relation_does_not_claim_graphic_match_without_geometry_evidence():
+    relation = _cut_relation(
+        _relation_row(shot_scale=.52, brightness=.48),
+        _relation_row(shot_scale=.5, brightness=.5),
+        intent="carry",
+    )
+
+    assert relation.kind == "continuation"
+    assert "shot_scale_similarity" in relation.matched_features
+    assert "brightness_similarity" in relation.matched_features
+
+
+def test_cut_relation_records_directional_carry_and_true_reversal():
+    carry = _cut_relation(
+        _relation_row(motion_dir="pan_right"),
+        _relation_row(motion_dir="right"),
+        intent="carry",
+    )
+    reversal = _cut_relation(
+        _relation_row(motion_dir="left"),
+        _relation_row(motion_dir="right"),
+        intent="reverse",
+    )
+    false_reversal = _cut_relation(
+        _relation_row(motion_dir="right"),
+        _relation_row(motion_dir="right"),
+        intent="reverse",
+    )
+
+    assert carry.kind == "match_action"
+    assert "motion_direction:right" in carry.matched_features
+    assert reversal.kind == "match_action"
+    assert "motion_reversal:left->right" in reversal.matched_features
+    assert false_reversal.kind != "match_action"
+
+
+def test_carry_cut_intent_does_not_invent_an_action_source_phase():
+    row = _relation_row(
+        start_sec=10,
+        end_sec=14,
+        keyframe="shot_0001_c2.jpg",
+    )
+
+    _, _, selection = _source_window(row, 1.0, intent="carry")
+
+    assert selection.phase == "representative"
+    assert "action_semantics" not in selection.evidence
+
+
+def test_source_intent_comes_from_narrative_role_not_cut_direction():
+    assert _source_intent(
+        type("Slot", (), {"role": "pre_drop", "intent": "reverse"})()
+    ) == "anticipation"
+    assert _source_intent(
+        type("Slot", (), {"role": "impact", "intent": "carry"})()
+    ) == "impact"
+    assert _source_intent(
+        type("Slot", (), {"role": "release", "intent": "reverse"})()
+    ) == "hold"
+    assert _source_intent(
+        type("Slot", (), {"role": "ending", "intent": "carry"})()
+    ) == "settle"
+
+
+def test_sequence_planner_corrects_a_skewed_pan_pool(tmp_path):
+    """A pool dominated by one panning direction must not produce a sequence
+    that is all pans-in-one-direction, even when that side scores slightly
+    higher — matching the QA's direction_balance metric (motion_qa), which
+    measures min(left,right)/max(left,right) over the whole edit rather than
+    per-cut continuity (already covered by _transition/cross_cut_continuity).
+    """
+    conn = connect(tmp_path / "v2.sqlite")
+    with conn:
+        conn.execute(
+            "INSERT INTO assets(id,path,sha256,fps_num,fps_den,duration_sec) "
+            "VALUES ('a','x','hash',24,1,40)"
+        )
+        conn.executemany(
+            """
+            INSERT INTO shots(
+              id,asset_id,idx,start_sec,end_sec,character,motion_dir,
+              shot_scale,visual_energy
+            ) VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            [
+                (
+                    f"s{i}", "a", i, i * 3, i * 3 + 2.5,
+                    "tanjiro", "right" if i < 8 else "left",
+                    0.5, 0.6,
+                )
+                for i in range(10)
+            ],
+        )
+    plan = DirectorPlan(
+        project_id="balance",
+        revision=1,
+        duration_sec=6,
+        primary_characters=["tanjiro"],
+        tone=["cinematic"],
+        structure=[
+            DirectorSection(
+                role="buildup", start=0, end=6, energy=0.6,
+                average_shot_length=1,
+            )
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+    )
+    music = MusicMap(
+        duration_sec=6,
+        bpm=120,
+        beats=[value / 2 for value in range(12)],
+        bars=[0],
+        downbeats=[0],
+        onsets=[],
+        beat_energy=[],
+        sections=[MusicSection(type="build", start=0, end=6, energy=0.6)],
+        impact_points=[],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+    # A small, deliberate scoring edge for "right" candidates: without the
+    # balance term, the beam would greedily pick right shots every time.
+    candidates = [
+        RankedCandidate(
+            shot_id=f"s{i}",
+            intrinsic=0.7,
+            contextual=0.7,
+            total=0.70 if i < 8 else 0.69,
+            intrinsic_components={},
+            contextual_components={},
+        )
+        for i in range(10)
+    ]
+    spec = plan_sequence(
+        conn, plan=plan, music=music, candidates_by_role={"buildup": candidates}
+    )
+    directions = [
+        conn.execute(
+            "SELECT motion_dir FROM shots WHERE id=?", (clip.shot_id,)
+        ).fetchone()[0]
+        for clip in spec.clips
+    ]
+    assert "left" in directions, (
+        "sequence never corrected the pan skew despite an under-represented "
+        "direction being available"
+    )
+
+
+def test_sequence_planner_prefers_blur_at_impact_and_clarity_at_establish(tmp_path):
+    """Drawn motion blur is a cut-point asset for high-motion intents and a
+    liability for establishing ones — the opposite of scoring it as uniformly
+    bad. This is the planner-side half of the blur_ratio/hold_ratio QA gap;
+    the retrieval-side half is the "motion_blur" removal from pose_bad in
+    studio/asset_intelligence/visual/analyzer.py.
+    """
+    conn = connect(tmp_path / "v2.sqlite")
+    with conn:
+        conn.execute(
+            "INSERT INTO assets(id,path,sha256,fps_num,fps_den,duration_sec) "
+            "VALUES ('a','x','hash',24,1,40)"
+        )
+        conn.executemany(
+            """
+            INSERT INTO shots(
+              id,asset_id,idx,start_sec,end_sec,character,motion_dir,
+              shot_scale,visual_energy,blur_score
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            [
+                (
+                    f"sHigh{i}", "a", i, i * 3, i * 3 + 2.5,
+                    "tanjiro", "right", 0.5, 0.6, 0.6,
+                )
+                for i in range(3)
+            ] + [
+                (
+                    f"sLow{i}", "a", i + 3, (i + 3) * 3, (i + 3) * 3 + 2.5,
+                    "tanjiro", "right", 0.5, 0.6, 0.03,
+                )
+                for i in range(3)
+            ],
+        )
+    plan = DirectorPlan(
+        project_id="blur",
+        revision=1,
+        duration_sec=3,
+        primary_characters=["tanjiro"],
+        tone=["cinematic"],
+        structure=[
+            DirectorSection(
+                role="impact", start=0, end=3, energy=0.6,
+                average_shot_length=1,
+            )
+        ],
+        visual_rules={"prefer": [], "avoid": []},
+        sound_strategy="test",
+        impact_budget=ImpactBudget(sfx_max=1, flash_max=1, shake_max=1),
+        generation={"llm_used": False},
+    )
+    music = MusicMap(
+        duration_sec=3,
+        bpm=120,
+        beats=[0, 0.5, 1, 1.5, 2, 2.5],
+        bars=[0],
+        downbeats=[0],
+        onsets=[],
+        beat_energy=[],
+        sections=[MusicSection(type="build", start=0, end=3, energy=0.6)],
+        impact_points=[],
+        risers=[],
+        breaks=[],
+        silences=[],
+        spectral_change_points=[],
+    )
+    candidates = [
+        RankedCandidate(
+            shot_id=shot_id, intrinsic=0.7, contextual=0.7, total=0.70,
+            intrinsic_components={}, contextual_components={},
+        )
+        for shot_id in (
+            [f"sHigh{i}" for i in range(3)] + [f"sLow{i}" for i in range(3)]
+        )
+    ]
+    spec = plan_sequence(
+        conn, plan=plan, music=music, candidates_by_role={"impact": candidates}
+    )
+    # slot 0 is always forced to "establish" regardless of section role; any
+    # later slot in an "impact"-role section gets intent="impact".
+    assert spec.clips[0].shot_id.startswith("sLow"), (
+        "the opening/establish slot picked a blurry shot over a clear one"
+    )
+    assert any(clip.shot_id.startswith("sHigh") for clip in spec.clips[1:]), (
+        "no later impact-intent slot ever picked a motion-blurred shot"
+    )
 
 
 def test_editing_styles_create_distinct_reusable_rhythm_grammars():

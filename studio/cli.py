@@ -213,6 +213,13 @@ def first_cut_cmd(
     ),
     character: list[str] | None = typer.Option(None, "--character"),
     tone: list[str] | None = typer.Option(None, "--tone"),
+    fps: int | None = typer.Option(
+        None,
+        "--fps",
+        min=24,
+        max=120,
+        help="交付帧率；60fps 会配合已验证的工程级 Optical Flow 补帧。",
+    ),
     naked_cut: bool = typer.Option(
         False,
         "--naked-cut",
@@ -230,6 +237,7 @@ def first_cut_cmd(
         reference_path=reference,
         primary_characters=character,
         tone=tone,
+        delivery_fps=fps,
         naked_cut=naked_cut,
     )
     out(result.model_dump(mode="json"), json) if json else typer.echo(

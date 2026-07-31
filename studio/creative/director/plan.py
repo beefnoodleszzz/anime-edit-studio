@@ -241,8 +241,31 @@ def generate_director_plan(
         # when both works have comparable durations. For a substantially
         # longer/shorter target, reuse the measured duration grammar and cut
         # density instead of stretching every cut into slow, unrelated timing.
+        prefix_cuts = [
+            value for value in style.cut_timestamps if 0 < value < duration
+        ]
+        tail_cuts = [
+            value for value in style.cut_timestamps
+            if duration <= value < style.duration_sec
+        ]
+        prefix_density = len(prefix_cuts) / max(duration, 1e-6)
+        tail_density = len(tail_cuts) / max(style.duration_sec - duration, 1e-6)
+        # Social references commonly append a low-cut end card.  When the
+        # requested duration cleanly ends at the dense editorial body, preserve
+        # that prefix's exact cut skeleton instead of treating the end card as
+        # evidence that the two works have incompatible durations.
+        reference_body_prefix = (
+            duration / max(style.duration_sec, 1e-6) >= 0.60
+            and len(prefix_cuts) >= 3
+            and prefix_density >= max(0.5, tail_density * 2.0)
+        )
         editing_style = editing_style.model_copy(
-            update={"normalized_cut_positions": []}
+            update={
+                "normalized_cut_positions": (
+                    [value / duration for value in prefix_cuts]
+                    if reference_body_prefix else []
+                )
+            }
         )
     # House format: "spends everything after [the hook] on beat-locked
     # cutting" (see module docstring). That only actually happens in

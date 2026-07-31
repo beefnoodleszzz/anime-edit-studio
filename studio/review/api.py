@@ -329,10 +329,12 @@ def create_review_app(
         try:
             rows = conn.execute(
                 """
-                SELECT id,project_id,role,shot_ids_json,selected_shot_id,
+                SELECT id,project_id,role,slot_key,timeline_in_sec,
+                       timeline_duration_sec,shot_ids_json,selected_shot_id,
                        selection_source,plan_revision,active,created_at
                 FROM candidate_groups
-                WHERE project_id=? AND active=1 ORDER BY role
+                WHERE project_id=? AND active=1
+                ORDER BY coalesce(timeline_in_sec,999999),role
                 """,
                 (project_id,),
             ).fetchall()

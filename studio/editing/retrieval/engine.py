@@ -17,6 +17,7 @@ class RetrievalQuery(BaseModel):
     min_motion: float | None = Field(None, ge=0)
     max_motion: float | None = Field(None, ge=0)
     subtitle_allowed: bool = True
+    strict_subtitle_clean: bool = False
     min_face: float | None = Field(None, ge=0, le=1)
     min_pose: float | None = Field(None, ge=0, le=1)
     min_eye: float | None = Field(None, ge=0, le=1)
@@ -102,6 +103,10 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
         ):
             where.append("lower(coalesce(s.tags,'')) NOT LIKE ?")
             params.append(f"%{tag}%")
+        if query.strict_subtitle_clean:
+            where.append(
+                "coalesce(json_extract(s.subtitle_region,'$.present'),0)=0"
+            )
     if query.min_face is not None:
         where.append("coalesce(s.face_visibility,0)>=?")
         params.append(query.min_face)

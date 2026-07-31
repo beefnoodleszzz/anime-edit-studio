@@ -8,7 +8,7 @@ import sqlite3
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-RANKING_VERSION = "candidate-ranking-1.2.0"
+RANKING_VERSION = "candidate-ranking-1.3.0"
 
 
 class CandidateContext(BaseModel):
@@ -25,6 +25,7 @@ class CandidateContext(BaseModel):
     music_fit_by_shot: dict[str, float] = Field(default_factory=dict)
     reference_fit_by_shot: dict[str, float] = Field(default_factory=dict)
     preference_by_shot: dict[str, float] = Field(default_factory=dict)
+    prefer_low_motion: bool = False
 
 
 class RankedCandidate(BaseModel):
@@ -139,6 +140,20 @@ def rank_candidates(
         raise ValueError("精排输出必须在 1..200")
     if not shot_ids:
         return []
+    contextual_weights = (
+        {
+            "sequence_fit": 0.18, "music_fit": 0.06,
+            "reference_fit": 0.10, "continuity": 0.08,
+            "novelty": 0.08, "preference": 0.08,
+            "source_stillness": 0.42,
+        }
+        if context.prefer_low_motion
+        else {
+            "sequence_fit": 0.27, "music_fit": 0.18,
+            "reference_fit": 0.17, "continuity": 0.15,
+            "novelty": 0.13, "preference": 0.1,
+        }
+    )
     conn.row_factory = sqlite3.Row
     placeholders = ",".join("?" for _ in shot_ids)
     rows = conn.execute(
@@ -171,6 +186,7 @@ def rank_candidates(
         semantic = 0.5
         if context.character:
             character = context.character.lower()
+            relationship = character.endswith("_cp")
             tags = (row["tags"] or "").lower()
             if character == (row["character"] or "").lower():
                 semantic += 0.30
@@ -178,10 +194,15 @@ def rank_candidates(
                 semantic += 0.12
             else:
                 semantic -= 0.25
-            semantic += 0.08 if "solo" in tags else 0.0
-            semantic -= 0.08 if any(
-                value in tags for value in ("multiple_boys", "multiple_girls")
-            ) else 0.0
+            if relationship:
+                semantic += 0.08 if any(
+                    value in tags for value in ("2boys", "multiple_boys")
+                ) else 0.0
+            else:
+                semantic += 0.08 if "solo" in tags else 0.0
+                semantic -= 0.08 if any(
+                    value in tags for value in ("multiple_boys", "multiple_girls")
+                ) else 0.0
         if context.action:
             semantic += 0.25 if context.action.lower() in (
                 (row["action"] or "") + "," + (row["tags"] or "")
@@ -194,11 +215,14 @@ def rank_candidates(
             "novelty": _novelty(row, selected),
             "preference": _bounded(context.preference_by_shot.get(shot_id, 0.5)),
         }
-        weights = {
-            "sequence_fit": 0.27, "music_fit": 0.18, "reference_fit": 0.17,
-            "continuity": 0.15, "novelty": 0.13, "preference": 0.1,
-        }
-        contextual = sum(components[key] * weights[key] for key in weights)
+        if context.prefer_low_motion:
+            components["source_stillness"] = 1.0 - _bounded(
+                row["subject_motion"], _bounded(row["motion_mag"]) / 5.0
+            )
+        contextual = sum(
+            components[key] * contextual_weights[key]
+            for key in contextual_weights
+        )
         total = 0.42 * intrinsic + 0.58 * contextual
         ranked.append(
             RankedCandidate(
@@ -224,13 +248,9 @@ def rank_candidates(
             )
             components = dict(item.contextual_components)
             components["novelty"] = novelty
-            contextual = (
-                components["sequence_fit"] * 0.27
-                + components["music_fit"] * 0.18
-                + components["reference_fit"] * 0.17
-                + components["continuity"] * 0.15
-                + components["novelty"] * 0.13
-                + components["preference"] * 0.1
+            contextual = sum(
+                components[key] * contextual_weights[key]
+                for key in contextual_weights
             )
             total = 0.42 * item.intrinsic + 0.58 * contextual
             rescored.append(

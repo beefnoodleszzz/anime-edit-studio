@@ -1,4 +1,4 @@
-"""Deterministic subject-box tracking for portrait reframing.
+"""Deterministic subject-box tracking for delivery reframing.
 
 This is the explicit fallback after Resolve SmartReframe/MagicMask were
 visually disproved.  It produces analysis data only; execution keyframes remain
@@ -18,7 +18,7 @@ import numpy as np
 from studio.asset_intelligence.visual.analyzer import VisualAnalyzer
 from studio.core.contracts import SubjectBox
 
-TRACKING_VERSION = "subject-track-1.0.0"
+TRACKING_VERSION = "subject-track-1.1.0-square"
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class SubjectTracker:
         *,
         start_sec: float,
         end_sec: float,
-        target_aspect: float = 4 / 5,
+        target_aspect: float = 1.0,
     ) -> list[TrackPoint]:
         if end_sec <= start_sec:
             raise ValueError("end_sec 必须大于 start_sec")

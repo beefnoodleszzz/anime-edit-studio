@@ -62,12 +62,13 @@ def apply_whip_blur_side(
     registry: RecipeRegistry,
     *,
     item,
+    recipe_id: str,
     side: str,
     duration_frames: int,
     transition_frames: int,
     params: dict,
 ) -> None:
-    ref = RecipeRef(recipe="motion_blur_transition_v1", params=params)
+    ref = RecipeRef(recipe=recipe_id, params=params)
     comp = apply_fusion_recipe(adapter, registry, item=item, ref=ref)
     resolved = registry.resolved_params(ref.recipe, ref.params)
     adapter.configure_whip_blur_side(
@@ -77,6 +78,7 @@ def apply_whip_blur_side(
         transition_frames=transition_frames,
         length=float(resolved["length"]),
         angle=float(resolved["angle"]),
+        settle_scale=float(resolved.get("settle_scale", 0.0)),
     )
 
 

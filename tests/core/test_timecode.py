@@ -114,6 +114,12 @@ class TestSeamlessConcatenation:
         assert source.frames_for_rebased_duration(48, timeline) == 60
         assert timeline.frames_for_rebased_duration(48, timeline) == 48
 
+    def test_rebased_duration_ceil_prevents_fractional_conform_gap(self):
+        source = Timebase(24000, 1001)
+        timeline = Timebase(30, 1)
+        assert source.frames_for_rebased_duration(43, timeline) == 35
+        assert source.frames_for_rebased_duration(8, timeline) == 7
+
 
 class TestTimecodeString:
     def test_non_drop_frame(self):

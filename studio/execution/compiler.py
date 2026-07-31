@@ -479,7 +479,38 @@ class ResolveCompiler:
             for phrase in spec.motion_phrases
             for beat in phrase.beats
         }
+        eye_glow_clips = {
+            marker.clip_id
+            for marker in spec.markers
+            if marker.kind == "eye_glow_cue" and marker.clip_id
+        }
+        demo_clips = {
+            marker.clip_id: marker.note
+            for marker in spec.markers
+            if marker.kind == "demo_replica_clip" and marker.clip_id
+        }
+        demo_terminal_impacts = {
+            clip.id: timeline_fps.to_frames(marker.sec - clip.timeline.in_sec)
+            for clip in spec.clips
+            for marker in spec.markers
+            if marker.kind == "demo_replica_impact"
+            and clip.timeline.in_sec + 1e-6 < marker.sec <= clip.timeline.out_sec
+        }
         for clip, item in written:
+            if clip.id in demo_clips:
+                category = demo_clips[clip.id].split(":", 1)[-1]
+                self.rv.build_demo_replica_comp(
+                    item,
+                    comp_name=f"aes:demo-replica:{category}",
+                    category=category,
+                    duration_frames=int(item.GetDuration() or 0),
+                    speed_ramp=clip.retime.type == "speed_ramp",
+                    terminal_impact_frame=demo_terminal_impacts.get(clip.id),
+                )
+                report.motion_phrases_applied += 1
+                if clip.color is not None:
+                    color_groups.setdefault(clip.color.recipe, []).append(item)
+                continue
             phrase_row = phrase_beats.get(clip.id)
             if phrase_row is not None:
                 phrase, beat = phrase_row
@@ -492,16 +523,33 @@ class ResolveCompiler:
                     item,
                     comp_name=f"aes:motion:{phrase.id}:{beat.stage}",
                     stage=beat.stage,
-                    direction=phrase.direction,
+                    direction=beat.direction or phrase.direction,
+                    zoom_direction=beat.zoom_direction or phrase.zoom_direction,
                     intensity=beat.intensity,
+                    duration_sec=clip.timeline.duration_sec,
+                    accent_at_sec=beat.accent_at_sec,
+                    anticipation_sec=beat.anticipation_sec,
+                    release_sec=beat.release_sec,
+                    entry_intensity=beat.entry_intensity,
+                    entry_velocity=beat.entry_velocity,
+                    exit_velocity=beat.exit_velocity,
                     duration_frames=int(item.GetDuration() or 0),
                     transition_frames=max(
                         1, timeline_fps.to_frames(phrase.cut_window_sec)
                     ),
-                    translation=phrase.translation,
-                    scale_delta=phrase.scale_delta,
+                    translation=(
+                        beat.translation
+                        if beat.translation is not None
+                        else phrase.translation
+                    ),
+                    scale_delta=(
+                        beat.scale_delta
+                        if beat.scale_delta is not None
+                        else phrase.scale_delta
+                    ),
                     rotation_deg=phrase.rotation_deg,
                     blur_strength=phrase.blur_strength,
+                    eye_glow=clip.id in eye_glow_clips,
                     retime=(
                         {
                             "entry_speed": clip.retime.entry_speed,
@@ -551,7 +599,10 @@ class ResolveCompiler:
             ):
                 if end.recipe in {"hard_cut", "none"}:
                     continue
-                if end.recipe != "motion_blur_transition_v1":
+                if end.recipe not in {
+                    "motion_blur_transition_v1",
+                    "motion_blur_transition_v2",
+                }:
                     raise ResolveOperationError(
                         f"transition recipe 尚无执行器: {end.recipe}"
                     )
@@ -559,6 +610,7 @@ class ResolveCompiler:
                     self.rv,
                     self.recipe_registry,
                     item=item,
+                    recipe_id=end.recipe,
                     side=side,
                     duration_frames=int(item.GetDuration() or 0),
                     transition_frames=max(

@@ -517,6 +517,14 @@ Planner 联合设计相邻镜头，并从选片阶段为 Hold 槽位偏好低 `m
 见 `docs/probes/motion_phrase_acceptance.json`：144 帧完整，跨 Cut 连续性
 0.00→0.90。
 
+2026-07-30 产品验收补强：MotionPhrase 的 Transform 不得用 `min/max` 分段线性
+表达式模拟曲线。Center、Size、Angle 必须共享由 MusicMotionMap 的
+`accent / anticipation / release` 生成的逐帧 Fusion `BezierSpline`。参考片只提供
+“直线路径 + 变速流动 + 径向推进”的视觉语法，音乐决定实际峰值位置与速度包络。
+拖影使用 Transform 原生亚帧 Motion Blur，ShutterAngle 跟随同一音乐速度曲线；
+禁止用 DirectionalBlur 冒充画面流动。`reverse` 阶段使用连续往返轨迹，不得在
+折点瞬时换向。
+
 确定性 Motion QA 独立检查 median/P75、动态范围、Hold 比例、方向平衡、方向
 反转率和短语内部跨 Cut 连续性。光流采样必须避开 Whip/Blur 峰值窗口（P21）。
 

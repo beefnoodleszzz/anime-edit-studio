@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 from pathlib import Path
 
@@ -16,11 +17,16 @@ from studio.critic.creative import (
 from studio.creative.director import DirectorBrief, generate_director_plan
 from studio.creative.preference import PreferenceModel, preference_signal
 from studio.creative.reference import analyze_reference
-from studio.editing.candidates import create_group, generate_review_assets
-from studio.editing.music import analyze_music
+from studio.editing.candidates import (
+    create_group,
+    generate_review_assets,
+    replace_with_slot_groups,
+)
+from studio.editing.music import analyze_music, build_music_motion_map
 from studio.editing.ranking import CandidateContext, rank_candidates
 from studio.editing.retrieval import RetrievalQuery, retrieve
 from studio.asset_intelligence.motion import load_action_peaks
+from studio.asset_intelligence.visual import gate_candidates
 from studio.editing.sequence import (
     canonical_role,
     apply_recipe_plan,
@@ -33,7 +39,11 @@ from studio.editing.readiness import (
     ProductionNotReady,
     evaluate_production_readiness,
 )
-from studio.editing.timing import apply_action_sync
+from studio.editing.timing import (
+    CutAccuracyReport,
+    CutAccuracyRow,
+    apply_action_sync,
+)
 from studio.editing.sound import apply_sound_design
 from studio.editspec.schema import AudioLayer, EditSpec, Marker, Timebase
 from studio.execution.ffmpeg import DELIVERY_TARGET_LUFS, measure_integrated_lufs
@@ -42,12 +52,18 @@ REPO = Path(__file__).resolve().parents[2]
 CACHE = REPO / "library" / "cache"
 
 
+def _is_relationship_character(character: str | None) -> bool:
+    """Relationship catalogs intentionally contain solo and shared reactions."""
+    return bool(character and character.lower().endswith("_cp"))
+
+
 class FirstCutResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: str
     plan_path: str
     spec_path: str
     style_profile_path: str
+    music_motion_map_path: str
     rhythm_qa_path: str
     edit_grammar_qa_path: str
     visual_phrase_path: str
@@ -77,6 +93,62 @@ def _load_action_peaks(conn, *, shot_ids: list[str]) -> tuple[dict, dict]:
         if peaks:
             peaks_by_shot[row["id"]] = peaks
     return peaks_by_shot, shot_starts
+
+
+def _action_sync_for_mode(
+    spec: EditSpec,
+    *,
+    music,
+    peaks_by_shot: dict,
+    shot_starts: dict,
+    naked_cut: bool,
+    editor_driven_motion: bool = False,
+) -> tuple[EditSpec, CutAccuracyReport]:
+    """Keep the diagnostic artifact while honoring naked-cut's original speed."""
+    if not naked_cut and not editor_driven_motion:
+        return apply_action_sync(
+            spec,
+            music=music,
+            peaks_by_shot=peaks_by_shot,
+            shot_starts=shot_starts,
+        )
+    return spec, CutAccuracyReport(
+        clip_count=len(spec.clips),
+        measured_clips=0,
+        retimed_clips=0,
+        on_beat_clips=(
+            max(0, len(spec.clips) - 1) if editor_driven_motion else 0
+        ),
+        max_action_peak_error_frames=0,
+        rows=[
+            CutAccuracyRow(
+                clip_id=clip.id,
+                shot_id=clip.shot_id,
+                timeline_in_sec=round(clip.timeline.in_sec, 4),
+                target_hit_sec=(
+                    round(clip.timeline.in_sec, 4)
+                    if editor_driven_motion and clip.timeline.in_sec > 0
+                    else None
+                ),
+                target_kind=(
+                    "camera_motion_accent"
+                    if editor_driven_motion and clip.timeline.in_sec > 0
+                    else None
+                ),
+                action_peak_error_frames=(
+                    0
+                    if editor_driven_motion and clip.timeline.in_sec > 0
+                    else None
+                ),
+                note=(
+                    "editor-driven camera: source action sync disabled"
+                    if editor_driven_motion
+                    else "naked cut: action sync disabled"
+                ),
+            )
+            for clip in spec.clips
+        ],
+    )
 
 
 def _reference_timebase(reference_path: Path | None) -> Timebase | None:
@@ -115,6 +187,29 @@ def _tone_allows_menacing_expression(tone: list[str] | None) -> bool:
     return bool(normalized & {"menacing", "dominant", "villainous", "ferocious"})
 
 
+def _character_group_exclusions(character: str | None) -> list[str]:
+    """Exclude crowd identities without filtering out the requested lead.
+
+    The tagger describes Nezuko as ``1girl`` in nearly every confirmed shot.
+    Applying the male-lead ``1girl`` exclusion to her therefore removes the
+    subject itself before contextual ranking can run.
+    """
+    female_characters = {"kamado_nezuko"}
+    if character in female_characters:
+        # The requested character must dominate the frame. Group tags mean the
+        # keyframe only proves presence, not that Nezuko is the editorial
+        # subject; these were the source of visible Zenitsu/ensemble pollution.
+        return [
+            "1boy", "2boys", "multiple_boys",
+            "2girls", "3girls", "4girls", "5girls", "multiple_girls",
+            "yellow_haori", "yellow_kimono",
+            # In the indexed Nezuko corpus this tag cluster is the forest
+            # ensemble shot where Zenitsu dominates the square crop.
+            "clenched_hands",
+        ]
+    return ["1girl", "2girls", "multiple_girls"]
+
+
 def _write_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -137,6 +232,7 @@ def create_first_cut(
     reference_path: Path | None = None,
     primary_characters: list[str] | None = None,
     tone: list[str] | None = None,
+    delivery_fps: int | None = None,
     database: Path = DEFAULT_V2_DB,
     output_dir: Path | None = None,
     reuse_candidate_groups: bool = False,
@@ -150,12 +246,18 @@ def create_first_cut(
     conn = connect(database)
     try:
         music = analyze_music(music_path, cache_root=CACHE)
+        music_motion = build_music_motion_map(music, duration_sec=duration_sec)
         style = (
             analyze_reference(reference_path, cache_root=CACHE)
             if reference_path is not None
             else None
         )
         _write_atomic(root / "music_map.json", music.model_dump_json(indent=2))
+        music_motion_path = root / "music_motion_map.json"
+        _write_atomic(
+            music_motion_path,
+            music_motion.model_dump_json(indent=2),
+        )
         if style is not None:
             _write_atomic(
                 root / "style_fingerprint.json",
@@ -173,6 +275,13 @@ def create_first_cut(
             style,
             conn=conn,
             output_path=plan_path,
+        )
+        editor_driven_motion = bool(
+            style is not None
+            and (
+                plan.editing_style.motion_change_ratio >= 0.6
+                or plan.editing_style.motion_p75_target >= 3.0
+            )
         )
         style_profile_path = root / "editing_style_profile.json"
         _write_atomic(
@@ -196,7 +305,7 @@ def create_first_cut(
                 """
                 SELECT id,role,shot_ids_json,selected_shot_id
                 FROM candidate_groups
-                WHERE project_id=? AND active=1
+                WHERE project_id=? AND active=1 AND slot_key IS NULL
                 """,
                 (project_id,),
             )
@@ -220,34 +329,36 @@ def create_first_cut(
                 continue
             front_facing = "front_facing" in (tone or [])
             menacing_expression = _tone_allows_menacing_expression(tone)
+            clean_portrait = "clean" in {
+                item.strip().lower() for item in (tone or [])
+            }
             character = (primary_characters or [None])[0]
             zenitsu = character == "agatsuma_zenitsu"
+            relationship = _is_relationship_character(character)
             query = RetrievalQuery(
                 project_id=project_id,
                 character=character,
                 subtitle_allowed=False,
+                strict_subtitle_clean=False,
+                max_motion=0.45 if clean_portrait else None,
                 # A high face threshold over-selects face-forward close-ups and
                 # suppresses the stronger medium/wide action compositions.  This
                 # starves the impact role for action-forward characters whose
                 # dynamic footage is framed wide (Zenitsu's speed, an action
                 # villain's fights), so relax the gate for those.
-                min_face=0.30 if (zenitsu or menacing_expression) else 0.40,
-                min_pose=0.30,
-                min_eye=0.10,
-                # image_quality is 25% exposure = 1 - |mean_brightness/255 -
-                # 0.5| * 1.7 (see analyzer.py): a scene whose average
-                # brightness sits far from mid-gray scores low regardless of
-                # real sharpness. A villain's fight is lit dark and moody by
-                # design, not poorly shot, and that alone was enough to fail
-                # 0.72 — spot-checked 5 of the excluded Akaza shots across
-                # the full 0.30-0.72 range (keyframes read directly) and
-                # every one was a clean, usable, correctly-identified frame.
-                # 20 of 65 confirmed Akaza shots were blocked by this gate
-                # alone, which was starving the candidate pool down to 12-26
-                # of 65 shots and forcing heavy reuse in a 32-clip cut.
-                min_image_quality=0.30 if (zenitsu or menacing_expression) else 0.72,
+                min_face=(
+                    0.55 if clean_portrait
+                    else 0.30 if (zenitsu or menacing_expression)
+                    else 0.40
+                ),
+                min_pose=0.55 if clean_portrait else 0.30,
+                min_eye=0.35 if clean_portrait else 0.10,
+                # This is only a broad-recall floor for legacy single-frame
+                # scores. The authoritative technical/crop decision below is
+                # the cached multi-frame 1:1 temporal gate.
+                min_image_quality=0.58 if clean_portrait else 0.30,
                 min_cutability=0.42,
-                min_aesthetic=4.5,
+                min_aesthetic=5.0 if clean_portrait else 4.5,
                 required_any_tags=[],
                 excluded_tags=[
                     "fake_screenshot",
@@ -261,6 +372,21 @@ def create_first_cut(
                     "artist_name",
                     "credits",
                     "black_background",
+                    *(
+                        [
+                            "blood",
+                            "blood_splatter",
+                            "cracked_skin",
+                            "scar_on_face",
+                            "veins",
+                            "teeth",
+                            "fangs",
+                            "closed_eyes",
+                            "blurry",
+                            "dark",
+                        ]
+                        if clean_portrait else []
+                    ),
                     *(
                         [
                             "bubble_blowing",
@@ -288,16 +414,18 @@ def create_first_cut(
                         ]
                         if zenitsu else []
                     ),
-                    "1girl",
-                    "2girls",
-                    "multiple_girls",
+                    *_character_group_exclusions(character),
                     *(
                         []
-                        if zenitsu
+                        if zenitsu or relationship
                         else [
                             "multiple_boys",
                             "2boys",
-                            "kamado_nezuko",
+                            *(
+                                []
+                                if character == "kamado_nezuko"
+                                else ["kamado_nezuko"]
+                            ),
                             "topless_male",
                         ]
                     ),
@@ -344,6 +472,20 @@ def create_first_cut(
                 limit=200,
             )
             recalled = retrieve(conn, query)
+            recalled, temporal_report = gate_candidates(
+                conn, recalled, target_aspect=1.0
+            )
+            gate_path = root / "candidate_quality_gate.json"
+            existing_gate = (
+                json.loads(gate_path.read_text(encoding="utf-8"))
+                if gate_path.exists()
+                else {}
+            )
+            existing_gate[role] = temporal_report
+            _write_atomic(
+                gate_path,
+                json.dumps(existing_gate, ensure_ascii=False, indent=2),
+            )
             preference_by_shot = {}
             if preference_model is not None and recalled:
                 placeholders = ",".join("?" for _ in recalled)
@@ -364,6 +506,7 @@ def create_first_cut(
                     target_shot_scale=0.56 if front_facing else None,
                     character=(primary_characters or [None])[0],
                     preference_by_shot=preference_by_shot,
+                    prefer_low_motion=editor_driven_motion,
                 ),
                 limit=200,
             )
@@ -371,22 +514,10 @@ def create_first_cut(
             if existing is not None and existing["selected_shot_id"]:
                 selected_id = existing["selected_shot_id"]
                 if selected_id not in {item.shot_id for item in ranked}:
-                    selected_rank = rank_candidates(
-                        conn,
-                        [selected_id],
-                        CandidateContext(
-                            project_id=project_id,
-                            role=role,
-                            target_energy=section.energy,
-                            target_shot_scale=0.56 if front_facing else None,
-                            character=(primary_characters or [None])[0],
-                            preference_by_shot=preference_by_shot,
-                        ),
-                        limit=1,
+                    raise ValueError(
+                        f"{role} 已选镜头 {selected_id} 未通过当前候选硬门槛；"
+                        "请重新选择，系统不会为保留旧选择绕过多帧质量检查"
                     )
-                    if not selected_rank:
-                        raise ValueError(f"{role} 已选镜头不再可用: {selected_id}")
-                    ranked.extend(selected_rank)
             if len(ranked) < 3:
                 raise ValueError(f"{section.role} 候选不足 3 个")
             candidates_by_role[role] = ranked
@@ -428,12 +559,28 @@ def create_first_cut(
             for row in conn.execute(
                 """
                 SELECT role,selected_shot_id FROM candidate_groups
-                WHERE project_id=? AND active=1 AND selected_shot_id IS NOT NULL
+                WHERE project_id=? AND active=1 AND slot_key IS NULL
+                  AND selected_shot_id IS NOT NULL
                 """,
                 (project_id,),
             )
         }
-        delivery_timebase = _reference_timebase(reference_path)
+        selected_by_slot = {
+            int(row["slot_key"]): row["selected_shot_id"]
+            for row in conn.execute(
+                """
+                SELECT slot_key,selected_shot_id FROM candidate_groups
+                WHERE project_id=? AND active=1 AND slot_key IS NOT NULL
+                  AND selected_shot_id IS NOT NULL
+                """,
+                (project_id,),
+            )
+        } if reuse_candidate_groups else {}
+        delivery_timebase = (
+            Timebase(num=delivery_fps, den=1)
+            if delivery_fps is not None
+            else _reference_timebase(reference_path)
+        )
         plan_kwargs = {}
         if delivery_timebase is not None:
             plan_kwargs["timebase"] = delivery_timebase
@@ -443,6 +590,7 @@ def create_first_cut(
             music=music,
             candidates_by_role=candidates_by_role,
             selected_by_role=selected_by_role,
+            selected_by_slot=selected_by_slot,
             **plan_kwargs,
         )
         spec.audio.append(
@@ -476,19 +624,35 @@ def create_first_cut(
             for sec in music.impact_points
             if sec <= plan.duration_sec
         )
+        if editor_driven_motion:
+            spec.markers.extend(
+                Marker(
+                    sec=clip.timeline.in_sec,
+                    kind="camera_motion_accent",
+                    note="BGM-locked source change and virtual-camera accent",
+                    clip_id=clip.id,
+                )
+                for clip in spec.clips[1:]
+            )
         if not naked_cut:
-            spec = apply_recipe_plan(spec, plan=plan)
+            spec = apply_recipe_plan(
+                spec,
+                plan=plan,
+                music_motion=music_motion,
+            )
         # Action Sync: land measured action peaks on musical targets and emit a
         # deterministic acceptance table.  Runs after recipe planning so it can
         # override the style-density speed ramp with a peak-anchored one.
         peaks_by_shot, shot_starts = _load_action_peaks(
             conn, shot_ids=[clip.shot_id for clip in spec.clips]
         )
-        spec, cut_accuracy = apply_action_sync(
+        spec, cut_accuracy = _action_sync_for_mode(
             spec,
             music=music,
             peaks_by_shot=peaks_by_shot,
             shot_starts=shot_starts,
+            naked_cut=naked_cut,
+            editor_driven_motion=editor_driven_motion,
         )
         cut_accuracy_path = root / "cut_accuracy_report.json"
         _write_atomic(cut_accuracy_path, cut_accuracy.model_dump_json(indent=2))
@@ -518,6 +682,21 @@ def create_first_cut(
             _write_atomic(sound_qa_path, sound_qa.model_dump_json(indent=2))
         else:
             sound_design_path = None
+        if delivery_fps is not None:
+            spec = spec.model_copy(
+                update={
+                    "clips": [
+                        clip.model_copy(
+                            update={
+                                "retime": clip.retime.model_copy(
+                                    update={"interpolation": "optical_flow"}
+                                )
+                            }
+                        )
+                        for clip in spec.clips
+                    ]
+                }
+            )
         # Revalidate after attaching the external audio layer.
         spec = EditSpec.model_validate(spec.model_dump(mode="python", by_alias=True))
         with conn:
@@ -536,11 +715,47 @@ def create_first_cut(
             edit_grammar_qa_path,
             edit_grammar_qa.model_dump_json(indent=2),
         )
+        # Review is timeline-slot authoritative. A is exactly the shot used by
+        # the preview; B/C are duration-compatible alternatives for that slot.
+        slot_payloads = []
+        for clip in spec.clips:
+            shot_ids = [clip.shot_id, *clip.decision.alternatives]
+            seen = set(shot_ids)
+            for candidate in candidates_by_role.get(canonical_role(clip.role), []):
+                if len(shot_ids) >= 3:
+                    break
+                if candidate.shot_id in seen:
+                    continue
+                row = conn.execute(
+                    "SELECT end_sec-start_sec AS duration FROM shots WHERE id=?",
+                    (candidate.shot_id,),
+                ).fetchone()
+                if row and float(row["duration"]) + 1e-6 >= clip.timeline.duration_sec:
+                    shot_ids.append(candidate.shot_id)
+                    seen.add(candidate.shot_id)
+            slot_payloads.append(
+                {
+                    "role": clip.role,
+                    "timeline_in_sec": clip.timeline.in_sec,
+                    "timeline_duration_sec": clip.timeline.duration_sec,
+                    "shot_ids": shot_ids[:3],
+                }
+            )
+        slot_groups = replace_with_slot_groups(
+            conn,
+            project_id=project_id,
+            slots=slot_payloads,
+            plan_revision=plan.revision,
+        )
+        group_ids = [group.id for group in slot_groups]
+        for group in slot_groups:
+            generate_review_assets(conn, group, output_dir=root / "previews")
         return FirstCutResult(
             project_id=project_id,
             plan_path=str(plan_path),
             spec_path=str(spec_path),
             style_profile_path=str(style_profile_path),
+            music_motion_map_path=str(music_motion_path),
             rhythm_qa_path=str(rhythm_qa_path),
             edit_grammar_qa_path=str(edit_grammar_qa_path),
             visual_phrase_path=str(visual_phrase_path),

@@ -14,7 +14,7 @@ from studio.creative.reference import EditingStyleProfile
 from studio.editing.music import MusicMap
 from studio.editspec.schema import EditSpec
 
-RHYTHM_QA_VERSION = "rhythm-qa-1.1.0"
+RHYTHM_QA_VERSION = "rhythm-qa-1.2.0"
 
 
 class RhythmCheck(BaseModel):
@@ -80,6 +80,12 @@ def evaluate_rhythm(
         if errors else 0.0
     )
     tight_target = max(0.0, profile.beat_sync_target - 0.15)
+    sync_tolerance = max(0.03, 1.0 / max(1, len(cuts)))
+    sync_passed = (
+        abs(sync_ratio - profile.beat_sync_target) <= sync_tolerance
+        if profile.source == "reference"
+        else sync_ratio + 0.03 >= profile.beat_sync_target
+    )
 
     density_tolerance = max(0.12, profile.target_cut_density * 0.18)
     median_tolerance = max(0.08, profile.median_shot_length * 0.25)
@@ -103,8 +109,8 @@ def evaluate_rhythm(
             metric="beat_sync_ratio",
             actual=sync_ratio,
             target=profile.beat_sync_target,
-            tolerance=0.03,
-            passed=sync_ratio + 0.03 >= profile.beat_sync_target,
+            tolerance=sync_tolerance if profile.source == "reference" else 0.03,
+            passed=sync_passed,
         ),
         RhythmCheck(
             metric="tight_sync_ratio",

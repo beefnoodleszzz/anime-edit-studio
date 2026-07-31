@@ -56,6 +56,26 @@ class _MotionComp:
         return {"SpeedRamp": self.speed, "MotionBlurTransition": self.blur}
 
 
+class _SettleTool(_Tool):
+    def __init__(self):
+        super().__init__()
+        self.Size = _Expression()
+
+    def GetAttrs(self):
+        return {"TOOLS_Name": "SettleTransform"}
+
+
+class _MotionCompWithSettle(_MotionComp):
+    def __init__(self):
+        super().__init__()
+        self.settle = _SettleTool()
+
+    def GetToolList(self, _selected):
+        tools = super().GetToolList(_selected)
+        tools["SettleTransform"] = self.settle
+        return tools
+
+
 class _Comp:
     def __init__(self):
         self.tool = _Tool()
@@ -178,6 +198,52 @@ def test_whip_blur_expression_targets_requested_clip_side():
     assert outgoing.blur.values["Angle"] == -15.0
 
 
+def test_whip_blur_without_settle_tool_is_a_silent_noop():
+    """v1 comps have no SettleTransform; settle_scale must not raise."""
+    adapter = ResolveAdapter(_Resolve())
+    comp = _MotionComp()
+    adapter.configure_whip_blur_side(
+        comp,
+        side="in",
+        duration_frames=48,
+        transition_frames=7,
+        length=0.24,
+        angle=0.0,
+        settle_scale=0.05,
+    )
+
+
+def test_settle_landing_eases_incoming_zoom_to_rest_but_leaves_exit_still():
+    adapter = ResolveAdapter(_Resolve())
+    incoming = _MotionCompWithSettle()
+    outgoing = _MotionCompWithSettle()
+    adapter.configure_whip_blur_side(
+        incoming,
+        side="in",
+        duration_frames=48,
+        transition_frames=7,
+        length=0.24,
+        angle=0.0,
+        settle_scale=0.05,
+    )
+    adapter.configure_whip_blur_side(
+        outgoing,
+        side="out",
+        duration_frames=48,
+        transition_frames=7,
+        length=0.24,
+        angle=0.0,
+        settle_scale=0.05,
+    )
+    size_expr = incoming.settle.Size.GetExpression()
+    assert "0.050000000" in size_expr
+    scope = {"time": 0, "min": min, "max": max}
+    assert eval(size_expr, {"__builtins__": {}}, scope) == pytest.approx(1.05)
+    scope["time"] = 6
+    assert eval(size_expr, {"__builtins__": {}}, scope) == pytest.approx(1.0)
+    assert outgoing.settle.Size.GetExpression() == "1"
+
+
 def test_reverse_motion_stage_pushes_away_without_scaling_below_fill():
     expression = ResolveAdapter._reverse_scale_expression(0.12, "(time/12)^3")
     assert expression == "1 + (0.120000000)*(1-((time/12)^3))"
@@ -219,6 +285,184 @@ def test_curve_flow_has_fast_settle_stable_and_anticipation_points():
     assert curves["size"][6.0] == pytest.approx(1.04)
     assert curves["size"][12.0] == pytest.approx(1.09)
     assert "blur" not in curves
+
+
+def test_liquid_curve_is_dense_monotonic_and_has_smooth_velocity():
+    curves = ResolveAdapter._liquid_motion_curves(
+        duration_frames=31,
+        x_sign=-1.0,
+        y_sign=0.0,
+        distance=0.12,
+        scale=0.18,
+        zoom_direction="in",
+        rotation=1.2,
+        blur_peak=0.25,
+        peak_phase=0.72,
+        anticipation_ratio=0.20,
+        release_ratio=0.22,
+    )
+
+    assert len(curves["center_x"]) == 31
+    positions = list(curves["center_x"].values())
+    assert positions[0] == pytest.approx(0.5)
+    assert positions[-1] == pytest.approx(0.38)
+    assert all(a >= b for a, b in zip(positions, positions[1:]))
+    velocities = [
+        abs(b - a) for a, b in zip(positions, positions[1:])
+    ]
+    assert max(velocities) > velocities[0] * 3
+    assert curves["blur"][0.0] == pytest.approx(0.25 * 0.35)
+    assert curves["blur"][30.0] == pytest.approx(0.0)
+    assert max(curves["blur"].values()) == pytest.approx(0.25)
+
+
+def test_liquid_reverse_curve_overshoots_and_returns_without_a_corner():
+    curves = ResolveAdapter._liquid_motion_curves(
+        duration_frames=31,
+        x_sign=1.0,
+        y_sign=0.0,
+        distance=0.12,
+        scale=0.18,
+        zoom_direction="in",
+        rotation=1.2,
+        blur_peak=0.25,
+        reverse=True,
+        peak_phase=0.72,
+        anticipation_ratio=0.20,
+        release_ratio=0.22,
+    )
+
+    positions = list(curves["center_x"].values())
+    peak = positions.index(max(positions))
+    assert 0 < peak < len(positions) - 1
+    assert positions[0] == pytest.approx(0.5)
+    assert positions[-1] == pytest.approx(0.5)
+    assert all(a <= b for a, b in zip(positions[:peak], positions[1:peak + 1]))
+    assert all(a >= b for a, b in zip(positions[peak:], positions[peak + 1:]))
+
+
+def test_music_peak_moves_liquid_velocity_peak():
+    early = ResolveAdapter._liquid_motion_curves(
+        duration_frames=61, x_sign=1.0, y_sign=0.0, distance=0.1,
+        scale=0.1, zoom_direction="in", rotation=0.0, blur_peak=0.1,
+        peak_phase=0.30, anticipation_ratio=0.16, release_ratio=0.20,
+    )
+    late = ResolveAdapter._liquid_motion_curves(
+        duration_frames=61, x_sign=1.0, y_sign=0.0, distance=0.1,
+        scale=0.1, zoom_direction="in", rotation=0.0, blur_peak=0.1,
+        peak_phase=0.78, anticipation_ratio=0.16, release_ratio=0.20,
+    )
+
+    early_peak = max(early["blur"], key=early["blur"].get)
+    late_peak = max(late["blur"], key=late["blur"].get)
+    assert early_peak < late_peak
+    assert early_peak == pytest.approx(18, abs=5)
+    assert late_peak == pytest.approx(47, abs=5)
+
+
+def test_liquid_curve_inherits_velocity_after_cut_then_settles():
+    inherited = ResolveAdapter._liquid_motion_curves(
+        duration_frames=31,
+        x_sign=1.0,
+        y_sign=0.0,
+        distance=0.1,
+        scale=0.1,
+        zoom_direction="in",
+        rotation=0.0,
+        blur_peak=0.1,
+        peak_phase=0.08,
+        anticipation_ratio=0.08,
+        release_ratio=0.28,
+        inherited_velocity=1.0,
+    )
+    positions = list(inherited["center_x"].values())
+    velocities = [b - a for a, b in zip(positions, positions[1:])]
+    assert velocities[0] > velocities[len(velocities) // 2] * 2
+    assert all(value >= 0 for value in velocities)
+
+
+def test_settle_curve_starts_on_zoomed_impact_and_recovers_without_pullout():
+    curves = ResolveAdapter._liquid_motion_curves(
+        duration_frames=31,
+        x_sign=1.0,
+        y_sign=0.0,
+        distance=0.05,
+        scale=0.24,
+        zoom_direction="in",
+        rotation=0.0,
+        blur_peak=0.1,
+        peak_phase=0.08,
+        anticipation_ratio=0.08,
+        release_ratio=0.28,
+        inherited_velocity=1.0,
+        settle=True,
+    )
+    sizes = list(curves["size"].values())
+    assert sizes[0] == pytest.approx(1.24)
+    assert sizes[-1] == pytest.approx(1.0)
+    assert all(a >= b for a, b in zip(sizes, sizes[1:]))
+    assert min(sizes) >= 1.0
+
+
+def test_impact_zoom_stays_clean_until_final_two_frames():
+    curves = ResolveAdapter._liquid_motion_curves(
+        duration_frames=31,
+        x_sign=0.0,
+        y_sign=0.0,
+        distance=0.0,
+        scale=0.22,
+        zoom_direction="in",
+        rotation=0.0,
+        blur_peak=0.1,
+    )
+    sizes = list(curves["size"].values())
+    assert sizes[:-2] == pytest.approx([1.0] * 29)
+    assert sizes[-2] > 1.0
+    assert sizes[-1] == pytest.approx(1.22)
+
+
+def test_beat_pull_template_normalizes_time_and_relays_zoom_across_cut():
+    outgoing = ResolveAdapter._beat_pull_curves(
+        duration_frames=42,
+        stage="accelerate",
+        intensity=0.75,
+        window_frames=8,
+    )
+    incoming = ResolveAdapter._beat_pull_curves(
+        duration_frames=42,
+        stage="settle",
+        intensity=0.75,
+        window_frames=8,
+    )
+
+    out_time = outgoing["source_time"]
+    in_time = incoming["source_time"]
+    assert out_time[0.0] == pytest.approx(0.0)
+    assert out_time[41.0] == pytest.approx(41.0)
+    assert in_time[0.0] == pytest.approx(0.0)
+    assert in_time[41.0] == pytest.approx(41.0)
+    assert all(
+        out_time[float(frame)] > out_time[float(frame - 1)]
+        for frame in range(1, 42)
+    )
+    assert (
+        (out_time[41.0] - out_time[40.0])
+        / (out_time[1.0] - out_time[0.0])
+        == pytest.approx(4.0, rel=0.08)
+    )
+    assert (
+        in_time[1.0] - in_time[0.0]
+        > in_time[41.0] - in_time[40.0]
+    )
+
+    out_size = outgoing["size"]
+    in_size = incoming["size"]
+    assert out_size[40.0] == pytest.approx(1.0)
+    assert out_size[41.0] == pytest.approx(in_size[0.0])
+    assert out_size[41.0] == pytest.approx(1.08)
+    assert in_size[1.0] < 1.08
+    assert in_size[2.0] == pytest.approx(1.0)
+    assert in_size[41.0] == pytest.approx(1.0)
 
 
 class _CurveTool(_Tool):
@@ -314,3 +558,23 @@ def test_camera_curve_push_out_settles_to_fill_without_exposing_canvas():
     size = item.comp.transform.Size.GetExpression()
     assert center == "Point(0.5, 0.5)"
     assert size == "1.180000 - (0.180000)*(((time/15))*((time/15)))"
+
+
+def test_transition_pair_curves_join_incoming_left_and_outgoing_right():
+    curves = ResolveAdapter.transition_pair_curves(
+        duration_frames=21,
+        incoming_direction="left",
+        outgoing_direction="right",
+    )
+    assert curves["position_px"][0.0] == 110
+    assert curves["position_px"][4.0] == -5
+    assert curves["position_px"][6.0] == 0
+    assert curves["position_px"][16.0] == 0
+    assert curves["position_px"][18.0] == 12
+    assert curves["position_px"][19.0] == 35
+    assert curves["position_px"][20.0] == 85
+    assert curves["zoom"][0.0] == 1.080
+    assert curves["zoom"][6.0] == 1.020
+    assert curves["zoom"][16.0] == 1.000
+    assert curves["blur"][20.0] == 0.75
+    assert curves["center_x"][0.0] == pytest.approx(0.5 - 110 / 1080)

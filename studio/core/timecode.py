@@ -154,7 +154,17 @@ class Timebase:
         if target_frames < 1:
             raise TimecodeError("目标时长必须至少 1 帧")
         exact = Fraction(target_frames) * self.rate / target_timebase.rate
-        return max(1, int(exact + Fraction(1, 2)))
+        # Resolve conforms the half-open source range downward in the cases
+        # where this ratio is fractional. Nearest rounding can therefore make
+        # the TimelineItem one frame shorter than its authoritative placement
+        # boundary (observed as a black one-frame hole at 23.976 -> 30).
+        # Choose the smallest whole source-frame count that can cover the
+        # requested target duration; this is duration rounding, not independent
+        # in/out rounding prohibited by P11.
+        return max(
+            1,
+            (exact.numerator + exact.denominator - 1) // exact.denominator,
+        )
 
     # ---------- timecode 字符串 ----------
 

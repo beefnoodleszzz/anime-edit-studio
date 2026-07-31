@@ -12,6 +12,7 @@ from studio.core.capabilities import is_verified
 from studio.creative.director import DirectorPlan
 from studio.editspec.schema import (
     EditSpec,
+    Marker,
     MotionBeat,
     MotionPhrase,
     RecipeRef,
@@ -20,14 +21,28 @@ from studio.editspec.schema import (
     TransitionEnd,
 )
 from studio.execution.recipes import RecipeRegistry
+from studio.editing.music import MusicMotionMap
 
-RECIPE_PLANNER_VERSION = "recipe-planner-1.3.0"
+RECIPE_PLANNER_VERSION = "recipe-planner-1.10.0"
 _MANAGED_EFFECTS = {
     "white_flash_v1", "impact_shake_v1", "eye_focus_v1", "camera_punch_v1",
     "anime_glow_v1", "rgb_split_impact_v1", "speed_flash_v1",
 }
 _MANAGED_SOUNDS = {
     "impact_low_v1", "sub_impact_v1", "sword_whoosh_v1", "riser_v1",
+}
+_MANAGED_TRANSITIONS = {
+    "motion_blur_transition_v1", "motion_blur_transition_v2",
+}
+# Reference edits mostly play source footage slowed down; only the editor's
+# own camera work is at "real" speed. Opening/ending shots hold longest,
+# impact-adjacent shots stay closest to native speed so beat-synced action
+# still reads, everything else sits in the calm middle.
+_CALM_RETIME_SPEED: dict[str | None, float] = {
+    "opening": 0.80,
+    "ending": 0.80,
+    "impact": 0.85,
+    None: 0.80,
 }
 
 
@@ -74,12 +89,98 @@ def _clip_tokens(clip) -> set[str]:
     }
 
 
+def _motion_evidence(relation) -> str | None:
+    if relation is None or relation.kind != "match_action" or relation.confidence < 0.7:
+        return None
+    return next(
+        (
+            feature for feature in relation.matched_features
+            if feature.startswith(("motion_direction:", "motion_reversal:"))
+        ),
+        None,
+    )
+
+
+def _reference_motion_groups(clips: list) -> list[list]:
+    """Return non-overlapping 3–4 clip runs joined by measured motion evidence."""
+    groups: list[list] = []
+    run_start: int | None = None
+    for index in range(1, len(clips) + 1):
+        evidence = (
+            _motion_evidence(clips[index].incoming_cut)
+            if index < len(clips)
+            else None
+        )
+        if evidence:
+            if run_start is None:
+                run_start = index - 1
+            continue
+        if run_start is None:
+            continue
+        run = clips[run_start:index]
+        cursor = 0
+        while len(run) - cursor >= 3:
+            remaining = len(run) - cursor
+            group_size = 3 if remaining in {3, 6} else 4
+            groups.append(run[cursor:cursor + group_size])
+            cursor += group_size
+        run_start = None
+    return groups
+
+
+def _evidence_direction(feature: str | None) -> str:
+    if not feature:
+        return "right"
+    value = feature.split(":", 1)[1]
+    if "->" in value:
+        value = value.split("->", 1)[1]
+    return "left" if "left" in value else "right"
+
+
+def _reference_curve_direction(style, timeline_sec: float, duration_sec: float) -> str:
+    """Map the measured finished-edit velocity to an executable cardinal axis."""
+    if not style.motion_curve:
+        return "right"
+    reference_time = (
+        timeline_sec / max(duration_sec, 1e-6) * style.motion_curve[-1].time
+    )
+    point = min(
+        style.motion_curve,
+        key=lambda value: abs(value.time - reference_time),
+    )
+    if abs(point.vy) > abs(point.vx):
+        return "up" if point.vy < 0 else "down"
+    return "left" if point.vx < 0 else "right"
+
+
+def _opposite_direction(first: str, second: str) -> bool:
+    vectors = {
+        "left": (-1, 0), "right": (1, 0),
+        "up": (0, -1), "down": (0, 1),
+        "up-left": (-1, -1), "up-right": (1, -1),
+        "down-left": (-1, 1), "down-right": (1, 1),
+    }
+    ax, ay = vectors[first]
+    bx, by = vectors[second]
+    return ax * bx + ay * by < 0
+
+
+def _reverse_direction(direction: str) -> str:
+    return {
+        "left": "right", "right": "left",
+        "up": "down", "down": "up",
+        "up-left": "down-right", "down-right": "up-left",
+        "up-right": "down-left", "down-left": "up-right",
+    }[direction]
+
+
 def apply_recipe_plan(
     spec: EditSpec,
     *,
     plan: DirectorPlan,
     registry: RecipeRegistry | None = None,
     capability_check: Callable[[str], bool] = is_verified,
+    music_motion: MusicMotionMap | None = None,
 ) -> EditSpec:
     """Return a new EditSpec using only admitted Recipes.
 
@@ -100,11 +201,14 @@ def apply_recipe_plan(
                 ]
             }
         )
-        if clip.transition.in_.recipe == "motion_blur_transition_v1":
+        if clip.transition.in_.recipe in _MANAGED_TRANSITIONS:
             clip.transition.in_ = TransitionEnd()
-        if clip.transition.out.recipe == "motion_blur_transition_v1":
+        if clip.transition.out.recipe in _MANAGED_TRANSITIONS:
             clip.transition.out = TransitionEnd()
-        if clip.retime.type == "speed_ramp":
+        if clip.retime.type == "speed_ramp" or abs(clip.retime.speed - 1.0) > 1e-9:
+            clip.source = clip.source.model_copy(
+                update={"out_sec": clip.source.in_sec + clip.timeline.duration_sec}
+            )
             clip.retime = Retime()
     used_versions: dict[str, str] = {}
 
@@ -125,7 +229,317 @@ def apply_recipe_plan(
 
     if (
         capability_check("motion_phrase_compositor")
-        and plan.editing_style.source in {"reference", "curated"}
+        and plan.editing_style.source == "reference"
+        and len(clips) >= 3
+    ):
+        style = plan.editing_style
+        # A high-change reference is editor-driven motion choreography, not a
+        # request to find naturally fast footage. Tile the actual timeline with
+        # adjacent phrases so velocity is shaped through cuts. For calmer
+        # references retain the conservative measured-match-action admission.
+        editor_driven = (
+            style.motion_change_ratio >= 0.6
+            or style.motion_p75_target >= 3.0
+        )
+        groups = (
+            [clips[index:index + 4] for index in range(0, len(clips), 4)]
+            if editor_driven
+            else _reference_motion_groups(clips)
+        )
+        groups = [group for group in groups if len(group) >= 2]
+        absolute_scale = min(2.2, max(0.65, style.motion_p75_target / 2.4))
+        global_directions = (
+            [
+                _reference_curve_direction(
+                    style, clip.timeline.in_sec, plan.duration_sec
+                )
+                for clip in clips
+            ]
+            if editor_driven else []
+        )
+        cursor = 0
+        for phrase_index, group in enumerate(groups):
+            features = [
+                _motion_evidence(clip.incoming_cut)
+                for clip in group[1:]
+            ]
+            beat_directions = []
+            if editor_driven:
+                measured_direction = global_directions[cursor]
+                phrase_direction = (
+                    "left" if "left" in measured_direction
+                    else "right" if "right" in measured_direction
+                    else "left" if phrase_index % 2 else "right"
+                )
+                beat_directions = [phrase_direction] * len(group)
+            direction = (
+                beat_directions[0]
+                if beat_directions
+                else _evidence_direction(features[0])
+            )
+            accents = [
+                music_motion.nearest(
+                    clip.timeline.out_sec,
+                    tolerance_sec=min(0.16, max(0.08, clip.timeline.duration_sec / 4)),
+                )
+                if music_motion is not None else None
+                for clip in group
+            ]
+            incoming_accents = [
+                music_motion.nearest(
+                    clip.timeline.in_sec,
+                    tolerance_sec=min(
+                        0.16, max(0.08, clip.timeline.duration_sec / 4)
+                    ),
+                )
+                if music_motion is not None else None
+                for clip in group
+            ]
+            intensities = [
+                (
+                    max(0.2, accent.strength)
+                    if accent is not None
+                    else max(
+                        0.2 if editor_driven else 0.08,
+                        min(
+                            1.0,
+                            float(style.motion_intensity_pattern[index])
+                            if index < len(style.motion_intensity_pattern)
+                            else 0.55,
+                        ),
+                    )
+                )
+                for index, accent in zip(
+                    range(cursor, cursor + len(group)), accents, strict=True
+                )
+            ]
+            if editor_driven and music_motion is not None:
+                # Direction changes are editorial punctuation. Carry weak
+                # pulses; reverse or change zoom on structural accents so the
+                # BGM controls choreography rather than merely scaling a
+                # fixed per-clip template.
+                current_direction = beat_directions[0]
+                for index in range(1, len(group)):
+                    prior = accents[index - 1]
+                    if (
+                        prior is not None
+                        and (
+                            prior.kind in {"impact", "downbeat"}
+                            or prior.strength >= 0.82
+                        )
+                    ):
+                        current_direction = _reverse_direction(current_direction)
+                    beat_directions[index] = current_direction
+            beat_zoom_directions = []
+            # The reference's cut grammar is a radial relay: the outgoing shot
+            # pushes into the cut and the incoming shot keeps pushing for its
+            # first 3–6 frames. Alternating in/out produces a visible pull-back
+            # exactly where the demo accelerates forward.
+            current_zoom = "in"
+            for index in range(len(group)):
+                beat_zoom_directions.append(current_zoom)
+            peak = max(intensities)
+            scale_delta = min(
+                0.85, (0.020 + 0.054 * peak) * absolute_scale * 6.4
+            )
+            translation = min(
+                0.16,
+                scale_delta / (2.0 * (1.0 + scale_delta)) * 0.92,
+                (0.014 + 0.038 * peak) * absolute_scale * 3.2,
+            )
+            if editor_driven:
+                motion_intensities = [max(0.55, value) for value in intensities]
+                velocities = [
+                    (
+                        accent.target_velocity
+                        if accent is not None
+                        else 0.12 + 0.10 * value
+                    )
+                    for value, accent in zip(
+                        motion_intensities, accents, strict=True
+                    )
+                ]
+                entry_velocities = [
+                    (
+                        min(velocities[index - 1], velocities[index])
+                        if index > 0
+                        and beat_directions[index - 1] == beat_directions[index]
+                        else 0.0
+                    )
+                    for index in range(len(group))
+                ]
+                exit_velocities = [
+                    (
+                        min(velocities[index], velocities[index + 1])
+                        if index + 1 < len(group)
+                        and beat_directions[index] == beat_directions[index + 1]
+                        else 0.0
+                    )
+                    for index in range(len(group))
+                ]
+                stages = [
+                    (
+                        "carry" if entry > 0 and exit > 0
+                        else "settle" if entry > 0
+                        else "accelerate" if exit > 0
+                        else "reverse" if index > 0
+                        and beat_directions[index - 1] != beat_directions[index]
+                        else "accelerate"
+                    )
+                    for index, (entry, exit) in enumerate(
+                        zip(entry_velocities, exit_velocities, strict=True)
+                    )
+                ]
+            else:
+                motion_intensities = intensities
+                entry_velocities = [0.0] * len(group)
+                exit_velocities = [0.0] * len(group)
+                stages = [
+                    "accelerate",
+                    *[
+                        "reverse"
+                        if feature and feature.startswith("motion_reversal:")
+                        else "carry"
+                        for feature in features
+                    ],
+                ]
+            beats = [
+                MotionBeat(
+                    clip_id=clip.id,
+                    stage=stage,
+                    intensity=intensity,
+                    direction=(
+                        beat_direction if editor_driven else None
+                    ),
+                    zoom_direction=(
+                        beat_zoom_direction if editor_driven else None
+                    ),
+                    accent_at_sec=(
+                        # A settle clip inherits the impact at its *incoming*
+                        # boundary.  Mapping the outgoing accent here made the
+                        # new shot wait until its own tail before accelerating,
+                        # so every hard cut visibly restarted the move.
+                        0.0
+                        if (
+                            incoming_accent is not None
+                            and (stage != "accelerate" or accent is None)
+                        )
+                        else (
+                            max(
+                                0.0,
+                                min(
+                                    clip.timeline.duration_sec,
+                                    accent.sec - clip.timeline.in_sec,
+                                ),
+                            )
+                            if accent is not None else None
+                        )
+                    ),
+                    anticipation_sec=(
+                        incoming_accent.anticipation_sec
+                        if (
+                            incoming_accent is not None
+                            and (stage != "accelerate" or accent is None)
+                        )
+                        else accent.anticipation_sec if accent is not None else None
+                    ),
+                    release_sec=(
+                        incoming_accent.release_sec
+                        if (
+                            incoming_accent is not None
+                            and (stage != "accelerate" or accent is None)
+                        )
+                        else accent.release_sec if accent is not None else None
+                    ),
+                    entry_intensity=(
+                        incoming_accent.strength
+                        if incoming_accent is not None else intensity
+                    ),
+                    translation=(
+                        min(
+                            0.08 / intensity,
+                            velocity * clip.timeline.duration_sec / intensity,
+                        )
+                        if editor_driven else None
+                    ),
+                    scale_delta=(
+                        min(0.32, (
+                            (0.12 + 0.16 * intensity)
+                            * min(1.0, clip.timeline.duration_sec / 0.7)
+                        )) / intensity
+                        if editor_driven else None
+                    ),
+                    entry_velocity=entry_velocity,
+                    exit_velocity=exit_velocity,
+                )
+                for (
+                    clip,
+                    stage,
+                    intensity,
+                    beat_direction,
+                    beat_zoom_direction,
+                    accent,
+                    incoming_accent,
+                    velocity,
+                    entry_velocity,
+                    exit_velocity,
+                ) in zip(
+                    group,
+                    stages,
+                    motion_intensities,
+                    beat_directions or [direction] * len(group),
+                    beat_zoom_directions,
+                    accents,
+                    incoming_accents,
+                    (
+                        velocities
+                        if editor_driven else [0.0] * len(group)
+                    ),
+                    entry_velocities,
+                    exit_velocities,
+                    strict=True,
+                )
+            ]
+            motion_phrases.append(
+                MotionPhrase(
+                    id=f"motion-phrase-{phrase_index:03d}",
+                    beats=beats,
+                    direction=direction,
+                    zoom_direction=(
+                        "in" if editor_driven
+                        else "in" if phrase_index % 2 == 0 else "out"
+                    ),
+                    translation=translation,
+                    scale_delta=scale_delta,
+                    rotation_deg=(
+                        (1 if phrase_index % 2 == 0 else -1)
+                        * min(4.0, 0.8 + 2.6 * peak)
+                        if editor_driven else 0.0
+                    ),
+                    blur_strength=min(0.18, 0.025 + 0.10 * peak),
+                    cut_window_sec=min(
+                        0.24,
+                        min(clip.timeline.duration_sec for clip in group) / 3,
+                    ),
+                    decision={
+                        "source": "rule",
+                        "confidence": 0.84,
+                        "reasoning": (
+                            "reference frame-motion envelope mapped to musical "
+                            "timeline: accelerate → carry → settle → reverse"
+                            if editor_driven
+                            else "adjacent match-action boundaries with measured "
+                            "carry/reversal direction evidence"
+                        ),
+                    },
+                )
+            )
+            occupied_effects.update(clip.id for clip in group)
+            cursor += len(group)
+
+    if (
+        capability_check("motion_phrase_compositor")
+        and plan.editing_style.source == "curated"
         and len(clips) >= 3
     ):
         # Place phrases from the measured reference velocity peaks.  No slot
@@ -323,8 +737,17 @@ def apply_recipe_plan(
         if plan.editing_style.source == "curated"
         else 0
     )
+    # Prefer v2 (adds a short landing-settle zoom on the incoming side) once a
+    # human has reviewed it; until then this quietly falls back to the
+    # long-accepted v1 blur-only bridge so behavior never regresses silently.
+    transition_recipe = "motion_blur_transition_v2"
+    if not _admitted(
+        registry, transition_recipe, kind="transition",
+        capability="transition", capability_check=capability_check,
+    ):
+        transition_recipe = "motion_blur_transition_v1"
     if desired_transitions and _admitted(
-        registry, "motion_blur_transition_v1", kind="transition",
+        registry, transition_recipe, kind="transition",
         capability="transition", capability_check=capability_check,
     ):
         candidates = list(range(len(clips) - 1))
@@ -338,18 +761,20 @@ def apply_recipe_plan(
                 right.timeline.duration_sec / 3,
             )
             params = {"length": duration, "angle": 0.0}
+            if transition_recipe == "motion_blur_transition_v2":
+                params["settle_scale"] = 0.05
             left.transition.out = TransitionEnd(
-                recipe="motion_blur_transition_v1",
+                recipe=transition_recipe,
                 duration_sec=duration,
                 params=params,
             )
             right.transition.in_ = TransitionEnd(
-                recipe="motion_blur_transition_v1",
+                recipe=transition_recipe,
                 duration_sec=duration,
                 params=params,
             )
             occupied_effects.update((left.id, right.id))
-            use("motion_blur_transition_v1")
+            use(transition_recipe)
 
     desired_ramps = min(
         len(impact),
@@ -452,6 +877,30 @@ def apply_recipe_plan(
     ):
         for clip in clips:
             clip.color = use("anime_clean_v1")
+
+    # A short, visually verified demon-eye close-up may request a localized
+    # eye glow inside the already-owned MotionPhrase comp. The cue remains
+    # explicit in EditSpec instead of being inferred by the Resolve compiler.
+    eye_closeups = [
+        clip for clip in clips
+        if clip.role == "ending"
+        and {"cracked_skin", "horns"} <= _clip_tokens(clip)
+    ]
+    if eye_closeups:
+        eye_clip = eye_closeups[-1]
+        spec.markers = [
+            marker for marker in spec.markers
+            if marker.kind != "eye_glow_cue"
+        ]
+        spec.markers.append(
+            Marker(
+                sec=eye_clip.timeline.in_sec,
+                duration_sec=eye_clip.timeline.duration_sec,
+                kind="eye_glow_cue",
+                note="Localized pink-purple eye glow",
+                clip_id=eye_clip.id,
+            )
+        )
     color_rules = (
         ("anime_fire_v1", {"fire", "flame", "orange", "warm"}),
         ("anime_night_blue_v1", {"night", "dark", "moon", "blue"}),
@@ -470,7 +919,10 @@ def apply_recipe_plan(
         registry, "anime_high_contrast_v1", kind="color",
         capability="color_recipe", capability_check=capability_check,
     ):
-        for clip in impact:
+        color_targets = (
+            clips if "tiktok_impact" in plan.tone else impact
+        )
+        for clip in color_targets:
             clip.color = use("anime_high_contrast_v1")
     if impact and _admitted(
         registry, "red_impact_v1", kind="color",
@@ -527,6 +979,40 @@ def apply_recipe_plan(
             update={"sfx": [*pre_drop.audio.sfx, SfxCue(recipe="riser_v1")]}
         )
         use("riser_v1")
+
+    # Reference edits (a.mp4-class) read as calm/held or slowed footage — the
+    # *editor's* camera work supplies the motion, not the raw source playing
+    # at native speed. Our shots were, until now, always played back 1:1,
+    # which reads as "just moving footage with effects on it" no matter how
+    # good the motion phrases/transitions above are. Give every clip that
+    # didn't already claim a special retime (speed_ramp) a calm constant
+    # slow-down baseline; this only narrows the already-assigned source
+    # window (never reads past it), so it is always safe to apply.
+    if capability_check("timespeed_recipe"):
+        for clip in clips:
+            if clip.retime.type != "constant" or abs(clip.retime.speed - 1.0) > 1e-9:
+                continue
+            speed = _CALM_RETIME_SPEED.get(clip.role, _CALM_RETIME_SPEED[None])
+            clip.retime = Retime(type="constant", speed=speed)
+            clip.source = clip.source.model_copy(
+                update={
+                    "out_sec": clip.source.in_sec
+                    + clip.timeline.duration_sec * speed
+                }
+            )
+            if (
+                clip.source_selection is not None
+                and clip.source_selection.anchor_sec > clip.source.out_sec
+            ):
+                clip.source_selection = clip.source_selection.model_copy(
+                    update={
+                        "anchor_sec": clip.source.out_sec,
+                        "evidence": [
+                            *clip.source_selection.evidence,
+                            "retime_anchor_clamped",
+                        ],
+                    }
+                )
 
     meta = spec.meta.model_copy(deep=True)
     meta.recipe_versions = {**meta.recipe_versions, **used_versions}

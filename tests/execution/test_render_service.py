@@ -7,7 +7,16 @@ from studio.execution.resolve import RenderResult
 
 
 class FakeAdapter:
+    def __init__(self):
+        self.render_kwargs = None
+
+    def timeline_frame_range(self, *, duration_sec, timebase):
+        assert duration_sec == 2
+        assert timebase.fps_float == 24
+        return 86400, 86447
+
     def render(self, **kwargs):
+        self.render_kwargs = kwargs
         output = kwargs["output_dir"] / f"{kwargs['name']}.mov"
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"video")
@@ -21,12 +30,25 @@ def test_render_service_is_resolve_only_and_persistent(tmp_path):
         revision=1,
         timebase=Timebase(num=24),
         canvas=Canvas(width=1080, height=1350),
+        clips=[
+            {
+                "id": "c1",
+                "asset_id": "a",
+                "shot_id": "s1",
+                "source": {"in_sec": 0, "out_sec": 2},
+                "timeline": {"in_sec": 0, "duration_sec": 2},
+            }
+        ],
     )
+    adapter = FakeAdapter()
     render_id, result = render_spec(
-        FakeAdapter(), conn, spec,
+        adapter, conn, spec,
         kind="preview", output_dir=tmp_path / "renders",
     )
     row = conn.execute("SELECT * FROM renders WHERE id=?", (render_id,)).fetchone()
     assert row["backend"] == "resolve"
     assert row["status"] == "complete"
     assert Path(row["output_path"]) == result.output
+    assert adapter.render_kwargs["mark_in"] == 86400
+    assert adapter.render_kwargs["mark_out"] == 86447
+    assert adapter.render_kwargs["name"] == "p-preview"

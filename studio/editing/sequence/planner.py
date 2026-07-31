@@ -35,7 +35,7 @@ from studio.editspec.schema import (
     TimelinePlacement,
 )
 
-SEQUENCE_PLANNER_VERSION = "sequence-planner-3.1.0"
+SEQUENCE_PLANNER_VERSION = "sequence-planner-3.2.0"
 _ROLE = {
     "buildup": "build",
     "drop": "impact",
@@ -69,6 +69,19 @@ class _State:
     shot_ids: list[str]
     rows: list[sqlite3.Row]
     alternatives: list[list[str]]
+
+
+def _source_intent(slot: _Slot) -> str:
+    """Keep narrative source phase independent from cross-cut direction."""
+    role_intent = {
+        "pre_drop": "anticipation",
+        "impact": "impact",
+        "release": "hold",
+        "ending": "settle",
+    }.get(slot.role)
+    if role_intent is not None:
+        return role_intent
+    return "establish" if slot.start == 0 else "representative"
 
 
 def _section_at(plan: DirectorPlan, sec: float):
@@ -140,7 +153,7 @@ def _snap_cuts_to_music(
         len(cuts),
         max(0, round(len(cuts) * profile.beat_sync_target)),
     )
-    snap_indices = {
+    snap_order = [
         index
         for index, _ in sorted(
             enumerate(cuts),
@@ -149,11 +162,29 @@ def _snap_cuts_to_music(
                 item[1],
             ),
         )[:snap_count]
-    }
-    return [
-        nearest[index] if index in snap_indices else cut
-        for index, cut in enumerate(cuts)
     ]
+    snap_indices = set(snap_order)
+    output = list(cuts)
+    occupied = {
+        round(cut, 6)
+        for index, cut in enumerate(cuts)
+        if index not in snap_indices
+    }
+    for index in snap_order:
+        available = [
+            anchor for anchor in anchors
+            if round(anchor, 6) not in occupied
+        ]
+        value = (
+            min(
+                available,
+                key=lambda anchor: (abs(anchor - cuts[index]), anchor),
+            )
+            if available else cuts[index]
+        )
+        output[index] = value
+        occupied.add(round(value, 6))
+    return output
 
 
 def _dedupe_boundaries(
@@ -176,6 +207,83 @@ def _dedupe_boundaries(
     return output
 
 
+def _snap_editor_motion_cuts(
+    cuts: list[float],
+    *,
+    plan: DirectorPlan,
+    music: MusicMap,
+) -> list[float]:
+    """Phase-lock reference cadence to this soundtrack's accepted accents."""
+    anchors = sorted({
+        round(value, 6)
+        for value in [*music.impact_points, *music.beats]
+        if 0.18 <= value <= plan.duration_sec - 0.18
+    })
+    if len(anchors) < len(cuts):
+        return cuts
+    output: list[float] = []
+    start_index = 0
+    for cut_index, cut in enumerate(cuts):
+        remaining = len(cuts) - cut_index - 1
+        available_end = len(anchors) - remaining
+        candidates = [
+            (index, value)
+            for index, value in enumerate(
+                anchors[start_index:available_end],
+                start=start_index,
+            )
+            if not output or value - output[-1] >= 0.18
+        ]
+        if not candidates:
+            return cuts
+        chosen_index, chosen = min(
+            candidates,
+            key=lambda item: (abs(item[1] - cut), item[1]),
+        )
+        output.append(chosen)
+        start_index = chosen_index + 1
+    return output
+
+
+def _slots_from_boundaries(
+    plan: DirectorPlan,
+    music: MusicMap,
+    boundaries: list[float],
+    *,
+    intent_by_start: dict[float, str] | None = None,
+) -> list[_Slot]:
+    profile = plan.editing_style
+    intents = intent_by_start or {0.0: "establish"}
+    values = []
+    for slot_index, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
+        section = _section_at(plan, (start + end) / 2)
+        role = canonical_role(section.role)
+        intent = intents.get(round(start, 6))
+        if intent is None:
+            near_impact = any(
+                abs(start - point) <= profile.beat_tolerance_sec
+                for point in music.impact_points
+            )
+            intent = (
+                "impact" if role == "impact" or near_impact
+                else "anticipation" if role == "pre_drop"
+                else "settle" if role == "ending"
+                else "reaction" if role == "release"
+                else "establish" if slot_index == 0
+                else "carry"
+            )
+        values.append(
+            _Slot(
+                role=role,
+                start=start,
+                duration=end - start,
+                energy=section.energy,
+                intent=intent,
+            )
+        )
+    return values
+
+
 def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
     profile = plan.editing_style
     preserve_phrase_accents = False
@@ -189,6 +297,35 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
             value * plan.duration_sec
             for value in profile.normalized_cut_positions
         ]
+        editor_driven_motion = (
+            profile.source == "reference"
+            and (
+                profile.motion_change_ratio >= 0.6
+                or profile.motion_p75_target >= 3.0
+            )
+        )
+        if editor_driven_motion:
+            cuts = _snap_editor_motion_cuts(
+                cuts,
+                plan=plan,
+                music=music,
+            )
+        intent_by_start = {0.0: "establish"}
+        for cut, vector in zip(cuts, profile.cut_carry_vectors):
+            intent_by_start[round(cut, 6)] = (
+                "carry" if vector.get("same_direction") else "reverse"
+            )
+        # generate_director_plan keeps these positions only when target and
+        # reference durations are comparable. At that point they are the
+        # measured reference grammar, not suggestions for another beat-grid
+        # pass. Snapping, semantic-boundary injection and min-duration dedupe
+        # would all rewrite the skeleton and delete intentional microcuts.
+        return _slots_from_boundaries(
+            plan,
+            music,
+            [0.0, *cuts, plan.duration_sec],
+            intent_by_start=intent_by_start,
+        )
     else:
         cuts = [
             value
@@ -257,6 +394,31 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
     # onsets/beats while preserving the reference's maximum shot duration.
     anchors = sorted(set([*music.beats, *music.onsets, *music.impact_points]))
     maximum = min(1.2, profile.max_shot_length)
+    if profile.normalized_cut_positions:
+        # A comparable-duration reference owns its measured cadence.  Its
+        # opening may deliberately hold longer than the portable distribution
+        # cap derived from the faster body.  Treating that global cap as a hard
+        # ceiling inserts generic music cuts into the measured hook and inflates
+        # density before the reference grammar reaches the planner.
+        measured_boundaries = [
+            0.0,
+            *[
+                value * plan.duration_sec
+                for value in profile.normalized_cut_positions
+                if 0 < value < 1
+            ],
+            plan.duration_sec,
+        ]
+        maximum = max(
+            maximum,
+            max(
+                right - left
+                for left, right in zip(
+                    measured_boundaries,
+                    measured_boundaries[1:],
+                )
+            ),
+        )
     changed = True
     gap_fill_cuts: list[float] = []
     while changed and anchors and profile.source == "reference":
@@ -342,7 +504,7 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
         for value in cuts
         if 0 < value < plan.duration_sec
     }
-    if beat_grid_mode:
+    if beat_grid_mode and not profile.normalized_cut_positions:
         # The grid is already density-controlled by musical phrase; pruning it
         # by reference density would cluster cuts early and create long gaps.
         target_cut_count = len(unique_cuts)
@@ -410,34 +572,12 @@ def _slots(plan: DirectorPlan, music: MusicMap) -> list[_Slot]:
         duration=plan.duration_sec,
         minimum=minimum,
     )
-    values = []
-    for slot_index, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
-        section = _section_at(plan, (start + end) / 2)
-        role = canonical_role(section.role)
-        intent = intent_by_start.get(round(start, 6))
-        if intent is None:
-            near_impact = any(
-                abs(start - point) <= profile.beat_tolerance_sec
-                for point in music.impact_points
-            )
-            intent = (
-                "impact" if role == "impact" or near_impact
-                else "anticipation" if role == "pre_drop"
-                else "settle" if role == "ending"
-                else "reaction" if role == "release"
-                else "establish" if slot_index == 0
-                else "carry"
-            )
-        values.append(
-            _Slot(
-                role=role,
-                start=start,
-                duration=end - start,
-                energy=section.energy,
-                intent=intent,
-            )
-        )
-    return values
+    return _slots_from_boundaries(
+        plan,
+        music,
+        boundaries,
+        intent_by_start=intent_by_start,
+    )
 
 
 def rhythm_metrics(
@@ -570,6 +710,7 @@ def _transition(
     previous_reference_direction: str | None = None,
     current_reference_direction: str | None = None,
     cut_kind: str = "carry",
+    ignore_source_motion: bool = False,
 ) -> float:
     if previous is None:
         return 0.5
@@ -585,12 +726,15 @@ def _transition(
         if cut_kind == "impact" else style.scale_contrast_target
     )
     score += 0.18 * (1.0 - min(1.0, abs(scale_delta - desired_scale)))
-    motion_changed = previous["motion_dir"] != current["motion_dir"]
-    if previous_reference_direction and current_reference_direction:
-        desired_change = previous_reference_direction != current_reference_direction
+    if ignore_source_motion:
+        score += 0.10
     else:
-        desired_change = style.motion_change_ratio >= 0.5
-    score += 0.16 if motion_changed == desired_change else 0.04
+        motion_changed = previous["motion_dir"] != current["motion_dir"]
+        if previous_reference_direction and current_reference_direction:
+            desired_change = previous_reference_direction != current_reference_direction
+        else:
+            desired_change = style.motion_change_ratio >= 0.5
+        score += 0.16 if motion_changed == desired_change else 0.04
     previous_energy = previous["visual_energy"] or 0.5
     current_energy = current["visual_energy"] or 0.5
     score += 0.11 * (1.0 - min(1.0, abs(previous_energy - current_energy)))
@@ -648,6 +792,7 @@ def _reference_fit(
     style: EditingStyleProfile,
     scale_range: tuple[float, float],
     motion_range: tuple[float, float],
+    editor_driven_motion: bool = False,
 ) -> float:
     """Score the shot against the reference's visual grammar at this slot."""
     scores: list[tuple[float, float]] = []
@@ -659,12 +804,12 @@ def _reference_fit(
         actual_scale = row["shot_scale"] if row["shot_scale"] is not None else 0.5
         scores.append((1.0 - min(1.0, abs(actual_scale - target_scale)), 0.38))
     target_direction = _pattern_value(style.motion_direction_pattern, index, total)
-    if target_direction is not None and row["motion_dir"]:
+    if not editor_driven_motion and target_direction is not None and row["motion_dir"]:
         exact = row["motion_dir"] == target_direction
         both_static = row["motion_dir"] == "static" and target_direction == "static"
         scores.append((1.0 if exact or both_static else 0.25, 0.34))
     target_motion = _pattern_value(style.motion_intensity_pattern, index, total)
-    if target_motion is not None:
+    if not editor_driven_motion and target_motion is not None:
         rank = float(target_motion)
         if rank <= 0.5:
             target_motion = style.motion_median_target * (0.2 + 1.6 * rank)
@@ -711,6 +856,36 @@ def _sequence_novelty(current: sqlite3.Row, selected: list[sqlite3.Row]) -> floa
     if not similarities:
         return 0.5
     return max(0.0, min(1.0, 1.0 - max(similarities)))
+
+
+def _horizontal_bucket(motion_dir: str | None) -> int:
+    if not motion_dir:
+        return 0
+    if "left" in motion_dir:
+        return -1
+    if "right" in motion_dir:
+        return 1
+    return 0
+
+
+def _direction_balance_fit(row: sqlite3.Row, prior_rows: list[sqlite3.Row]) -> float:
+    """Reward candidates that correct a running left/right pan imbalance.
+
+    Mirrors the QA's direction_balance metric (min(left,right)/max(left,right)
+    over the whole cut, see studio/critic/creative/motion.py) rather than
+    per-cut continuity, which _transition already covers. Without this term
+    the pool's skew toward one panning direction compounds across the beam
+    search and the sequence ends up dominated by a single side.
+    """
+    bucket = _horizontal_bucket(row["motion_dir"])
+    if bucket == 0:
+        return 0.5
+    left = sum(1 for prior in prior_rows if _horizontal_bucket(prior["motion_dir"]) == -1)
+    right = sum(1 for prior in prior_rows if _horizontal_bucket(prior["motion_dir"]) == 1)
+    if left == right:
+        return 1.0
+    deficit_side = -1 if left < right else 1
+    return 1.0 if bucket == deficit_side else 0.2
 
 
 _KEYFRAME_POSITION = (0.15, 0.325, 0.5, 0.675, 0.85)
@@ -761,7 +936,7 @@ def _source_window(
         phase, phase_position = "anticipation", min(position, 0.38)
         evidence.append("anticipation_intent")
         confidence = max(confidence, 0.62)
-    elif intent in {"carry", "reverse"} or tokens & {
+    elif tokens & {
         "sword", "swing", "running", "run", "attack", "action",
     }:
         phase, phase_position = "action", max(0.42, min(position, 0.62))
@@ -813,10 +988,16 @@ def _cut_relation(
         and current["action"]
         and previous["action"] == current["action"]
     )
+    previous_direction = _horizontal_bucket(previous["motion_dir"])
+    current_direction = _horizontal_bucket(current["motion_dir"])
     same_direction = bool(
-        previous["motion_dir"]
-        and previous["motion_dir"] == current["motion_dir"]
-        and previous["motion_dir"] != "static"
+        previous_direction
+        and previous_direction == current_direction
+    )
+    opposite_direction = bool(
+        previous_direction
+        and current_direction
+        and previous_direction != current_direction
     )
     scale_delta = abs(
         float(previous["shot_scale"] or 0.5)
@@ -826,24 +1007,36 @@ def _cut_relation(
         float(previous["brightness"] or 0.5)
         - float(current["brightness"] or 0.5)
     )
-    if intent in {"carry", "reverse"} and (same_action or same_direction):
-        features = [
-            name for name, enabled in (
-                ("action", same_action), ("motion_direction", same_direction)
-            ) if enabled
-        ]
+    if intent == "carry" and (same_action or same_direction):
+        features = ["action"] if same_action else []
+        if same_direction:
+            direction = "left" if current_direction < 0 else "right"
+            features.append(f"motion_direction:{direction}")
         return CutRelation(
             kind="match_action",
             motivation="沿动作或运动方向跨切，保持动势连续",
             confidence=0.82 if len(features) == 2 else 0.7,
             matched_features=features,
         )
+    if intent == "reverse" and opposite_direction:
+        previous_name = "left" if previous_direction < 0 else "right"
+        current_name = "left" if current_direction < 0 else "right"
+        return CutRelation(
+            kind="match_action",
+            motivation="在参考反向切点跨切，以真实相反运动形成动势回摆",
+            confidence=0.76,
+            matched_features=[
+                f"motion_reversal:{previous_name}->{current_name}",
+            ],
+        )
     if scale_delta <= 0.1 and brightness_delta <= 0.12:
         return CutRelation(
-            kind="graphic_match",
-            motivation="利用相近景别与亮度结构建立图形匹配",
-            confidence=0.68,
-            matched_features=["shot_scale", "brightness"],
+            kind="continuation",
+            motivation="景别与明暗连续，但缺少构图锚点，保守记为延续",
+            confidence=0.55,
+            matched_features=[
+                "shot_scale_similarity", "brightness_similarity",
+            ],
         )
     if intent == "impact" or brightness_delta >= 0.38 or scale_delta >= 0.42:
         return CutRelation(
@@ -890,6 +1083,7 @@ def plan_sequence(
     timebase: Timebase = Timebase(num=24000, den=1001),
     music_asset_id: str | None = None,
     selected_by_role: dict[str, str] | None = None,
+    selected_by_slot: dict[int, str] | None = None,
     beam_width: int = 32,
 ) -> EditSpec:
     conn.row_factory = sqlite3.Row
@@ -920,6 +1114,13 @@ def plan_sequence(
 
     scale_range = robust_range(scales, (0.2, 0.8))
     motion_range = robust_range(motions, (0.0, 5.0))
+    editor_driven_motion = (
+        plan.editing_style.source == "reference"
+        and (
+            plan.editing_style.motion_change_ratio >= 0.6
+            or plan.editing_style.motion_p75_target >= 3.0
+        )
+    )
     score_by_id = {
         candidate.shot_id: candidate.total
         for candidates in candidates_by_role.values()
@@ -938,6 +1139,9 @@ def plan_sequence(
         shot_id: role
         for role, shot_id in (selected_by_role or {}).items()
     }
+    reserved_for_slot = {
+        shot_id: index for index, shot_id in (selected_by_slot or {}).items()
+    }
     global_pool = [
         item for values in candidates_by_role.values() for item in values
     ]
@@ -954,11 +1158,22 @@ def plan_sequence(
             prior = state.rows[-1] if state.rows else None
             viable = []
             for candidate in pool:
-                forced = (selected_by_role or {}).get(slot.role)
+                forced = (selected_by_slot or {}).get(slot_index)
+                if forced is None:
+                    forced = (selected_by_role or {}).get(slot.role)
                 if forced and slot.role not in forced_used and candidate.shot_id != forced:
+                    if slot_index not in (selected_by_slot or {}):
+                        continue
+                if (
+                    slot_index in (selected_by_slot or {})
+                    and candidate.shot_id != forced
+                ):
                     continue
                 reserved_role = reserved_for_role.get(candidate.shot_id)
                 if reserved_role is not None and reserved_role != slot.role:
+                    continue
+                reserved_slot = reserved_for_slot.get(candidate.shot_id)
+                if reserved_slot is not None and reserved_slot != slot_index:
                     continue
                 row = row_by_id.get(candidate.shot_id)
                 if row is None:
@@ -966,6 +1181,11 @@ def plan_sequence(
                 # Reuse is allowed, but never within MIN_REPEAT_GAP clips — a
                 # shot must not reappear adjacently or in the same phrase.
                 if row["id"] in state.shot_ids[-MIN_REPEAT_GAP:]:
+                    continue
+                if (
+                    editor_driven_motion
+                    and state.shot_ids.count(row["id"]) >= 3
+                ):
                     continue
                 reuse_count = state.shot_ids.count(row["id"])
                 source_duration = row["end_sec"] - row["start_sec"]
@@ -990,6 +1210,7 @@ def plan_sequence(
                     style=plan.editing_style,
                     scale_range=scale_range,
                     motion_range=motion_range,
+                    editor_driven_motion=editor_driven_motion,
                 )
                 previous_reference_direction = _pattern_value(
                     plan.editing_style.motion_direction_pattern,
@@ -1029,6 +1250,26 @@ def plan_sequence(
                         0.35,
                     ),
                 )
+                # Drawn motion blur at a cut is a feature action editing wants,
+                # not a defect: without this the pool skews toward clean/held
+                # frames (see the analyzer's pose_bad fix for the matching
+                # retrieval-side gate) and cuts land on settled frames instead
+                # of mid-pan ones, which is what the blur_ratio/hold_ratio QA
+                # gap actually measures.
+                blur = max(0.0, min(1.0, float(row["blur_score"] or 0.0)))
+                target_blur = {
+                    "hold": 0.08,
+                    "establish": 0.12,
+                    "carry": 0.28,
+                    "reverse": 0.42,
+                    "impact": 0.48,
+                    "settle": 0.12,
+                    "reaction": 0.15,
+                    "anticipation": 0.20,
+                }.get(slot.intent, 0.20)
+                intent_blur_fit = 1.0 - min(
+                    1.0, abs(blur - target_blur) / max(target_blur, 0.25)
+                )
                 value = (
                     state.score
                     + 0.25 * score_by_id[row["id"]]
@@ -1039,12 +1280,44 @@ def plan_sequence(
                         previous_reference_direction=previous_reference_direction,
                         current_reference_direction=current_reference_direction,
                         cut_kind=cut_kind,
+                        ignore_source_motion=editor_driven_motion,
                     )
                     + 0.12 * energy_fit
                     + 0.27 * reference_fit
                     + 0.08 * _sequence_novelty(row, state.rows)
                     + 0.10 * duration_conservation
-                    + 0.12 * intent_motion_fit
+                    + (
+                        0.30
+                        * (
+                            1.0
+                            - max(
+                                0.0,
+                                min(
+                                    1.0,
+                                    float(
+                                        row["subject_motion"]
+                                        if row["subject_motion"] is not None
+                                        else motion / max(motion_range[1], 1e-6)
+                                    ),
+                                ),
+                            )
+                        )
+                        if editor_driven_motion else 0.12 * intent_motion_fit
+                    )
+                    + (
+                        0.0 if editor_driven_motion
+                        else 0.10 * _direction_balance_fit(row, state.rows)
+                    )
+                    + (
+                        0.10 * (
+                            0.45 * (
+                                1.0 - abs(float(row["shot_scale"] or 0.5) - 0.62)
+                            )
+                            + 0.30 * float(row["face_visibility"] or 0.5)
+                            + 0.25 * float(row["pose_quality"] or 0.5)
+                        )
+                        if editor_driven_motion else 0.10 * intent_blur_fit
+                    )
                     - REPEAT_PENALTY * reuse_count
                 )
                 viable.append((value, row))
@@ -1082,7 +1355,7 @@ def plan_sequence(
             }
         )[:16]
         source_in, source_out, source_selection = _source_window(
-            row, slot.duration, intent=slot.intent
+            row, slot.duration, intent=_source_intent(slot)
         )
         previous_row = best.rows[index - 1] if index else None
         clips.append(

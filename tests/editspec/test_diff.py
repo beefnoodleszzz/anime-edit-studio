@@ -16,6 +16,8 @@ from studio.editspec.schema import (
     Clip,
     Decision,
     EditSpec,
+    MotionBeat,
+    MotionPhrase,
     SourceRange,
     Timebase,
     TimelinePlacement,
@@ -58,6 +60,30 @@ def test_generated_diff_includes_top_level_audio():
     )
     patch = diff_specs(before, after)
     assert [op.op for op in patch.ops] == ["patch_spec"]
+    assert apply_diff(before, patch) == after
+
+
+def test_generated_diff_includes_top_level_motion_phrases():
+    before = spec(clip("a", 0), clip("b", 1))
+    after = before.model_copy(deep=True)
+    after.revision = 2
+    after.motion_phrases.append(
+        MotionPhrase(
+            id="phrase-1",
+            beats=[
+                MotionBeat(clip_id="a", stage="accelerate", intensity=0.4),
+                MotionBeat(clip_id="b", stage="settle", intensity=0.3),
+            ],
+            direction="left",
+            translation=0.1,
+            scale_delta=0.05,
+            blur_strength=0.12,
+            cut_window_sec=0.08,
+        )
+    )
+    patch = diff_specs(before, after)
+    assert [op.op for op in patch.ops] == ["patch_spec"]
+    assert patch.ops[0].path == "motion_phrases"
     assert apply_diff(before, patch) == after
 
 

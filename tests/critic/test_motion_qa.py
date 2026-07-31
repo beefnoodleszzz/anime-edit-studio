@@ -47,3 +47,28 @@ def test_motion_qa_detects_holds_dynamics_and_direction_changes(tmp_path):
     assert result.dynamic_range >= 1
     assert result.hold_ratio > 0.2
     assert result.direction_reversal_rate > 0
+
+
+def test_motion_qa_measures_music_velocity_alignment(tmp_path):
+    video = tmp_path / "motion.mp4"
+    _video(video)
+    profile = EditingStyleProfile(
+        motion_median_target=0.3,
+        motion_p75_target=1.0,
+        motion_dynamic_range_target=1.3,
+        hold_ratio_target=0.4,
+        direction_balance_target=0.4,
+        direction_reversal_target=0.2,
+    )
+    result = evaluate_motion(
+        video,
+        profile,
+        motion_accents=[(1.9, 1.0), (2.9, 0.8)],
+    )
+
+    assert -1 <= result.music_motion_correlation <= 1
+    assert 0 <= result.accent_peak_ratio <= 1
+    assert {check.metric for check in result.checks} >= {
+        "music_motion_correlation",
+        "accent_peak_ratio",
+    }

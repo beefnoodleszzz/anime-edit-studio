@@ -130,6 +130,31 @@ recipes:
       min: -180.0
       max: 180.0
       default: 0.0
+- id: motion_blur_transition_v2
+  version: 1.0.0
+  kind: transition
+  engine: resolve_fusion
+  capability: fusion_transition
+  verified: false
+  artifact: recipes/effects/motion_blur_transition_v2/motion_blur_transition_v2.comp
+  preview: recipes/effects/motion_blur_transition_v2/preview.mp4
+  acceptance: recipes/effects/motion_blur_transition_v2/ACCEPTANCE.md
+  parameters:
+    length:
+      type: float
+      min: 0.0
+      max: 0.5
+      default: 0.24
+    angle:
+      type: float
+      min: -180.0
+      max: 180.0
+      default: 0.0
+    settle_scale:
+      type: float
+      min: 0.0
+      max: 0.2
+      default: 0.05
 - id: eye_focus_v1
   version: 1.0.0
   kind: effect

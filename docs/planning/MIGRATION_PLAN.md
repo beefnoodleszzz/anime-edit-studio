@@ -592,6 +592,12 @@ Resolve 真机验证并进入自动链。炼狱 V3 产品级预览已通过 Rhyt
 Resolve H.265 delivery 均已跑通；645/645 帧完整，响度 -14.1 LUFS，最终
 Technical QA 13/13 通过。自动指标不得替代后续作品的人工审美确认。
 
+2026-07-30 补充：祢豆子参考片验收发现旧 MotionPhrase 主链虽有较高光流幅度，
+实际仍使用分段线性表达式，且一度错误地把参考曲线当作每镜固定业务逻辑。主链现由
+MusicMotionMap 的重音、预备和释放生成逐帧 Fusion Spline；横移、Zoom、旋转与
+Transform 原生亚帧 Motion Blur 共用音乐速度场。Resolve 覆盖渲染时长与 13 项
+Technical QA 均通过。流动审美仍以所有者观看为最终门槛。
+
 1. 所有者集中观看 21 个 Recipe 的 `preview.mp4`，逐项给出通过/拒绝和备注。
 2. 只有人工通过项才可把 `config/recipes.yaml` 的 `verified` 转为 true；拒绝项继续迭代。
 3. 使用单一主题素材从 Review UI 跑一次产品级 25 秒 E2E，确认创意质量而不只是 13 项技术 QA。

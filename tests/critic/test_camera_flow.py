@@ -8,10 +8,7 @@ from studio.critic.technical import (
 )
 from studio.critic.technical.camera_flow import CutCarry, ShotFlow
 
-REFERENCE_A = (
-    Path(__file__).resolve().parents[2]
-    / "docs" / "probes" / "camera_flow_reference_a.json"
-)
+REFERENCE_A = Path(__file__).resolve().parent / "fixtures" / "camera_flow_reference_a.json"
 
 
 def _shot(index: int, vx: float, vy: float, magnitude: float) -> ShotFlow:

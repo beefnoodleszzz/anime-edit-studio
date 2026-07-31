@@ -606,3 +606,8 @@ pitfalls:
     issue: "在 Whip/Blur 峰值帧上计算光流会因跟踪点丢失而把高速运动误判为静止"
     impact: "真实跨切点 Carry 会被 QA 错判为不连续，导致错误调整运动公式"
     fix: "跨 Cut 连续性采样必须位于动态 Blur 包络之外；当前 7 帧包络使用 Cut 前 -8→-6 与 Cut 后 +6→+8"
+
+  - id: P22
+    issue: "Close/Delete/Create Project 连续调用后，project.GetMediaPool()、folder.GetClipList()/GetSubFolderList() 以及 SetSetting() 会短暂返回 None/False，随后自行恢复"
+    impact: "看起来像随机失败的 TypeError（对 None 取 for）或工程设置写入失败，实为 Resolve 内部工程重建的进程内竞态，不是真实的 API 缺陷"
+    fix: "ensure_project 对 GetMediaPool() 加 15s 轮询；_set_settings 对失败键加 3s 重试；_index_media_pool 遍历时对 GetClipList()/GetSubFolderList() 一律 `or []`"

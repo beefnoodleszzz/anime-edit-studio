@@ -1,7 +1,7 @@
 [project]
 name = "anime-edit-studio"
 version = "2.0.0.dev0"
-description = "AI 导演 / EditSpec IR / DaVinci Resolve 执行的动漫短视频生产系统"
+description = "Demo 驱动的 AMV 生成引擎：分析剪辑语言、按目标音乐重算节奏、自动选素材、在 DaVinci Resolve 中生成 AMV"
 # 上界由 fusionscript 决定：Resolve 21 的脚本模块不支持 3.14+（AGENTS.md P3）
 requires-python = ">=3.11,<3.14"
 dependencies = [
@@ -22,12 +22,9 @@ ml = [
     "open-clip-torch>=2.24",   # CLIP 语义检索 (ViT-B-32, MPS)
     "wdtagger>=0.16",          # 动漫打标 (Danbooru v3, ONNX)
 ]
-review = [
-    "fastapi>=0.116",
-    "uvicorn>=0.35",
-]
 dev = [
     "pytest>=9.0",
+    "soundfile>=0.12",
 ]
 
 [project.scripts]
@@ -43,8 +40,7 @@ packages = ["studio"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# v1 遗留测试已随 v1 归档，不参与 v2 CI
-norecursedirs = ["projects", "library", "renderer", "review-web", ".venv"]
+norecursedirs = ["projects", "library", ".venv"]
 markers = [
     "requires_resolve: 需要本机运行 DaVinci Resolve，CI 中跳过",
 ]

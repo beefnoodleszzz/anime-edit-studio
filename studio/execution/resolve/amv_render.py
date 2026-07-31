@@ -62,6 +62,7 @@ def build_amv_timeline(
             "track_index": 1,
             "media_fps": media_by_clip[clip.id][1],
             "timeline_fps": timebase,
+            "media_type": 1,  # video only — source audio must not leak in unannounced
         }
         for clip in spec.clips
     ]

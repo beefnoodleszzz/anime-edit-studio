@@ -119,6 +119,15 @@ class ResolveAdapter:
             )
         self._project = project
 
+        # Right after Create/DeleteProject in quick succession, GetMediaPool()
+        # can transiently return None for a couple hundred ms before the
+        # project is fully live — poll briefly rather than fail spuriously.
+        deadline = time.monotonic() + 15.0
+        while project.GetMediaPool() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if project.GetMediaPool() is None:
+            raise ResolveOperationError(f"工程 {name!r} 的 MediaPool 在 15s 内未就绪")
+
         # 工程级时间线设置必须在建时间线**之前**施加，否则新时间线会用旧设置
         self._set_settings(
             {
@@ -130,7 +139,11 @@ class ResolveAdapter:
                 "timelineOutputResolutionHeight": str(height),
             }
         )
+        deadline = time.monotonic() + 3.0
         actual_fps = float(project.GetSetting("timelineFrameRate") or 0)
+        while abs(actual_fps - timebase.fps_float) > 0.002 and time.monotonic() < deadline:
+            time.sleep(0.15)
+            actual_fps = float(project.GetSetting("timelineFrameRate") or 0)
         if abs(actual_fps - timebase.fps_float) > 0.002:
             raise ResolveOperationError(
                 f"Resolve 时间线时基未生效: 请求 {timebase.fps_float:.6f}，"
@@ -152,14 +165,25 @@ class ResolveAdapter:
         return f"{tb.fps_float:g}"
 
     def _set_settings(self, settings: dict[str, str]) -> None:
-        failed = {
-            key: value
-            for key, value in settings.items()
-            if not self._project.SetSetting(key, value)
-        }
-        if failed:
+        # Right after a fast Close/Delete/Create sequence, Resolve's project
+        # context can still be mid-switch: SetSetting returns False for
+        # *every* key even though GetMediaPool() already succeeded. That is
+        # a transient race, not a real rejection, so retry briefly before
+        # treating any remaining failures as genuine (e.g. a setting Resolve
+        # actually refuses in this project state).
+        remaining = dict(settings)
+        deadline = time.monotonic() + 3.0
+        while remaining and time.monotonic() < deadline:
+            remaining = {
+                key: value
+                for key, value in remaining.items()
+                if not self._project.SetSetting(key, value)
+            }
+            if remaining:
+                time.sleep(0.15)
+        if remaining:
             # 不致命：部分设置在某些工程状态下会被拒绝，记录以便排查
-            log.warning("以下工程设置未生效: %s", failed)
+            log.warning("以下工程设置未生效: %s", remaining)
 
     @property
     def project(self):
@@ -214,11 +238,13 @@ class ResolveAdapter:
         index: dict[str, object] = {}
 
         def walk(folder) -> None:
-            for item in folder.GetClipList():
+            # A freshly created/reset project's root folder returns None
+            # (not []) from GetClipList()/GetSubFolderList() while empty.
+            for item in folder.GetClipList() or []:
                 path = item.GetClipProperty("File Path")
                 if path:
                     index[path] = item
-            for sub in folder.GetSubFolderList():
+            for sub in folder.GetSubFolderList() or []:
                 walk(sub)
 
         walk(self.project.GetMediaPool().GetRootFolder())

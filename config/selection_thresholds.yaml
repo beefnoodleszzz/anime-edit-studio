@@ -1,0 +1,17 @@
+# Technical hard-gate thresholds (REFACTOR.md §9). Versioned and calibratable
+# without touching code. A shot window failing any of these must never enter
+# the final cut regardless of portrait/action score.
+version: "1.0.0"
+
+technical_gate:
+  minimum_window_sec: 0.30
+  maximum_bad_frame_ratio: 0.10
+  maximum_subtitle_frame_ratio: 0.05
+  minimum_subject_visible_ratio: 0.70
+  minimum_safe_crop_ratio: 0.85
+  maximum_consecutive_unusable_frames: 3
+  maximum_watermark_probability: 0.50
+  maximum_black_clip_ratio: 0.40
+  maximum_white_clip_ratio: 0.40
+  minimum_sharpness_p10: 40.0
+  maximum_compression_score: 0.55

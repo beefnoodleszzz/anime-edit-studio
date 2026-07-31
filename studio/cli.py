@@ -28,11 +28,15 @@ spec_app = typer.Typer(add_completion=False, help="EditSpec 校验与检查")
 resolve_app = typer.Typer(add_completion=False, help="Resolve 构建与渲染")
 data_app = typer.Typer(add_completion=False, help="v2 数据库与 ETL")
 candidates_app = typer.Typer(add_completion=False, help="候选召回、精排与 A/B/C")
+library_app = typer.Typer(add_completion=False, help="素材库增量索引")
+amv_app = typer.Typer(add_completion=False, help="Demo 驱动的 AMV 生成")
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(spec_app, name="spec")
 app.add_typer(resolve_app, name="resolve")
 app.add_typer(data_app, name="data")
 app.add_typer(candidates_app, name="candidates")
+app.add_typer(library_app, name="library")
+app.add_typer(amv_app, name="amv")
 
 
 def out(data, as_json: bool) -> None:
@@ -349,6 +353,112 @@ def candidates_metrics_cmd(
         out(metrics, json) if json else typer.echo(metrics)
     finally:
         conn.close()
+
+
+# ─────────────────────────── library ───────────────────────────
+
+@library_app.command("index")
+def library_index_cmd(
+    materials_dir: Path = typer.Argument(..., exists=True, file_okay=False),
+    json: bool = typer.Option(False, "--json"),
+):
+    """增量索引一个素材目录：ingest → shot 检测 → 分析，全部幂等。"""
+    from studio.workflows.create_amv import index_materials
+
+    asset_ids = index_materials(materials_dir, database=_v2_db())
+    out({"materials_dir": str(materials_dir), "count": len(asset_ids), "asset_ids": asset_ids}, json) if json else (
+        typer.echo(f"{materials_dir}: {len(asset_ids)} 个素材已索引")
+    )
+
+
+# ─────────────────────────── amv ───────────────────────────
+
+def _v2_db() -> Path:
+    from studio.core.database import DEFAULT_V2_DB
+
+    return DEFAULT_V2_DB
+
+
+@amv_app.command("create")
+def amv_create_cmd(
+    project_id: str = typer.Option(..., "--project"),
+    demo: Path = typer.Option(..., "--demo", exists=True, dir_okay=False),
+    materials: Path = typer.Option(..., "--materials", exists=True, file_okay=False),
+    music: Path | None = typer.Option(None, "--music", exists=True, dir_okay=False),
+    focus: str | None = typer.Option(None, "--focus"),
+    aspect: str | None = typer.Option(None, "--aspect", help="例如 9:16；省略则沿用 Demo"),
+    fps: str | None = typer.Option(None, "--fps", help="num/den，例如 24000/1001；省略则沿用 Demo"),
+    launch: bool = typer.Option(False, "--launch", help="Resolve 未运行时自动启动"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """Demo + 素材(+ 音乐) → 索引 → 分析 → 规划 → AMVSpec → Resolve preview → QA。"""
+    from studio.execution.resolve import ResolveAdapter, ResolveUnavailable
+    from studio.workflows.create_amv import build_amv_spec_workflow, render_amv_preview
+
+    fps_pair = None
+    if fps:
+        num, den = fps.split("/")
+        fps_pair = (int(num), int(den))
+
+    result = build_amv_spec_workflow(
+        project_id=project_id, demo_path=demo, materials_dir=materials,
+        music_path=music, focus=focus, aspect=aspect, fps=fps_pair,
+        database=_v2_db(),
+    )
+
+    report_summary: dict = {
+        "project_id": project_id,
+        "output_dir": str(result.output_dir),
+        "amv_spec": str(result.paths()["amv_spec"]),
+        "clips": len(result.spec.clips),
+        "duration_sec": result.spec.duration_sec,
+        "rendered": False,
+    }
+    try:
+        adapter = ResolveAdapter.open(auto_launch=launch)
+        qa_report = render_amv_preview(result, adapter=adapter, database=_v2_db())
+        report_summary["rendered"] = True
+        report_summary["preview"] = str(result.output_dir / "preview.mov")
+        report_summary["qa"] = str(result.output_dir / "qa.json")
+        report_summary["qa_passed"] = qa_report.passed
+    except ResolveUnavailable as exc:
+        report_summary["resolve_error"] = str(exc)
+
+    if json:
+        out(report_summary, True)
+        return
+    typer.echo(f"AMVSpec: {report_summary['amv_spec']} ({report_summary['clips']} clips / {report_summary['duration_sec']:.2f}s)")
+    if report_summary["rendered"]:
+        typer.secho(
+            f"preview {'PASS' if report_summary['qa_passed'] else 'FAIL'}: {report_summary['preview']}",
+            fg="green" if report_summary["qa_passed"] else "red",
+        )
+    else:
+        typer.secho(
+            f"Resolve 真机验收未执行，不能宣称完整完成: {report_summary.get('resolve_error', 'Resolve 不可用')}",
+            fg="yellow",
+        )
+
+
+@amv_app.command("release")
+def amv_release_cmd(
+    project_id: str = typer.Option(..., "--project"),
+    projects_root: Path = typer.Option(Path("projects"), "--projects-root"),
+    json: bool = typer.Option(False, "--json"),
+):
+    """把已通过 QA 硬门禁的 preview.mov 显式发布为 release.mov。"""
+    from studio.workflows.create_amv import release_amv
+
+    output_dir = projects_root / project_id
+    try:
+        release_path = release_amv(output_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.secho(str(exc), fg="red", err=True)
+        raise typer.Exit(2) from exc
+
+    out({"project_id": project_id, "release": str(release_path)}, json) if json else typer.echo(
+        f"released: {release_path}"
+    )
 
 
 # ─────────────────────────── doctor ───────────────────────────

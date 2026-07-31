@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
@@ -493,6 +493,58 @@ def _migration_014(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_015(conn: sqlite3.Connection) -> None:
+    """New Demo-driven AMV chain (REFACTOR.md §14): ReferenceBlueprint/MusicTimeline
+    caches keyed by source hash, plus AMV projects and their run history.
+
+    These tables are additive. The old candidate/preference/growth/review
+    tables above are untouched here; they are dropped only after the new
+    chain is verified end-to-end (REFACTOR.md §0.1, §13).
+    """
+    conn.executescript(
+        """
+        CREATE TABLE reference_blueprints (
+            source_hash TEXT PRIMARY KEY,
+            version TEXT NOT NULL,
+            blueprint_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+        CREATE TABLE music_timelines (
+            source_hash TEXT PRIMARY KEY,
+            version TEXT NOT NULL,
+            timeline_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+        CREATE TABLE amv_projects (
+            id TEXT PRIMARY KEY,
+            demo_path TEXT NOT NULL,
+            materials_dir TEXT NOT NULL,
+            music_path TEXT,
+            focus TEXT,
+            series_scope TEXT,
+            output_dir TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            updated_at TEXT
+        );
+        CREATE TABLE amv_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL REFERENCES amv_projects(id) ON DELETE CASCADE,
+            stage TEXT NOT NULL CHECK(stage IN (
+              'analyze_reference','analyze_music','plan','compile',
+              'render_probe','optimize','render_preview','qa','release'
+            )),
+            status TEXT NOT NULL CHECK(status IN ('running','complete','failed')),
+            amv_spec_hash TEXT,
+            details_json TEXT NOT NULL DEFAULT '{}',
+            error_json TEXT,
+            started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            finished_at TEXT
+        );
+        CREATE INDEX idx_amv_runs_project ON amv_runs(project_id, stage, started_at);
+        """
+    )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -508,6 +560,7 @@ MIGRATIONS = (
     (12, _migration_012),
     (13, _migration_013),
     (14, _migration_014),
+    (15, _migration_015),
 )
 
 

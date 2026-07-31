@@ -67,11 +67,32 @@ def test_window_too_short_fails_gate(tmp_path):
 
 def test_watermark_probability_flags_stable_corner_content():
     class _Sample:
-        def __init__(self, corner_edges):
+        def __init__(self, corner_edges, corner_patches):
             self.corner_edges = corner_edges
+            self.corner_patches = corner_patches
 
-    stable = [_Sample((0.20, 0.20, 0.02, 0.02)) for _ in range(6)]
+    identical_patch = np.full((8, 8), 120.0, dtype=np.float32)
+    zero_patch = np.zeros((8, 8), dtype=np.float32)
+    # A real watermark: same edge density AND pixel-identical patch every frame.
+    stable = [
+        _Sample((0.20, 0.20, 0.02, 0.02), (identical_patch, identical_patch, zero_patch, zero_patch))
+        for _ in range(6)
+    ]
     assert _watermark_probability(stable) > 0.5
 
-    noisy = [_Sample((0.20 + 0.15 * ((-1) ** i), 0.02, 0.02, 0.02)) for i in range(6)]
-    assert _watermark_probability(noisy) == 0.0
+    # Same edge-density statistics, but different pixels each frame (e.g. a
+    # noisy texture) — must NOT be flagged as a watermark.
+    rng = np.random.default_rng(0)
+    different_each_frame = [
+        _Sample(
+            (0.20, 0.20, 0.02, 0.02),
+            (
+                rng.normal(120, 40, (8, 8)).astype(np.float32),
+                rng.normal(120, 40, (8, 8)).astype(np.float32),
+                zero_patch,
+                zero_patch,
+            ),
+        )
+        for _ in range(6)
+    ]
+    assert _watermark_probability(different_each_frame) == 0.0

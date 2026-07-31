@@ -1,16 +1,15 @@
-"""GlobalSequencePlanner (REFACTOR.md §8.5): Beam Search shot selection.
+"""GlobalSequencePlanner (REFACTOR.md §16): Beam Search over ShotWindow candidates.
 
-Fills every TimelineSlot from the asset database using the existing
-retrieval hard-gate engine and ranking engine (studio.editing.retrieval /
-studio.editing.ranking — both already real-machine proven, reused rather
-than reimplemented). The novelty this module adds is *global* optimization:
-Beam Search over the whole slot sequence instead of taking each slot's
-top-ranked candidate independently, so continuity/reuse/novelty are judged
-across the full timeline, not slot-by-slot.
+Selection unit is a ShotWindow — a precise time slice inside a Shot
+(REFACTOR.md §4: "选择单位必须从 Shot 变成 ShotWindow") — not the whole Shot.
+``studio.selection.selector`` generates/scores the per-slot candidate pool;
+this module is the only place that judges the *sequence*: identity/color/
+motion-direction continuity across the beam, and rejecting a window that
+reuses another already-chosen window's source range.
 
 Determinism: the beam is seeded from ``hash(project_id + slot plan)``, and
-ties are broken by shot_id, so identical inputs always produce the identical
-sequence (REFACTOR.md §8.5).
+ties are broken by window_id, so identical inputs always produce the
+identical sequence (REFACTOR.md §16).
 """
 from __future__ import annotations
 
@@ -18,47 +17,107 @@ import hashlib
 import sqlite3
 from dataclasses import dataclass, field
 
-from studio.editing.ranking.engine import CandidateContext, rank_candidates
-from studio.editing.retrieval.engine import RetrievalQuery, retrieve
 from studio.planning.slots import TimelineSlot
+from studio.selection.schemas import MotionDirection, ShotWindow
+from studio.selection.selector import ScoredWindow, candidates_for_slot, shot_pool
 
 BEAM_WIDTH = 6
-CANDIDATES_PER_SLOT = 12
-DURATION_TOLERANCE_SEC = 0.6
+CANDIDATES_PER_SLOT = 30
+SOURCE_OVERLAP_THRESHOLD = 0.5
 
 
 @dataclass(frozen=True)
 class SequenceChoice:
     slot_index: int
-    shot_id: str
-    asset_id: str
-    score: float
+    window_id: str = ""
+    shot_id: str = ""
+    asset_id: str = ""
+    source_in_sec: float = 0.0
+    source_out_sec: float = 0.0
+    anchor_sec: float = 0.0
+    window_kind: str = "generic"
+    score: float = 0.0
+    score_components: dict = field(default_factory=dict)
+    subject_scale: float | None = None
+    subject_center: tuple[float, float] | None = None
+    entry_motion: MotionDirection = "none"
+    exit_motion: MotionDirection = "none"
 
 
 @dataclass
 class _Beam:
     choices: list[SequenceChoice] = field(default_factory=list)
     total_score: float = 0.0
+    selected_window_ids: list[str] = field(default_factory=list)
+    selected_source_ranges: list[tuple[str, float, float]] = field(default_factory=list)
+    selected_shot_ids: list[str] = field(default_factory=list)
+    selected_asset_ids: list[str] = field(default_factory=list)
+    identity_cluster: str | None = None
+    series_scope: str | None = None
+    previous_subject_scale: float | None = None
+    previous_subject_center: tuple[float, float] | None = None
+    previous_color: str | None = None
+    previous_exit_motion: MotionDirection = "none"
+    energy_history: list[float] = field(default_factory=list)
 
     @property
-    def shot_ids(self) -> list[str]:
-        return [c.shot_id for c in self.choices]
-
-    @property
-    def asset_ids(self) -> list[str]:
-        return [c.asset_id for c in self.choices]
+    def window_ids(self) -> list[str]:
+        return self.selected_window_ids
 
 
-def _asset_id_of(conn: sqlite3.Connection, shot_id: str) -> str:
-    row = conn.execute("SELECT asset_id FROM shots WHERE id=?", (shot_id,)).fetchone()
-    return row[0] if row else ""
+def _overlap_ratio(a: tuple[str, float, float], b: tuple[str, float, float]) -> float:
+    asset_a, in_a, out_a = a
+    asset_b, in_b, out_b = b
+    if asset_a != asset_b:
+        return 0.0
+    intersection = max(0.0, min(out_a, out_b) - max(in_a, in_b))
+    shortest = min(out_a - in_a, out_b - in_b)
+    return intersection / shortest if shortest > 0 else 0.0
 
 
-def _repeat_penalty(asset_id: str, recent_asset_ids: list[str]) -> float:
-    window = recent_asset_ids[-3:]
-    if asset_id in window:
-        return 0.6
-    return 0.0
+def _is_duplicate(candidate: ScoredWindow, beam: _Beam) -> bool:
+    if candidate.window.id in beam.selected_window_ids:
+        return True
+    candidate_range = (candidate.window.asset_id, candidate.window.start_sec, candidate.window.end_sec)
+    return any(
+        _overlap_ratio(candidate_range, existing) > SOURCE_OVERLAP_THRESHOLD
+        for existing in beam.selected_source_ranges
+    )
+
+
+def _continuity_bonus(candidate: ScoredWindow, beam: _Beam) -> float:
+    """Reward/penalize how well this candidate follows the beam's most
+    recent choice — replaces the old "same asset in last 3 picks" penalty
+    with the identity/color/scale/position/motion signals REFACTOR.md §16
+    actually asks for."""
+    if not beam.choices:
+        return 0.0
+    window = candidate.window
+    bonus = 0.0
+
+    identity = window.subject.identity_cluster
+    if beam.identity_cluster is not None and identity is not None:
+        bonus += 0.05 if identity == beam.identity_cluster else -0.10
+
+    series_scope = window.subject.series_scope
+    if beam.series_scope is not None and series_scope is not None and series_scope != beam.series_scope:
+        bonus -= 0.20  # cross-work contamination is a stronger signal than identity drift
+
+    if beam.previous_subject_scale is not None and window.subject.subject_scale is not None:
+        bonus -= 0.05 * abs(window.subject.subject_scale - beam.previous_subject_scale)
+
+    # Color continuity is tracked on the beam (previous_color) for future use
+    # once ShotWindow carries a per-window dominant color; it isn't wired
+    # through yet, so it contributes nothing here rather than a fake bonus.
+
+    if beam.previous_exit_motion != "none" and window.editability.entry_motion != "none":
+        bonus += 0.05 if window.editability.entry_motion == beam.previous_exit_motion else -0.05
+
+    recent_asset_ids = beam.selected_asset_ids[-3:]
+    if window.asset_id in recent_asset_ids:
+        bonus -= 0.15  # same-asset repetition is still a real novelty problem
+
+    return bonus
 
 
 def plan_sequence(
@@ -70,74 +129,69 @@ def plan_sequence(
     character: str | None = None,
     beam_width: int = BEAM_WIDTH,
 ) -> list[SequenceChoice]:
-    """Beam-search a globally consistent shot per TimelineSlot.
+    """Beam-search a globally consistent ShotWindow per TimelineSlot.
 
-    Empty result for a slot means no candidate cleared the hard retrieval
-    gates — callers must not silently drop the slot; REFACTOR.md §8.4:
+    Empty result for a slot means no candidate cleared the hard technical
+    gate — callers must not silently drop the slot; REFACTOR.md §8.4:
     "硬门禁失败镜头不能靠软分数救回。"
     """
     conn.row_factory = sqlite3.Row
     beams = [_Beam()]
 
     for slot in slots:
-        query = RetrievalQuery(
-            asset_ids=asset_ids or [],
-            project_id=project_id,
-            character=character,
-            min_duration_sec=max(0.1, slot.duration_sec - DURATION_TOLERANCE_SEC),
-            max_duration_sec=slot.duration_sec + DURATION_TOLERANCE_SEC,
-            subtitle_allowed=False,
-            limit=max(CANDIDATES_PER_SLOT, 100),
+        pool = shot_pool(
+            conn, asset_ids=asset_ids, character=character, duration_sec=slot.duration_sec,
         )
-        pool = retrieve(conn, query)
-        if not pool:
-            # Retry once without the duration window: a hard duration miss
-            # should not silently starve the slot when the pool otherwise
-            # clears every quality/cleanliness gate.
-            query = query.model_copy(update={"min_duration_sec": None, "max_duration_sec": None})
-            pool = retrieve(conn, query)
-        if not pool:
+        candidates = candidates_for_slot(conn, slot, pool, limit=CANDIDATES_PER_SLOT)
+        candidates = [c for c in candidates if c.window.technical.passed]
+        if not candidates:
             for beam in beams:
-                beam.choices.append(
-                    SequenceChoice(slot_index=slot.index, shot_id="", asset_id="", score=0.0)
-                )
+                beam.choices.append(SequenceChoice(slot_index=slot.index))
+                beam.energy_history.append(slot.target_energy)
             continue
 
         next_beams: list[_Beam] = []
         for beam in beams:
-            context = CandidateContext(
-                project_id=project_id,
-                role=f"slot-{slot.index}",
-                target_energy=slot.target_energy,
-                previous_shot_id=beam.shot_ids[-1] if beam.choices else None,
-                selected_shot_ids=beam.shot_ids,
-                prefer_low_motion=slot.hold,
-            )
-            ranked = rank_candidates(conn, pool[:CANDIDATES_PER_SLOT], context, limit=CANDIDATES_PER_SLOT)
-            ranked.sort(key=lambda item: (-item.total, item.shot_id))
-            # A shot already used earlier in this beam is not a candidate
-            # again unless the pool cannot otherwise fill the slot at all.
-            used = set(beam.shot_ids)
-            unused = [item for item in ranked if item.shot_id not in used]
-            selectable = unused if unused else ranked
+            usable = [c for c in candidates if not _is_duplicate(c, beam)]
+            selectable = usable if usable else candidates
             for candidate in selectable[:beam_width]:
-                asset_id = _asset_id_of(conn, candidate.shot_id)
-                score = candidate.total - _repeat_penalty(asset_id, beam.asset_ids)
+                window = candidate.window
+                total_score = candidate.score + _continuity_bonus(candidate, beam)
+                choice = SequenceChoice(
+                    slot_index=slot.index,
+                    window_id=window.id, shot_id=window.shot_id, asset_id=window.asset_id,
+                    source_in_sec=window.start_sec, source_out_sec=window.end_sec,
+                    anchor_sec=window.anchor_sec, window_kind=window.kind,
+                    score=total_score, score_components=candidate.components,
+                    subject_scale=window.subject.subject_scale, subject_center=window.subject.subject_center,
+                    entry_motion=window.editability.entry_motion, exit_motion=window.editability.exit_motion,
+                )
                 extended = _Beam(
-                    choices=[*beam.choices, SequenceChoice(
-                        slot_index=slot.index, shot_id=candidate.shot_id,
-                        asset_id=asset_id, score=score,
-                    )],
-                    total_score=beam.total_score + score,
+                    choices=[*beam.choices, choice],
+                    total_score=beam.total_score + total_score,
+                    selected_window_ids=[*beam.selected_window_ids, window.id],
+                    selected_source_ranges=[
+                        *beam.selected_source_ranges,
+                        (window.asset_id, window.start_sec, window.end_sec),
+                    ],
+                    selected_shot_ids=[*beam.selected_shot_ids, window.shot_id],
+                    selected_asset_ids=[*beam.selected_asset_ids, window.asset_id],
+                    identity_cluster=window.subject.identity_cluster or beam.identity_cluster,
+                    series_scope=window.subject.series_scope or beam.series_scope,
+                    previous_subject_scale=window.subject.subject_scale,
+                    previous_subject_center=window.subject.subject_center,
+                    previous_color=beam.previous_color,
+                    previous_exit_motion=window.editability.exit_motion,
+                    energy_history=[*beam.energy_history, slot.target_energy],
                 )
                 next_beams.append(extended)
         if next_beams:
-            next_beams.sort(key=lambda b: (-b.total_score, b.shot_ids))
+            next_beams.sort(key=lambda b: (-b.total_score, b.selected_window_ids))
             beams = next_beams[:beam_width]
 
     if not beams:
         return []
-    beams.sort(key=lambda b: (-b.total_score, b.shot_ids))
+    beams.sort(key=lambda b: (-b.total_score, b.selected_window_ids))
     return beams[0].choices
 
 

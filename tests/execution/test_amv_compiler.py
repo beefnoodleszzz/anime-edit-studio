@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import cv2
+import numpy as np
+
 from studio.core.database import connect
 from studio.execution.amv_compiler import compile_amv_spec
 from studio.execution.resolve.fusion_program import DIRECTIONAL_BLUR_NAME, comp_name_for
@@ -10,11 +13,27 @@ from studio.spec.amv import Canvas, Timebase
 from studio.spec.music_timeline import MusicTimeline
 from tests.execution.test_fusion_program import _Item
 
+_SIZE = (320, 240)
 
-def _seed_shots(conn, *, count=4, duration=2.0):
+
+def _write_asset_video(path, *, total_duration_sec, fps=12.0):
+    rng = np.random.default_rng(5)
+    frame_count = int(total_duration_sec * fps) + 2
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, _SIZE)
+    for i in range(frame_count):
+        frame = np.clip(rng.normal(130, 20, (_SIZE[1], _SIZE[0], 3)), 0, 255).astype(np.uint8)
+        cv2.circle(frame, (60 + (i * 3) % 200, 120), 26, (200, 180, 90), -1)
+        writer.write(frame)
+    writer.release()
+
+
+def _seed_shots(conn, *, tmp_path, count=4, duration=2.0):
+    video = tmp_path / "a0.mp4"
+    _write_asset_video(video, total_duration_sec=count * duration)
     conn.execute(
         "INSERT INTO assets(id,path,sha256,width,height,fps_num,fps_den,duration_sec) "
-        "VALUES ('a0','/m/a0.mp4','sha0',1920,1080,24000,1001,60.0)"
+        "VALUES ('a0',?,'sha0',320,240,12,1,?)",
+        (str(video), count * duration),
     )
     for i in range(count):
         conn.execute(
@@ -31,7 +50,7 @@ def _seed_shots(conn, *, count=4, duration=2.0):
 
 def test_compile_amv_spec_builds_one_owned_comp_per_clip_with_transitions(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, count=3)
+    _seed_shots(conn, tmp_path=tmp_path, count=3)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5,
                       entry_motion="carry" if i > 0 else "none")

@@ -59,6 +59,15 @@ def _motion_match(target: str, actual: str | None) -> float | None:
     return 1.0 if actual_bucket == target else 0.0
 
 
+def _field(row: Mapping, key: str):
+    """Works for both a plain dict and a sqlite3.Row (which has no .get)."""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return None
+    return value
+
+
 def compute_reference_fit(
     slot: TimelineSlot,
     shot_row: Mapping,
@@ -68,28 +77,28 @@ def compute_reference_fit(
     components: dict[str, float] = {}
 
     components["visual_energy"] = 1.0 - abs(
-        _as_float(shot_row.get("visual_energy"), 0.5) - slot.target_energy
+        _as_float(_field(shot_row, "visual_energy"), 0.5) - slot.target_energy
     )
 
     if slot.target_subject_scale is not None:
         components["subject_scale"] = 1.0 - abs(
-            _as_float(shot_row.get("shot_scale"), slot.target_subject_scale) - slot.target_subject_scale
+            _as_float(_field(shot_row, "shot_scale"), slot.target_subject_scale) - slot.target_subject_scale
         )
     if slot.target_shot_scale is not None:
         components["shot_scale"] = 1.0 - abs(
-            _as_float(shot_row.get("shot_scale"), slot.target_shot_scale) - slot.target_shot_scale
+            _as_float(_field(shot_row, "shot_scale"), slot.target_shot_scale) - slot.target_shot_scale
         )
     if slot.target_brightness is not None:
         components["brightness"] = 1.0 - abs(
-            _as_float(shot_row.get("brightness"), slot.target_brightness) - slot.target_brightness
+            _as_float(_field(shot_row, "brightness"), slot.target_brightness) - slot.target_brightness
         )
     if slot.target_dominant_color is not None:
-        palette = _top_palette_color(shot_row.get("color_palette"))
+        palette = _top_palette_color(_field(shot_row, "color_palette"))
         similarity = _color_similarity(slot.target_dominant_color, palette)
         if similarity is not None:
             components["dominant_color"] = similarity
     if slot.source_motion_preference != "none":
-        match = _motion_match(slot.source_motion_preference, shot_row.get("motion_dir"))
+        match = _motion_match(slot.source_motion_preference, _field(shot_row, "motion_dir"))
         if match is not None:
             components["motion_direction"] = match
     if window is not None and slot.slot_kind in _SLOT_KIND_TO_WINDOW_KINDS:

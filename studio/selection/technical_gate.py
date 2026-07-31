@@ -36,7 +36,8 @@ _BAD_FRAME_CLIPPED = 0.42
 _SUBTITLE_MIN_BOX_WIDTH = 0.20
 _WATERMARK_CORNER_FRACTION = 0.12
 _WATERMARK_EDGE_BAND = (0.05, 0.35)
-_WATERMARK_MAX_VARIANCE = 0.015
+_WATERMARK_PATCH_SIZE = 8
+_WATERMARK_MAX_PIXEL_DRIFT = 2.0  # mean abs diff (0-255) between consecutive frames' corner patch
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class FrameSample:
     subject_confidence: float
     safe_crop: float
     corner_edges: tuple[float, float, float, float]
+    corner_patches: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
     bad: bool
 
 
@@ -61,12 +63,25 @@ class TechnicalGateResult:
     samples: list[FrameSample]
 
 
-def _corner_edge_density(gray: np.ndarray) -> tuple[float, float, float, float]:
+def _corner_regions(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     height, width = gray.shape
     cw, ch = max(1, int(width * _WATERMARK_CORNER_FRACTION)), max(
         1, int(height * _WATERMARK_CORNER_FRACTION)
     )
+    return (
+        gray[:ch, :cw],
+        gray[:ch, width - cw :],
+        gray[height - ch :, :cw],
+        gray[height - ch :, width - cw :],
+    )
+
+
+def _corner_edge_density(gray: np.ndarray) -> tuple[float, float, float, float]:
     edges = cv2.Canny(gray, 60, 160)
+    height, width = gray.shape
+    cw, ch = max(1, int(width * _WATERMARK_CORNER_FRACTION)), max(
+        1, int(height * _WATERMARK_CORNER_FRACTION)
+    )
     corners = (
         edges[:ch, :cw],
         edges[:ch, width - cw :],
@@ -74,6 +89,14 @@ def _corner_edge_density(gray: np.ndarray) -> tuple[float, float, float, float]:
         edges[height - ch :, width - cw :],
     )
     return tuple(float(np.mean(corner) / 255.0) for corner in corners)  # type: ignore[return-value]
+
+
+def _corner_patches(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    size = (_WATERMARK_PATCH_SIZE, _WATERMARK_PATCH_SIZE)
+    return tuple(  # type: ignore[return-value]
+        cv2.resize(region, size, interpolation=cv2.INTER_AREA).astype(np.float32)
+        for region in _corner_regions(gray)
+    )
 
 
 def _frame_sample(frame: np.ndarray, sec: float, target_aspect: float) -> FrameSample:
@@ -107,6 +130,7 @@ def _frame_sample(frame: np.ndarray, sec: float, target_aspect: float) -> FrameS
         subject_confidence=box.confidence,
         safe_crop=safe_crop,
         corner_edges=_corner_edge_density(gray),
+        corner_patches=_corner_patches(gray),
         bad=bad,
     )
 
@@ -130,20 +154,29 @@ def _longest_run(flags: list[bool]) -> int:
 
 
 def _watermark_probability(samples: list[FrameSample]) -> float:
-    """A watermark is a small decal that sits in the same corner, at roughly
-    constant edge density, across the whole window — unlike scene content,
-    which moves. Low variance in a corner's edge density across samples,
-    with a plausible-magnitude edge density, is the signature used here."""
+    """A watermark is a small decal whose *pixels* stay nearly identical
+    frame to frame, in a corner with plausible edge content — unlike scene
+    content (or texture/noise with similar aggregate statistics but
+    different pixels each frame). Pixel-level drift between consecutive
+    frames' corner patches is what actually distinguishes a static overlay
+    from moving or resampled content; edge-density alone cannot (two
+    differently-random textures can share the same density statistics)."""
     if len(samples) < 3:
         return 0.0
-    per_corner = np.array([sample.corner_edges for sample in samples])  # (n, 4)
-    means = per_corner.mean(axis=0)
-    variances = per_corner.var(axis=0)
-    scores = []
+    mean_edge_density = np.array([sample.corner_edges for sample in samples]).mean(axis=0)
     low, high = _WATERMARK_EDGE_BAND
-    for mean, variance in zip(means, variances):
-        if low <= mean <= high and variance <= _WATERMARK_MAX_VARIANCE:
-            scores.append(float(np.clip(1.0 - variance / _WATERMARK_MAX_VARIANCE, 0.0, 1.0)))
+    scores = []
+    for corner_index in range(4):
+        if not (low <= mean_edge_density[corner_index] <= high):
+            scores.append(0.0)
+            continue
+        drifts = [
+            float(np.abs(samples[i].corner_patches[corner_index] - samples[i + 1].corner_patches[corner_index]).mean())
+            for i in range(len(samples) - 1)
+        ]
+        mean_drift = float(np.mean(drifts))
+        if mean_drift <= _WATERMARK_MAX_PIXEL_DRIFT:
+            scores.append(float(np.clip(1.0 - mean_drift / _WATERMARK_MAX_PIXEL_DRIFT, 0.0, 1.0)))
         else:
             scores.append(0.0)
     return float(max(scores))

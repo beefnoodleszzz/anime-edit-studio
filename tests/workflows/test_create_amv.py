@@ -61,7 +61,7 @@ def test_build_amv_spec_workflow_writes_the_exact_output_contract(tmp_path, monk
     _write_audio(music)
     database = tmp_path / "engine.sqlite"
 
-    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database: ["mat0"])
+    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database, profile="full": ["mat0"])
     _seed_shots(database, "mat0", count=8, shot_duration=0.5)
 
     result = module.build_amv_spec_workflow(
@@ -95,7 +95,7 @@ def test_build_amv_spec_workflow_caches_reference_and_music_analysis_by_hash(tmp
     _write_audio(music)
     database = tmp_path / "engine.sqlite"
 
-    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database: ["mat0"])
+    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database, profile="full": ["mat0"])
     _seed_shots(database, "mat0", count=8, shot_duration=0.5)
 
     calls = {"reference": 0, "music": 0}

@@ -20,12 +20,14 @@ headless mode — AGENTS.md P5). Connection env vars are injected by
 aes doctor env                    # Python / Resolve / external tool health
 aes doctor capabilities           # verified / unverified Resolve capability matrix
 aes doctor assets                 # which asset_ids are resolvable right now
+aes doctor vision                 # ShotWindow selection vision backends: running / degraded
 
-aes library index /path/to/materials    # incremental: ingest + shot detect + analyze
+aes library index /path/to/materials [--profile coarse|full]   # incremental: ingest + shot detect + analyze
 
 aes amv create \
   --project my-amv --demo demo.mp4 --materials /path/to/materials \
-  --music track.wav [--focus TEXT] [--aspect 9:16] [--fps 24000/1001] [--launch] [--json]
+  --music track.wav [--focus TEXT] [--aspect 9:16] [--fps 24000/1001] \
+  [--selector-profile fast|balanced|quality] [--launch] [--json]
 
 aes amv release --project my-amv [--json]
 ```

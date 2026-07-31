@@ -22,6 +22,18 @@ ml = [
     "open-clip-torch>=2.24",   # CLIP 语义检索 (ViT-B-32, MPS)
     "wdtagger>=0.16",          # 动漫打标 (Danbooru v3, ONNX)
 ]
+# ShotWindow 选镜阶段的 Python 3.11 兼容轻/中量视觉后端，按需安装：
+# uv pip install -e ".[vision]"（REFACTOR.md §20）
+vision = [
+    "onnxruntime>=1.18",       # 动漫脸检测优先走 ONNX Runtime
+]
+# CoTracker/SAM2/DOVER 等仅用于每槽位前 5-8 名精筛的可选重模型后端；
+# 缺失时自动降级到轻量 fallback，不阻塞 selection 流程（REFACTOR.md §7.3/§7.4）：
+# uv pip install -e ".[vision-heavy]"
+vision-heavy = [
+    "torch>=2.2",
+    "torchvision>=0.17",
+]
 dev = [
     "pytest>=9.0",
     "soundfile>=0.12",

@@ -67,16 +67,24 @@ def _iter_materials(materials_dir: Path):
             yield path
 
 
-def index_materials(materials_dir: Path, *, database: Path) -> list[str]:
+def index_materials(materials_dir: Path, *, database: Path, profile: str = "full") -> list[str]:
     """Ingest/shot-detect every material incrementally; both steps are
     idempotent (content-hash upsert / skip-if-already-detected), so re-running
-    over the same directory never re-analyzes the whole library."""
+    over the same directory never re-analyzes the whole library.
+
+    ``profile="coarse"`` skips the ml-tier analyzers (embeddings/tagger,
+    REFACTOR.md §18) for a fast first pass; ``"full"`` (default) runs them.
+    ShotWindow generation itself always runs at selection time regardless of
+    this profile — it only gates the per-asset embedding/tagger pass.
+    """
+    if profile not in ("coarse", "full"):
+        raise ValueError(f"unknown index profile: {profile!r}")
     asset_ids = []
     for path in _iter_materials(materials_dir):
         info = ingest_asset(path, database=database)
         detect_shots(info["id"], database=database)
         asset_ids.append(info["id"])
-    analyze_assets(asset_id=None, include_models=True)
+    analyze_assets(asset_id=None, include_models=(profile == "full"))
     return asset_ids
 
 
@@ -142,11 +150,25 @@ def build_amv_spec_workflow(
     fps: tuple[int, int] | None = None,
     projects_root: Path = Path("projects"),
     database: Path = DEFAULT_V2_DB,
+    selector_profile: str = "balanced",
 ) -> AMVSpecResult:
+    """``selector_profile`` (REFACTOR.md §18): ``"fast"`` skips the ml-tier
+    per-asset analyzers (embeddings/tagger) for a quicker first pass.
+    ``"balanced"`` (default) and ``"quality"`` both run the full analyzer set
+    and the same ShotWindow selection pipeline today — CoTracker/SAM2/DOVER
+    refinement isn't wired into the selector yet (backends/*.py degrade to
+    their fallbacks regardless of profile), so those two profiles are not
+    currently distinguishable; the option exists so callers don't need to
+    change once that wiring lands."""
+    if selector_profile not in ("fast", "balanced", "quality"):
+        raise ValueError(f"unknown selector profile: {selector_profile!r}")
     output_dir = projects_root / project_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    asset_ids = index_materials(materials_dir, database=database)
+    asset_ids = index_materials(
+        materials_dir, database=database,
+        profile="coarse" if selector_profile == "fast" else "full",
+    )
     conn = connect(database)
     try:
         with conn:

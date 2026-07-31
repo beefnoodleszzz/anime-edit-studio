@@ -18,8 +18,8 @@ def test_migration_creates_amv_tables(tmp_path):
     conn.close()
 
 
-def test_schema_version_is_16():
-    assert SCHEMA_VERSION == 16
+def test_schema_version_is_17():
+    assert SCHEMA_VERSION == 17
 
 
 def test_amv_project_and_run_round_trip(tmp_path):
@@ -38,6 +38,18 @@ def test_amv_project_and_run_round_trip(tmp_path):
     ).fetchone()
     assert row["stage"] == "analyze_reference"
     assert row["status"] == "complete"
+    conn.close()
+
+
+def test_migration_17_adds_shot_windows_and_drops_review_decisions(tmp_path):
+    conn = connect(tmp_path / "engine.v2.sqlite")
+    tables = {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    for name in ("shot_windows", "shot_window_embeddings", "shot_window_tracks"):
+        assert name in tables
+    assert "review_decisions" not in tables
     conn.close()
 
 

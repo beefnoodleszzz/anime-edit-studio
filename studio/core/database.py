@@ -6,7 +6,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
 
@@ -549,6 +549,55 @@ def _migration_016(conn: sqlite3.Connection) -> None:
         conn.execute(f"DROP TABLE IF EXISTS {table}")
 
 
+def _migration_017(conn: sqlite3.Connection) -> None:
+    """ShotWindow selection stage (REFACTOR.md §6/§17): the unit GlobalSequencePlanner
+    chooses is a precise time window inside a Shot, not the whole Shot. Also drops
+    the legacy human-review table: the old Review UI is gone, and the automated
+    selection flow must not depend on it (REFACTOR.md §6)."""
+    conn.executescript(
+        """
+        DROP TABLE IF EXISTS review_decisions;
+
+        CREATE TABLE shot_windows (
+            id TEXT PRIMARY KEY,
+            shot_id TEXT NOT NULL REFERENCES shots(id) ON DELETE CASCADE,
+            asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            start_sec REAL NOT NULL,
+            end_sec REAL NOT NULL,
+            anchor_sec REAL NOT NULL,
+            kind TEXT NOT NULL,
+            technical_pass INTEGER NOT NULL,
+            features_json TEXT NOT NULL,
+            analysis_version TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            UNIQUE(shot_id, start_sec, end_sec, kind, analysis_version)
+        );
+        CREATE INDEX idx_shot_windows_shot
+          ON shot_windows(shot_id, analysis_version);
+        CREATE INDEX idx_shot_windows_kind
+          ON shot_windows(kind, technical_pass);
+
+        CREATE TABLE shot_window_embeddings (
+            window_id TEXT NOT NULL REFERENCES shot_windows(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK(kind IN ('frame','subject','face')),
+            model TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            PRIMARY KEY(window_id, kind, model)
+        );
+
+        CREATE TABLE shot_window_tracks (
+            window_id TEXT NOT NULL REFERENCES shot_windows(id) ON DELETE CASCADE,
+            backend TEXT NOT NULL,
+            version TEXT NOT NULL,
+            points_json TEXT NOT NULL,
+            mean_confidence REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            PRIMARY KEY(window_id, backend, version)
+        );
+        """
+    )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -566,6 +615,7 @@ MIGRATIONS = (
     (14, _migration_014),
     (15, _migration_015),
     (16, _migration_016),
+    (17, _migration_017),
 )
 
 

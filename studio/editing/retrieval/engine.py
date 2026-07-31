@@ -42,12 +42,6 @@ def retrieve(conn: sqlite3.Connection, query: RetrievalQuery) -> list[str]:
         placeholders = ",".join("?" for _ in query.asset_ids)
         where.append(f"s.asset_id IN ({placeholders})")
         params.extend(query.asset_ids)
-    if query.project_id:
-        where.append(
-            "NOT EXISTS (SELECT 1 FROM review_decisions rd "
-            "WHERE rd.project_id=? AND rd.shot_id=s.id AND rd.decision='reject')"
-        )
-        params.append(query.project_id)
     if query.character:
         needle = f"%{query.character.lower()}%"
         where.append(

@@ -194,3 +194,57 @@ class TestRenderedOutput:
         # are exercised for real elsewhere against actual delivery audio.
         picture_checks = [c for c in qa.checks if c.name not in {"loudness", "unexpected_silence"}]
         assert all(c.passed for c in picture_checks), [c for c in picture_checks if not c.passed]
+
+
+class TestSelectionSourceWindows:
+    """REFACTOR.md §22.8: the new ShotWindow selector, not a hand-built
+    SourceRange, drives a real render — verifying the §22.4 regression
+    (source.in_sec must not default to shot.start_sec) against actually
+    indexed footage rather than a synthetic clip."""
+
+    def test_planner_uses_precise_windows_and_renders(self, adapter, conn, asset_ids, music_path, tmp_path):
+        from studio.planning.amv_spec_builder import build_amv_spec
+        from studio.planning.global_sequence_planner import plan_sequence
+        from studio.spec.music_timeline import MusicTimeline
+
+        slots = [
+            TimelineSlot(index=0, start_sec=0.0, duration_sec=CLIP_DURATION, target_energy=0.7),
+            TimelineSlot(
+                index=1, start_sec=CLIP_DURATION, duration_sec=CLIP_DURATION,
+                target_energy=0.7, entry_motion="carry",
+            ),
+        ]
+        choices = plan_sequence(conn, slots, project_id=PROJECT_NAME, asset_ids=asset_ids)
+        if not all(choice.shot_id for choice in choices):
+            pytest.skip("材料库中没有能通过技术门禁的候选窗口")
+
+        music = MusicTimeline(
+            source_hash="acceptance", duration_sec=2 * CLIP_DURATION,
+            selected_tempo=120.0, tempo_confidence=0.8,
+        )
+        spec = build_amv_spec(
+            conn, project_id=PROJECT_NAME, slots=slots, choices=choices,
+            canvas=CANVAS, timebase=TIMEBASE, music=music, music_path=music_path,
+            demo_hash="acceptance", materials_index_hash="acceptance",
+            output_path=tmp_path / "preview.mov",
+        )
+
+        shot_ids = [choice.shot_id for choice in choices if choice.shot_id]
+        placeholders = ",".join("?" for _ in shot_ids)
+        shot_starts = {
+            row["id"]: row["start_sec"]
+            for row in conn.execute(
+                f"SELECT id,start_sec FROM shots WHERE id IN ({placeholders})", shot_ids
+            )
+        }
+        assert any(
+            abs(clip.source.in_sec - shot_starts.get(clip.shot_id, clip.source.in_sec)) > 0.05
+            for clip in spec.clips
+        ), "no clip's source range differs from its shot's own start — the exact §17 regression"
+
+        items = build_amv_timeline(adapter, spec, conn, project_name=PROJECT_NAME, reset=True)
+        result, consistent = render_amv(
+            adapter, spec, items, output_dir=tmp_path / "renders", name="amv-selection-acceptance",
+        )
+        assert consistent, "Fusion graph readback was inconsistent after a real render"
+        assert result.output.is_file()

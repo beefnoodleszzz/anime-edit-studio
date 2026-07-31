@@ -1,35 +1,14 @@
-"""Versioned SQLite schema and v1→v2 data ETL.
-
-The v2 database is independent from ``library/engine.sqlite``.  ETL is
-transactional, idempotent, and proves row/embedding counts before it may be
-accepted as the production v2 database.
-"""
+"""Versioned SQLite schema for the AMV engine's v2 database."""
 from __future__ import annotations
 
-import json
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 REPO = Path(__file__).resolve().parents[2]
-DEFAULT_V1_DB = REPO / "library" / "engine.sqlite"
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
-
-_COPY_TABLES = (
-    "assets",
-    "shots",
-    "review_decisions",
-    "creative_briefs",
-    "preference_models",
-    "project_assets",
-    "growth_experiments",
-    "growth_variants",
-    "shot_outcomes",
-    "source_records",
-)
 
 
 def _migration_001(conn: sqlite3.Connection) -> None:
@@ -545,6 +524,31 @@ def _migration_015(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_016(conn: sqlite3.Connection) -> None:
+    """Drop the old product's tables (REFACTOR.md §14): Candidate A/B/C,
+    Preference, Growth, the old Director/EditSpec pipeline, and Recipe Zoo
+    are gone from the codebase, so their storage goes too."""
+    for table in (
+        "candidate_groups",
+        "preference_pairs",
+        "preference_models",
+        "growth_experiments",
+        "growth_variants",
+        "shot_outcomes",
+        "director_plans",
+        "edit_specs",
+        "edit_spec_diffs",
+        "recipes",
+        "creative_briefs",
+        "reference_videos",
+        "feedback_events",
+        "revision_runs",
+        "project_assets",
+        "llm_calls",
+    ):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -561,6 +565,7 @@ MIGRATIONS = (
     (13, _migration_013),
     (14, _migration_014),
     (15, _migration_015),
+    (16, _migration_016),
 )
 
 
@@ -586,148 +591,8 @@ def connect(path: Path = DEFAULT_V2_DB) -> sqlite3.Connection:
     return conn
 
 
-def _columns(conn: sqlite3.Connection, schema: str, table: str) -> list[str]:
-    return [
-        row[1]
-        for row in conn.execute(f"PRAGMA {schema}.table_info({table})").fetchall()
-    ]
-
-
-def _count(conn: sqlite3.Connection, schema: str, table: str) -> int:
-    return int(conn.execute(f"SELECT count(*) FROM {schema}.{table}").fetchone()[0])
-
-
-@dataclass(frozen=True)
-class ETLReport:
-    source: Path
-    target: Path
-    counts: dict[str, tuple[int, int]]
-    embeddings: tuple[int, int]
-    characters: int
-
-    @property
-    def ok(self) -> bool:
-        return all(a == b for a, b in self.counts.values()) and self.embeddings[0] == self.embeddings[1]
-
-    def to_dict(self) -> dict:
-        return {
-            "source": str(self.source),
-            "target": str(self.target),
-            "ok": self.ok,
-            "counts": {
-                table: {"source": before, "target": after}
-                for table, (before, after) in self.counts.items()
-            },
-            "embeddings": {"source": self.embeddings[0], "target": self.embeddings[1]},
-            "characters": self.characters,
-        }
-
-
-def migrate_v1(
-    source: Path,
-    target: Path,
-    *,
-    aliases_path: Path | None = None,
-) -> ETLReport:
-    """Create and verify a fresh v2 database from the immutable v1 source."""
-    if source.resolve() == target.resolve():
-        raise ValueError("ETL source 与 target 不能相同")
-    if target.exists():
-        raise FileExistsError(f"目标库已存在，拒绝覆盖: {target}")
-    conn = connect(target)
-    conn.execute("ATTACH DATABASE ? AS legacy", (str(source),))
-    try:
-        with conn:
-            # Assets need exact fps rather than the v1 float-only representation.
-            conn.execute(
-                """
-                INSERT INTO assets(id,path,sha256,width,height,fps_num,fps_den,
-                                   duration_sec,codec,proxy_path,created_at)
-                SELECT id,path,sha256,width,height,
-                       CASE
-                         WHEN abs(fps-23.976) < 0.01 THEN 24000
-                         WHEN abs(fps-29.97) < 0.01 THEN 30000
-                         WHEN abs(fps-59.94) < 0.01 THEN 60000
-                         ELSE round(fps)
-                       END,
-                       CASE
-                         WHEN abs(fps-23.976) < 0.01 OR abs(fps-29.97) < 0.01
-                              OR abs(fps-59.94) < 0.01 THEN 1001 ELSE 1
-                       END,
-                       duration,codec,proxy_path,created_at
-                FROM legacy.assets
-                """
-            )
-            # Copy only shared columns; new analysis dimensions remain NULL until Phase 3.
-            for table in _COPY_TABLES[1:]:
-                common = [
-                    col for col in _columns(conn, "main", table)
-                    if col in _columns(conn, "legacy", table)
-                ]
-                names = ",".join(f'"{name}"' for name in common)
-                conn.execute(
-                    f"INSERT INTO main.{table} ({names}) SELECT {names} FROM legacy.{table}"
-                )
-            conn.execute(
-                """
-                INSERT INTO shots_fts(shot_id,character,action,emotion,dialogue,tags)
-                SELECT id,character,action,emotion,dialogue,tags FROM shots
-                """
-            )
-
-            aliases = aliases_path or REPO / "kit" / "aliases.json"
-            character_count = 0
-            if aliases.exists():
-                payload = json.loads(aliases.read_text(encoding="utf-8"))
-                for alias, expansion in payload.items():
-                    if alias.startswith("_"):
-                        continue
-                    canonical = str(expansion).split()[0] if expansion else alias
-                    conn.execute(
-                        """
-                        INSERT INTO characters(id,canonical_name,aliases_json)
-                        VALUES (?,?,?)
-                        ON CONFLICT(id) DO UPDATE SET aliases_json=excluded.aliases_json
-                        """,
-                        (
-                            canonical,
-                            canonical,
-                            json.dumps([alias, expansion], ensure_ascii=False),
-                        ),
-                    )
-                character_count = _count(conn, "main", "characters")
-
-        counts = {
-            table: (_count(conn, "legacy", table), _count(conn, "main", table))
-            for table in _COPY_TABLES
-        }
-        embeddings = (
-            int(conn.execute("SELECT count(embedding) FROM legacy.shots").fetchone()[0]),
-            int(conn.execute("SELECT count(embedding) FROM main.shots").fetchone()[0]),
-        )
-        report = ETLReport(source, target, counts, embeddings, character_count)
-        if not report.ok:
-            raise RuntimeError(f"ETL 验收失败: {report.to_dict()}")
-        return report
-    except Exception:
-        conn.close()
-        target.unlink(missing_ok=True)
-        Path(f"{target}-wal").unlink(missing_ok=True)
-        Path(f"{target}-shm").unlink(missing_ok=True)
-        raise
-    finally:
-        try:
-            conn.execute("DETACH DATABASE legacy")
-        except sqlite3.Error:
-            pass
-        conn.close()
-
-
 __all__ = [
-    "DEFAULT_V1_DB",
     "DEFAULT_V2_DB",
-    "ETLReport",
     "SCHEMA_VERSION",
     "connect",
-    "migrate_v1",
 ]

@@ -18,8 +18,8 @@ def test_migration_creates_amv_tables(tmp_path):
     conn.close()
 
 
-def test_schema_version_is_15():
-    assert SCHEMA_VERSION == 15
+def test_schema_version_is_16():
+    assert SCHEMA_VERSION == 16
 
 
 def test_amv_project_and_run_round_trip(tmp_path):

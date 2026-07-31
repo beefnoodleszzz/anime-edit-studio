@@ -136,6 +136,13 @@ class Clip(_Base):
     asset_id: str
     shot_id: str | None = None
 
+    # REFACTOR.md §17: identifies which ShotWindow this clip came from and
+    # where its anchor sits, without carrying the full scoring/analysis
+    # payload into the execution IR (that stays in the selection DB).
+    window_id: str | None = None
+    window_kind: str | None = None
+    anchor_sec: float | None = None
+
     source: SourceRange
     timeline: TimelinePlacement
 

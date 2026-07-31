@@ -1,4 +1,4 @@
-"""New Demo-driven AMV pipeline schemas (spec v3.0.0).
+"""New Demo-driven AMV pipeline schemas (spec v3.1.0).
 
 This package is the new primary chain described in REFACTOR.md: a Demo
 reference video plus a target music track produce a ``ReferenceBlueprint``
@@ -11,6 +11,6 @@ Resolve renders, at which point the old chain is deleted (REFACTOR.md §0.1).
 """
 from __future__ import annotations
 
-SPEC_VERSION = "3.0.0"
+SPEC_VERSION = "3.1.0"
 
 __all__ = ["SPEC_VERSION"]

@@ -36,6 +36,7 @@ from studio.planning.global_sequence_planner import plan_sequence
 from studio.planning.rhythm_style_mapper import map_rhythm_to_slots
 from studio.qa.optimizer import optimize_test_interval, pick_representative_interval
 from studio.qa.rendered_qa import RenderedQAReport, run_rendered_qa
+from studio.spec import SPEC_VERSION
 from studio.spec.amv import AMVSpec, Canvas, Timebase
 from studio.spec.music_timeline import MusicTimeline
 from studio.spec.reference_blueprint import ReferenceBlueprint
@@ -88,14 +89,23 @@ def _materials_index_hash(asset_ids: list[str]) -> str:
 def _load_or_analyze_reference(conn: sqlite3.Connection, demo_path: Path) -> ReferenceBlueprint:
     source_hash = file_sha256(demo_path)
     row = conn.execute(
-        "SELECT blueprint_json FROM reference_blueprints WHERE source_hash=?", (source_hash,)
+        "SELECT version,blueprint_json FROM reference_blueprints WHERE source_hash=?",
+        (source_hash,),
     ).fetchone()
-    if row is not None:
-        return ReferenceBlueprint.model_validate_json(row[0])
+    # A cached row from an older SPEC_VERSION may be missing fields this
+    # version's Pydantic model requires (extra="forbid" also rejects fields
+    # it no longer has) — re-analyze rather than fail or silently reuse a
+    # stale shape (REFACTOR.md §13).
+    if row is not None and row[0] == SPEC_VERSION:
+        return ReferenceBlueprint.model_validate_json(row[1])
     blueprint = analyze_reference(demo_path)
     with conn:
         conn.execute(
-            "INSERT INTO reference_blueprints(source_hash,version,blueprint_json) VALUES (?,?,?)",
+            """
+            INSERT INTO reference_blueprints(source_hash,version,blueprint_json) VALUES (?,?,?)
+            ON CONFLICT(source_hash) DO UPDATE SET
+              version=excluded.version, blueprint_json=excluded.blueprint_json
+            """,
             (source_hash, blueprint.version, blueprint.model_dump_json()),
         )
     return blueprint
@@ -104,14 +114,18 @@ def _load_or_analyze_reference(conn: sqlite3.Connection, demo_path: Path) -> Ref
 def _load_or_analyze_music(conn: sqlite3.Connection, music_path: Path, *, cache_root: Path) -> MusicTimeline:
     source_hash = file_sha256(music_path)
     row = conn.execute(
-        "SELECT timeline_json FROM music_timelines WHERE source_hash=?", (source_hash,)
+        "SELECT version,timeline_json FROM music_timelines WHERE source_hash=?", (source_hash,)
     ).fetchone()
-    if row is not None:
-        return MusicTimeline.model_validate_json(row[0])
+    if row is not None and row[0] == SPEC_VERSION:
+        return MusicTimeline.model_validate_json(row[1])
     timeline = analyze_music_timeline(music_path, cache_root=cache_root)
     with conn:
         conn.execute(
-            "INSERT INTO music_timelines(source_hash,version,timeline_json) VALUES (?,?,?)",
+            """
+            INSERT INTO music_timelines(source_hash,version,timeline_json) VALUES (?,?,?)
+            ON CONFLICT(source_hash) DO UPDATE SET
+              version=excluded.version, timeline_json=excluded.timeline_json
+            """,
             (source_hash, timeline.version, timeline.model_dump_json()),
         )
     return timeline

@@ -65,6 +65,18 @@ class ShotObservation(_Base):
     global_motion_estimate: Estimate
     motion_confidence: float = Field(..., ge=0.0, le=1.0)
 
+    # REFACTOR.md §13: Exact Replica must carry the Demo shot's actual
+    # screen language into the TimelineSlot, not just its energy/hold/entry.
+    subject_count: int = Field(0, ge=0)
+    face_visibility: float = Field(0.0, ge=0.0, le=1.0)
+    eye_visibility: float = Field(0.0, ge=0.0, le=1.0)
+    portrait_probability: float = Field(0.0, ge=0.0, le=1.0)
+    action_probability: float = Field(0.0, ge=0.0, le=1.0)
+    shot_kind_probabilities: dict[str, float] = Field(default_factory=dict)
+    dominant_color: str | None = None
+    motion_direction: TransitionDirection = "none"
+    stable_ratio: float = Field(0.0, ge=0.0, le=1.0)
+
     @model_validator(mode="after")
     def _range_is_ordered(self):
         if self.end_sec <= self.start_sec:

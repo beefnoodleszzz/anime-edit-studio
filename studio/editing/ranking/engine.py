@@ -207,10 +207,16 @@ def rank_candidates(
             semantic += 0.25 if context.action.lower() in (
                 (row["action"] or "") + "," + (row["tags"] or "")
             ).lower() else -0.25
+        # Callers (GlobalSequencePlanner) populate reference_fit_by_shot from
+        # studio.selection.reference_fit.compute_reference_fit for every
+        # candidate before ranking; a shot missing here means the caller
+        # genuinely had nothing to compare (REFACTOR.md §15 removed the old
+        # always-0.5 placeholder, it did not add a new hardcoded one).
+        reference_fit = context.reference_fit_by_shot.get(shot_id)
         components = {
             "sequence_fit": _bounded(0.6 * sequence_fit + 0.4 * semantic),
             "music_fit": _bounded(context.music_fit_by_shot.get(shot_id, sequence_fit)),
-            "reference_fit": _bounded(context.reference_fit_by_shot.get(shot_id, 0.5)),
+            "reference_fit": _bounded(reference_fit) if reference_fit is not None else 0.5,
             "continuity": _continuity(row, previous),
             "novelty": _novelty(row, selected),
             "preference": _bounded(context.preference_by_shot.get(shot_id, 0.5)),

@@ -21,11 +21,15 @@ import hashlib
 import random
 from typing import Literal
 
-from studio.planning.slots import EntryMotion, TimelineSlot
+from studio.planning.slots import EntryMotion, SlotKind, TimelineSlot
 from studio.spec.music_timeline import MusicTimeline
-from studio.spec.reference_blueprint import ReferenceBlueprint
+from studio.spec.reference_blueprint import ReferenceBlueprint, ShotObservation
 
 MappingMode = Literal["exact_replica", "style_transfer"]
+
+_SLOT_KIND_FROM_SHOT_KIND: dict[str, SlotKind] = {
+    "portrait": "portrait", "action": "action", "hold": "hold",
+}
 
 _ACCENT_PRIORITY = {
     "section_boundary": 5,
@@ -57,6 +61,32 @@ def _entry_motion_distribution(blueprint: ReferenceBlueprint) -> list[EntryMotio
     return [kind for kind, weight in weights.items() for _ in range(max(1, round(weight / total * 20)))]
 
 
+def _slot_kind_for(shot: ShotObservation) -> SlotKind:
+    if not shot.shot_kind_probabilities:
+        return "generic"
+    dominant = max(shot.shot_kind_probabilities, key=shot.shot_kind_probabilities.get)
+    return _SLOT_KIND_FROM_SHOT_KIND.get(dominant, "generic")
+
+
+def _screen_language_fields(shot: ShotObservation) -> dict:
+    """Fields REFACTOR.md §13 requires a slot to carry from its Demo shot,
+    factored out since both mapping modes populate them from a shot."""
+    return dict(
+        slot_kind=_slot_kind_for(shot),
+        slot_kind_probabilities=dict(shot.shot_kind_probabilities),
+        target_subject_scale=shot.subject_scale,
+        target_subject_center=shot.subject_center,
+        target_brightness=shot.brightness,
+        target_dominant_color=shot.dominant_color,
+        preferred_subject_count=shot.subject_count or None,
+        entry_direction=shot.motion_direction,
+        exit_direction=shot.motion_direction,
+        source_motion_preference=shot.motion_direction,
+        hero_frame_required=shot.action_probability >= 0.6,
+        reference_shot_index=shot.index,
+    )
+
+
 def _exact_replica(blueprint: ReferenceBlueprint) -> list[TimelineSlot]:
     relation_by_cut_sec = {c.sec: c.relation for c in blueprint.cuts}
     slots = []
@@ -71,6 +101,7 @@ def _exact_replica(blueprint: ReferenceBlueprint) -> list[TimelineSlot]:
                 target_energy=shot.visual_energy,
                 hold=shot.global_motion_estimate.value < 0.4,
                 entry_motion=entry_motion,
+                **_screen_language_fields(shot),
             )
         )
     return slots
@@ -114,6 +145,7 @@ def _style_transfer(blueprint: ReferenceBlueprint, music: MusicTimeline) -> list
         relative_position = index / max(1, len(boundary_secs) - 2)
         energy_index = min(len(energies) - 1, int(relative_position * len(energies)))
         kind_for_start = next((kind for sec, kind in boundaries if sec == start), None)
+        reference_shot = blueprint.shots[energy_index] if blueprint.shots else None
         slots.append(
             TimelineSlot(
                 index=len(slots),
@@ -124,6 +156,7 @@ def _style_transfer(blueprint: ReferenceBlueprint, music: MusicTimeline) -> list
                 entry_motion=rng.choice(motions) if index > 0 else "none",
                 music_event_sec=start if kind_for_start else None,
                 music_event_kind=kind_for_start,
+                **(_screen_language_fields(reference_shot) if reference_shot else {}),
             )
         )
     return slots

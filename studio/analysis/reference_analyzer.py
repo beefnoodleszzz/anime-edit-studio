@@ -16,7 +16,9 @@ import numpy as np
 
 from studio.analysis.cut_detection import CutCandidate, detect_cuts
 from studio.analysis.global_motion import estimate_global_motion
+from studio.asset_intelligence.visual.analyzer import VisualAnalyzer
 from studio.core.hashing import file_sha256
+from studio.selection.backends.anime_face import create_anime_face_backend
 from studio.spec.music_timeline import MusicTimeline
 from studio.spec.reference_blueprint import (
     CutObservation,
@@ -26,6 +28,7 @@ from studio.spec.reference_blueprint import (
     ShotObservation,
     StyleSummary,
     TechnicalProfile,
+    TransitionDirection,
     TransitionPairObservation,
 )
 
@@ -52,13 +55,47 @@ def _gray_at(capture: cv2.VideoCapture, frame_index: int) -> np.ndarray | None:
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 
+def _bgr_at(capture: cv2.VideoCapture, frame_index: int) -> np.ndarray | None:
+    capture.set(cv2.CAP_PROP_POS_FRAMES, max(0, frame_index))
+    ok, image = capture.read()
+    return image if ok else None
+
+
 def _sharpness(gray: np.ndarray) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
+_DIRECTION_ANGLES: list[tuple[float, TransitionDirection]] = [
+    (0.0, "right"), (45.0, "down-right"), (90.0, "down"), (135.0, "down-left"),
+    (180.0, "left"), (225.0, "up-left"), (270.0, "up"), (315.0, "up-right"),
+]
+
+
+def _direction_bucket(tx: float, ty: float, *, min_magnitude: float = 2.0) -> TransitionDirection:
+    """Bucket a measured global-motion translation into the same 9-direction
+    set TransitionPair/TimelineSlot use, rather than a fabricated fine angle."""
+    if np.hypot(tx, ty) < min_magnitude:
+        return "none"
+    # Screen-space y grows downward; angle measured clockwise from +x.
+    angle = np.degrees(np.arctan2(ty, tx)) % 360.0
+    return min(_DIRECTION_ANGLES, key=lambda item: min(abs(angle - item[0]), 360 - abs(angle - item[0])))[1]
+
+
+def _shot_kind_probabilities(
+    portrait_probability: float, action_probability: float, stable_ratio: float,
+) -> dict[str, float]:
+    raw = {"portrait": portrait_probability, "action": action_probability, "hold": stable_ratio}
+    total = sum(raw.values())
+    if total <= 1e-6:
+        return {"generic": 1.0}
+    return {key: value / total for key, value in raw.items()}
+
+
 def _shot_observations(
     capture: cv2.VideoCapture, fps: float, boundaries_sec: list[float], duration_sec: float,
+    face_backend=None,
 ) -> list[ShotObservation]:
+    face_backend = face_backend or create_anime_face_backend()
     edges = [0.0, *boundaries_sec, duration_sec]
     shots: list[ShotObservation] = []
     for index, (start, end) in enumerate(zip(edges, edges[1:])):
@@ -73,6 +110,26 @@ def _shot_observations(
             gray_next = gray_mid
         motion = estimate_global_motion(gray_mid, gray_next)
         translation = float(np.hypot(motion.tx, motion.ty))
+
+        # Screen-language fields (REFACTOR.md §13): all derived from signals
+        # already measured for this shot (or one extra face pass on the same
+        # mid-frame), never fabricated. A single mid-frame face/color read is
+        # a coarse per-shot summary, not a gating decision.
+        color_mid = _bgr_at(capture, mid_frame)
+        faces = face_backend.detect(color_mid) if color_mid is not None else []
+        best_face = max(faces, key=lambda face: face.confidence, default=None)
+        subject_count = 1 if best_face is not None else 0
+        face_visibility = best_face.confidence if best_face is not None else 0.0
+        eye_visibility = best_face.eyes_visible_ratio if best_face is not None else 0.0
+        portrait_probability = (
+            best_face.frontal_probability * best_face.confidence if best_face is not None else 0.0
+        )
+        stable_ratio = float(np.clip(1.0 - translation / 40.0, 0.0, 1.0))
+        action_probability = float(np.clip(motion.confidence * translation / 30.0, 0.0, 1.0))
+        dominant_color = (
+            VisualAnalyzer._palette(color_mid)[0] if color_mid is not None else None
+        )
+
         shots.append(
             ShotObservation(
                 index=index,
@@ -95,6 +152,17 @@ def _shot_observations(
                     evidence=[motion.method, f"inlier_ratio={motion.inlier_ratio:.2f}"],
                 ),
                 motion_confidence=motion.confidence,
+                subject_count=subject_count,
+                face_visibility=face_visibility,
+                eye_visibility=eye_visibility,
+                portrait_probability=portrait_probability,
+                action_probability=action_probability,
+                shot_kind_probabilities=_shot_kind_probabilities(
+                    portrait_probability, action_probability, stable_ratio
+                ),
+                dominant_color=dominant_color,
+                motion_direction=_direction_bucket(motion.tx, motion.ty),
+                stable_ratio=stable_ratio,
             )
         )
     return shots

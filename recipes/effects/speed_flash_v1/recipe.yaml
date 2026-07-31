@@ -1,8 +1,0 @@
-id: speed_flash_v1
-version: 1.0.0
-kind: effect
-engine: resolve_fusion
-capability: fusion_recipe
-parameters:
-  length: {type: float, min: 0.0, max: 0.4, default: 0.16}
-  angle: {type: float, min: -180.0, max: 180.0, default: 0.0}

@@ -1,6 +1,0 @@
-id: signature_teal_orange_v1
-version: 1.0.0
-kind: color
-engine: resolve_colorgroup
-capability: color_recipe
-parameters: {}

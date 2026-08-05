@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from studio.planning.motion_planner import (
+    ANTICIPATION_SEC,
     build_clip_motion,
     build_transition_pair,
     direction_vector_for,
@@ -82,6 +83,31 @@ def test_faster_effective_pan_gets_more_shutter_angle_than_a_slower_one():
     fast_motion = build_clip_motion(fast_slot, CANVAS, direction=direction_vector_for("left"))
     slow_motion = build_clip_motion(slow_slot, CANVAS, direction=direction_vector_for("left"))
     assert fast_motion.native_motion_blur_keyframes[0].shutter_angle > slow_motion.native_motion_blur_keyframes[0].shutter_angle
+
+
+def test_transition_pairs_directional_blur_has_a_zero_baseline_at_anticipation_start():
+    # Regression: the outgoing side's blur_keyframes used to only define the
+    # cut-time peak and the post-cut decay, with nothing marking where the
+    # anticipation window actually *starts*. The Fusion compiler had to
+    # paper over that by anchoring a zero point at the clip's absolute
+    # frame 0 — correct for a clip barely longer than its anticipation
+    # window, but for a clip much longer than that window it let the blur
+    # visibly ramp in from the clip's very first frame instead of only
+    # within the real anticipation window (confirmed on a real render: a
+    # ~0.9s clip whose anticipation window was ~0.2s showed heavy smear
+    # starting at 0.3s, long before the cut). The zero point now comes
+    # from the actual anticipation start time.
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7,
+        outgoing_duration_sec=1.5, incoming_duration_sec=1.5,
+    )
+    assert len(pair.blur_keyframes) == 3
+    anticipation_start = pair.blur_keyframes[0]
+    assert anticipation_start.strength == 0.0
+    assert anticipation_start.sec == pytest.approx(2.0 - ANTICIPATION_SEC)
+    assert pair.blur_keyframes[1].sec == pytest.approx(2.0)
+    assert pair.blur_keyframes[1].strength > 0.0
 
 
 def test_direction_vector_for_rejects_a_relation_label_not_a_direction():

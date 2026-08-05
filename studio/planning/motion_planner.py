@@ -227,8 +227,21 @@ def build_transition_pair(
     ]
 
     blur_strength = min(1.0, 0.3 + confidence * 0.5) if relation != "none" else 0.0
+    blur_angle = math.degrees(math.atan2(dy, dx)) if (dx or dy) else 0.0
+    # A zero-strength point at the anticipation window's own start, not
+    # just the cut and the release: without it, the outgoing clip's blur
+    # curve only ever defines the peak — Fusion's compiled spline has
+    # nothing before that peak to interpolate from, so it either holds
+    # the peak constant across the whole clip (found reading back a real
+    # render's connected spline) or, once the compiler papers over that by
+    # anchoring zero at the clip's absolute frame 0, ramps in slowly from
+    # the clip's start instead of sharply within the real anticipation
+    # window. anticipation_sec is already capped to a fraction of the
+    # outgoing clip's own duration, so outgoing_start_sec always falls
+    # inside that clip.
     blur_keyframes = [
-        DirectionalBlurKeyframe(sec=cut_sec, angle=math.degrees(math.atan2(dy, dx)) if (dx or dy) else 0.0, strength=blur_strength),
+        DirectionalBlurKeyframe(sec=outgoing_start_sec, angle=0.0, strength=0.0),
+        DirectionalBlurKeyframe(sec=cut_sec, angle=blur_angle, strength=blur_strength),
         DirectionalBlurKeyframe(sec=cut_sec + release_budget, angle=0.0, strength=0.0),
     ]
 

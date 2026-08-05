@@ -234,7 +234,10 @@ def test_transition_pair_adds_directional_blur_and_drives_both_curves():
     assert directional.inputs["__connect_Input"] is motion_tool
     assert comp.media_out.inputs["__connect_Input"] is comp.tool_named(POST_COLOR_NAME)
     length_spline = comp.spline_named("DirectionalBlurLength")
-    assert set(length_spline.keyframes) == {0.0, round(0.33 * TIMEBASE.fps, 6)}
+    # BezierSpline keyframe *positions* only keep 4 decimal places on real
+    # Resolve (values are unaffected) — _create_scalar_spline rounds to
+    # that precision itself so callers don't have to remember it.
+    assert set(length_spline.keyframes) == {0.0, round(0.33 * TIMEBASE.fps, 4)}
 
 
 def test_flash_effect_kind_drives_a_gain_spike_on_the_existing_post_color_tool():

@@ -46,6 +46,21 @@ def test_moving_slot_ends_at_a_safe_scale_covering_the_translation():
     assert motion.native_motion_blur_keyframes
 
 
+def test_short_clip_gets_a_damped_push_not_the_full_designed_magnitude():
+    # Regression: a fixed-magnitude push covered in a much shorter clip than
+    # it was designed for reads as unnaturally fast whip-speed motion blur —
+    # found running a real fast-cut AMV where almost every clip was shorter
+    # than the reference duration. A short clip's end keyframe should sit
+    # closer to center than a clip at/above the reference duration.
+    short_slot = TimelineSlot(index=0, start_sec=0, duration_sec=0.15, target_energy=0.8, entry_motion="carry")
+    long_slot = TimelineSlot(index=1, start_sec=0, duration_sec=1.2, target_energy=0.8, entry_motion="carry")
+    short_motion = build_clip_motion(short_slot, CANVAS, direction=direction_vector_for("left"))
+    long_motion = build_clip_motion(long_slot, CANVAS, direction=direction_vector_for("left"))
+    short_dx = abs(short_motion.transform_keyframes[-1].center_x - 0.5)
+    long_dx = abs(long_motion.transform_keyframes[-1].center_x - 0.5)
+    assert short_dx < long_dx
+
+
 def test_direction_vector_for_rejects_a_relation_label_not_a_direction():
     # "carry"/"reverse"/"reset" are relation labels, not screen directions —
     # feeding one in here must fail loudly, not silently resolve to (0, 0).
@@ -126,6 +141,27 @@ def test_no_profile_means_no_effect_kind():
         relation="carry", direction="left", canvas=CANVAS, confidence=0.7,
     )
     assert pair.effect_kind == "none"
+
+
+def test_transition_windows_are_capped_by_short_clip_durations():
+    # Regression: a fast-cut sequence (Demo shots averaging well under a
+    # second) used to spend almost the whole clip inside the anticipation/
+    # release ramp on both sides of every cut — anticipation_sec/
+    # release_sec must shrink to fit a short clip's own duration rather
+    # than always running at the profile/default's full length.
+    profile = TransitionProfile(
+        anticipation_sec=0.5, release_sec=0.5, translation_unit=0.2,
+        overshoot=0.05, confidence=0.9, attack_fraction=0.5,
+    )
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7, profile=profile,
+        outgoing_duration_sec=0.2, incoming_duration_sec=0.2,
+    )
+    anticipation_sec = 2.0 - pair.outgoing_keyframes[0].sec
+    release_sec = pair.incoming_keyframes[-1].sec - 2.0
+    assert anticipation_sec <= 0.2 * 0.35 + 1e-6
+    assert release_sec <= 0.2 * 0.35 + 1e-6
 
 
 def test_unusable_profile_falls_back_to_a_flat_hard_cut():

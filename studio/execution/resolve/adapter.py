@@ -568,15 +568,30 @@ class ResolveAdapter:
 
     @staticmethod
     def _create_scalar_spline(comp, name: str, values: dict[float, float]):
+        """实测坑（两层）：
+
+        1. BezierSpline 的关键帧**位置**（不是数值）在 Resolve 内部只保留 4 位
+           小数——提交 17.167347 回读得到的是 17.1673，不是原值。调用方若用
+           6 位小数算帧号（本仓库多处用 ``round(sec * fps, 6)``），必须先按
+           Resolve 实际精度取整，而不是要求每个调用方各自记得。
+        2. 就算提交前已经按 4 位小数取整，回读值仍可能带浮点噪声（提交
+           0.3001，回读 0.30010000000000003）——大概率是 Resolve 内部按
+           frame/fps 之类的比例重新算了一遍。按 ``set`` 做精确浮点比较必然
+           偶发不一致，所以回读值也要按同样精度取整再比较。
+
+        数值本身（KeyFrame 的 ``{1: value}``）不受影响，只有位置需要取整。
+        """
+        rounded = {round(float(frame), 4): float(value) for frame, value in values.items()}
         spline = comp.BezierSpline()
         if not spline:
             raise ResolveOperationError(f"{name}: BezierSpline 创建失败")
         spline.SetAttrs({"TOOLS_Name": name})
         spline.SetKeyFrames(
-            {float(frame): {1: float(value)} for frame, value in values.items()}
+            {frame: {1: value} for frame, value in rounded.items()}
         )
         actual = spline.GetKeyFrames() or {}
-        if set(actual) != set(values):
+        actual_frames = {round(float(frame), 4) for frame in actual}
+        if actual_frames != set(rounded):
             raise ResolveOperationError(f"{name}: BezierSpline 关键帧回读不一致")
         return spline
 

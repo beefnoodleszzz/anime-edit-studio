@@ -40,6 +40,20 @@ TRANSLATION_UNIT = 0.10
 ANTICIPATION_SEC = 8 / 24
 RELEASE_SEC = 8 / 24
 
+# A push/transition sized for a ~0.6s hold reads as unnatural whip-speed
+# motion blur when the same magnitude gets crammed into a much shorter
+# clip (found running a real fast-cut AMV: most clips averaged ~0.65s but
+# anticipation+release windows averaged ~0.6s combined, leaving almost no
+# clip ever showing a readable, un-blurred frame). Both the base per-clip
+# push and the transition windows scale down for clips shorter than this
+# reference instead of always running at full designed magnitude/duration.
+REFERENCE_DURATION_SEC = 0.6
+MAX_TRANSITION_FRACTION = 0.35
+
+
+def _duration_damped(value: float, duration_sec: float) -> float:
+    return value * min(1.0, duration_sec / REFERENCE_DURATION_SEC)
+
 
 def required_safe_scale(
     dx_frac: float, dy_frac: float, canvas: Canvas, *, rotation_deg: float = 0.0,
@@ -73,9 +87,10 @@ def build_clip_motion(slot: TimelineSlot, canvas: Canvas, *, direction: tuple[fl
         return Motion(transform_keyframes=keyframes)
 
     dx, dy = direction
-    target_scale = required_safe_scale(dx * TRANSLATION_UNIT, dy * TRANSLATION_UNIT, canvas)
-    end_x = 0.5 - dx * TRANSLATION_UNIT * 0.5
-    end_y = 0.5 - dy * TRANSLATION_UNIT * 0.5
+    translation_unit = _duration_damped(TRANSLATION_UNIT, slot.duration_sec)
+    target_scale = required_safe_scale(dx * translation_unit, dy * translation_unit, canvas)
+    end_x = 0.5 - dx * translation_unit * 0.5
+    end_y = 0.5 - dy * translation_unit * 0.5
     keyframes = [
         TransformKeyframe(sec=0.0, center_x=0.5, center_y=0.5, scale=1.0 + BASE_PUSH_SCALE * 0.2),
         TransformKeyframe(
@@ -101,6 +116,8 @@ def build_transition_pair(
     canvas: Canvas,
     confidence: float,
     profile: TransitionProfile | None = None,
+    outgoing_duration_sec: float | None = None,
+    incoming_duration_sec: float | None = None,
 ) -> TransitionPair:
     """Generate outgoing deceleration and incoming pickup from one shared
     decision. ``relation`` decides the qualitative shape (carry continues
@@ -117,7 +134,15 @@ def build_transition_pair(
     placed at the Demo's own measured attack timing rather than always the
     midpoint. An unusable (low-confidence) profile falls back to a plain
     hard cut — no direction, no overshoot — rather than inventing a
-    transition shape from noise."""
+    transition shape from noise.
+
+    ``outgoing_duration_sec``/``incoming_duration_sec`` (the actual clip
+    each side of the cut occupies on the timeline) cap the anticipation/
+    release windows and damp the translation magnitude for short clips:
+    without this, a fast-cut sequence (Demo shots averaging well under a
+    second) spends almost its entire runtime inside the transition ramp on
+    both sides of every cut, so the viewer never sees a settled, readable
+    frame — found running a real fast-cut AMV, not a hypothetical."""
     if profile is not None and not profile.usable:
         relation, direction = "reset", "none"
     effect_kind = profile.effect_kind if profile is not None and profile.usable else "none"
@@ -126,6 +151,15 @@ def build_transition_pair(
     release_budget = profile.release_sec if profile is not None else RELEASE_SEC
     translation_unit = profile.translation_unit if profile is not None else TRANSLATION_UNIT
     attack_fraction = profile.attack_fraction if profile is not None else 0.5
+
+    if outgoing_duration_sec is not None:
+        anticipation_budget = min(anticipation_budget, outgoing_duration_sec * MAX_TRANSITION_FRACTION)
+    if incoming_duration_sec is not None:
+        release_budget = min(release_budget, incoming_duration_sec * MAX_TRANSITION_FRACTION)
+    shortest_side = min(
+        d for d in (outgoing_duration_sec, incoming_duration_sec) if d is not None
+    ) if (outgoing_duration_sec is not None or incoming_duration_sec is not None) else REFERENCE_DURATION_SEC
+    translation_unit = _duration_damped(translation_unit, shortest_side)
 
     dx, dy = direction_vector_for(direction if relation != "reset" else "none")
     output_direction = "none" if relation in ("reset", "none") else direction

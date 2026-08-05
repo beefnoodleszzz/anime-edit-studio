@@ -87,9 +87,36 @@ def _screen_language_fields(shot: ShotObservation) -> dict:
     )
 
 
+MIN_SLOT_DURATION_SEC = 0.08
+
+
+def _merge_short_slots(slots: list[TimelineSlot], *, min_duration: float) -> list[TimelineSlot]:
+    """Absorb any slot shorter than ``min_duration`` into the previous one.
+
+    Both mapping modes can produce a sub-frame-scale slot: exact-replica
+    from a cut-detection artifact "shot" a fraction of a frame long,
+    style-transfer from two selected music accents landing almost on top
+    of each other. Either way no candidate clip can back a slot that short
+    — Resolve's own Fusion comp placement needs at least a frame of runway
+    (real-machine finding: ``AddFusionComp`` fails outright on one) — so it
+    is merged rather than emitted as its own unplaceable slot. The first
+    slot has nowhere to merge backward into and is left as-is; in practice
+    a demo/music track does not open on a sub-frame sliver."""
+    merged: list[TimelineSlot] = []
+    for slot in slots:
+        if slot.duration_sec < min_duration and merged:
+            previous = merged[-1]
+            merged[-1] = previous.model_copy(
+                update={"duration_sec": previous.duration_sec + slot.duration_sec}
+            )
+            continue
+        merged.append(slot)
+    return merged
+
+
 def _exact_replica(blueprint: ReferenceBlueprint) -> list[TimelineSlot]:
     relation_by_cut_sec = {c.sec: c.relation for c in blueprint.cuts}
-    slots = []
+    slots: list[TimelineSlot] = []
     for shot in blueprint.shots:
         relation = relation_by_cut_sec.get(shot.start_sec, "none")
         entry_motion: EntryMotion = relation if relation in ("carry", "reverse", "reset") else "none"
@@ -167,9 +194,8 @@ def map_rhythm_to_slots(
 ) -> list[TimelineSlot]:
     """Produce TimelineSlots. ``mode`` is auto-detected from source hashes if omitted."""
     resolved_mode = mode or choose_mode(blueprint, music)
-    if resolved_mode == "exact_replica":
-        return _exact_replica(blueprint)
-    return _style_transfer(blueprint, music)
+    slots = _exact_replica(blueprint) if resolved_mode == "exact_replica" else _style_transfer(blueprint, music)
+    return _merge_short_slots(slots, min_duration=MIN_SLOT_DURATION_SEC)
 
 
 __all__ = ["MappingMode", "choose_mode", "map_rhythm_to_slots"]

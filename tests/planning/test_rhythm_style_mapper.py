@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from studio.planning.rhythm_style_mapper import choose_mode, map_rhythm_to_slots
+import pytest
+
+from studio.planning.rhythm_style_mapper import MIN_SLOT_DURATION_SEC, _merge_short_slots, choose_mode, map_rhythm_to_slots
+from studio.planning.slots import TimelineSlot
 from studio.spec.music_timeline import Accent, MusicTimeline, Section
 from studio.spec.reference_blueprint import (
     CutObservation,
@@ -67,6 +70,51 @@ def test_exact_replica_mode_is_chosen_when_music_matches_demo_audio():
     assert [s.start_sec for s in slots] == [0.0, 2.0]
     assert [s.duration_sec for s in slots] == [2.0, 2.0]
     assert slots[1].entry_motion == "carry"
+
+
+def test_exact_replica_merges_sub_frame_shots_into_the_previous_slot():
+    # Regression: cut-detection artifacts near a real cut can produce a
+    # "shot" a fraction of a frame long (observed on a real Demo). No
+    # candidate clip can back a slot that short, and Resolve's own Fusion
+    # comp placement needs at least a frame of runway, so it must be
+    # absorbed rather than emitted as its own unplaceable slot.
+    blueprint = _blueprint(music_ref="abc")
+    tiny_shot = ShotObservation(
+        index=1, start_sec=2.0, end_sec=2.02, duration_sec=0.02,
+        visual_energy=0.5, brightness=0.5,
+        native_motion_estimate=Estimate(value=0.1, confidence=0.5, evidence=[]),
+        global_motion_estimate=Estimate(value=0.1, confidence=0.5, evidence=[]),
+        motion_confidence=0.5,
+    )
+    real_second_shot = blueprint.shots[1].model_copy(update={"index": 2, "start_sec": 2.02})
+    blueprint = blueprint.model_copy(
+        update={"shots": [blueprint.shots[0], tiny_shot, real_second_shot]}
+    )
+    music = _music("abc")
+
+    slots = map_rhythm_to_slots(blueprint, music)
+
+    assert len(slots) == 2
+    assert slots[0].duration_sec == 2.02  # 2.0 (first shot) + 0.02 (absorbed sliver)
+    assert slots[1].start_sec == 2.02
+
+
+def test_merge_short_slots_absorbs_any_sub_threshold_slot_from_either_mode():
+    # style_transfer builds slots from selected music-accent boundaries, and
+    # two accents landing almost on top of each other produces the same
+    # unplaceable-sliver problem exact_replica has from cut-detection
+    # artifacts — _merge_short_slots is the single point both modes route
+    # through (map_rhythm_to_slots), so it must not care which mode
+    # produced the sliver.
+    slots = [
+        TimelineSlot(index=0, start_sec=0.0, duration_sec=1.0, target_energy=0.5),
+        TimelineSlot(index=1, start_sec=1.0, duration_sec=0.01, target_energy=0.5),
+        TimelineSlot(index=2, start_sec=1.01, duration_sec=1.0, target_energy=0.5),
+    ]
+    merged = _merge_short_slots(slots, min_duration=MIN_SLOT_DURATION_SEC)
+    assert len(merged) == 2
+    assert merged[0].duration_sec == pytest.approx(1.01)
+    assert merged[1].duration_sec == pytest.approx(1.0)
 
 
 def test_style_transfer_mode_uses_target_music_event_times_not_demo_times():

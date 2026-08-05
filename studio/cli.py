@@ -66,6 +66,14 @@ def amv_create_cmd(
     from studio.execution.resolve import ResolveAdapter, ResolveUnavailable
     from studio.workflows.create_amv import build_amv_spec_workflow, render_amv_preview
 
+    # Resolve's own process CWD isn't this script's CWD, so a relative path
+    # here (e.g. --music refs/audio/foo.wav from the repo root) resolves
+    # fine for typer's --exists check but fails inside Resolve's own
+    # ImportMedia call. Absolute-ify anything that ends up embedded in the
+    # AMVSpec and handed to Resolve.
+    demo = demo.resolve()
+    music = music.resolve() if music else None
+
     fps_pair = None
     if fps:
         num, den = fps.split("/")

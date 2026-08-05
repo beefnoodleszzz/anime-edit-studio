@@ -94,12 +94,14 @@ def build_amv_spec(
     cursor_sec = 0.0
     previous_clip_id: str | None = None
     previous_choice: SequenceChoice | None = None
+    previous_slot: TimelineSlot | None = None
 
     for slot, choice in zip(slots, choices):
         if not choice.shot_id:
             cursor_sec += slot.duration_sec
             previous_clip_id = None
             previous_choice = None
+            previous_slot = None
             continue
         _validate_source_within_shot(conn, choice)
         clip_id = f"c{slot.index}"
@@ -132,10 +134,13 @@ def build_amv_spec(
                     canvas=canvas,
                     confidence=0.6,
                     profile=transition_profiles.get(slot.entry_motion),
+                    outgoing_duration_sec=previous_slot.duration_sec,
+                    incoming_duration_sec=slot.duration_sec,
                 )
             )
         previous_clip_id = clip_id
         previous_choice = choice
+        previous_slot = slot
         cursor_sec += slot.duration_sec
 
     return AMVSpec(

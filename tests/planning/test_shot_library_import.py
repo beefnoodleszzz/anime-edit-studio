@@ -76,6 +76,41 @@ def test_resolve_shot_ids_raises_when_neither_source_nor_archive_exists(tmp_path
         resolve_shot_ids(["shot-1"], catalog)
 
 
+def test_resolve_shot_ids_falls_back_to_archive_path_relative_to_media_root(tmp_path):
+    # shots.archive_path is stored relative to the shot-library's own
+    # media/ root (e.g. "archive/<id>/<shot>.mkv"), matching the real
+    # layout: <root>/data/catalog.sqlite + <root>/media/archive/... — not
+    # absolute like assets.path. A prior bug resolved it against the
+    # current working directory instead and silently fell through to
+    # FileNotFoundError even when the archive file genuinely existed.
+    root = tmp_path / "anime-shot-library"
+    data_dir = root / "data"
+    data_dir.mkdir(parents=True)
+    catalog = data_dir / "catalog.sqlite"
+    _make_catalog(catalog, source_exists=False)
+
+    archive_dir = root / "media" / "archive" / "grp1"
+    archive_dir.mkdir(parents=True)
+    (archive_dir / "shot-1.mkv").write_bytes(b"fake archive bytes")
+
+    conn = sqlite3.connect(catalog)
+    conn.execute(
+        "UPDATE shots SET archive_path=?, archive_checksum=? WHERE id='shot-1'",
+        ("archive/grp1/shot-1.mkv", "deadbeef"),
+    )
+    conn.commit()
+    conn.close()
+
+    manifest = resolve_shot_ids(["shot-1"], catalog)
+
+    assert len(manifest) == 1
+    entry = manifest[0]
+    assert entry.media_path == archive_dir / "shot-1.mkv"
+    assert entry.start_sec == 0.0
+    assert entry.end_sec == pytest.approx(2.5)
+    assert entry.sha256 == "deadbeef"
+
+
 def test_import_shot_manifest_round_trips_into_studio_db(tmp_path):
     catalog = tmp_path / "catalog.sqlite"
     _make_catalog(catalog, source_exists=True)

@@ -79,11 +79,35 @@ def _direction_similarity(a: MotionDirection, b: MotionDirection) -> float:
     return max(0.0, min(1.0, (cosine + 1.0) / 2.0))
 
 
-@lru_cache(maxsize=512)
-def _estimate_edge_motion(media: str, start_sec: float, end_sec: float) -> tuple[MotionDirection, MotionDirection]:
-    """Sample a frame pair near each edge of the window and bucket the
-    measured camera-like motion into a direction, so the beam can reward
-    matching entry/exit motion across a cut without any learned backend."""
+_MOTION_ESTIMATE_MAX_WIDTH = 480
+
+
+def _downscaled_gray(frame) -> "cv2.typing.MatLike":
+    """Motion estimation only needs to resolve a coarse 9-way direction, not
+    exact pixel displacement — downscaling before the optical-flow/ECC pass
+    is a large, safe speedup (ECC in particular scales with pixel count and
+    can take seconds per call at full HD)."""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape
+    if width <= _MOTION_ESTIMATE_MAX_WIDTH:
+        return gray
+    scale = _MOTION_ESTIMATE_MAX_WIDTH / width
+    return cv2.resize(gray, (_MOTION_ESTIMATE_MAX_WIDTH, max(1, round(height * scale))), interpolation=cv2.INTER_AREA)
+
+
+@lru_cache(maxsize=2048)
+def _estimate_edge_motion(media: str, shot_start_sec: float, shot_end_sec: float) -> tuple[MotionDirection, MotionDirection]:
+    """Sample a frame pair near each edge of the *shot itself* (its own
+    catalog start/end, not whatever window a particular slot happens to
+    trim it to) and bucket the measured camera-like motion into a
+    direction, so the beam can reward matching entry/exit motion across a
+    cut without any learned backend.
+
+    Keying the cache on the shot's own fixed boundaries — rather than the
+    per-slot trimmed window — is deliberate: a shot's overall pan direction
+    is a property of the shot, not of which slot is asking, and caching on
+    the trim window meant this recomputed via real video decode for every
+    (shot, slot) pair instead of once per shot."""
     capture = cv2.VideoCapture(media)
     try:
         fps = capture.get(cv2.CAP_PROP_FPS) or 24.0
@@ -97,16 +121,16 @@ def _estimate_edge_motion(media: str, start_sec: float, end_sec: float) -> tuple
             ok2, frame2 = capture.read()
             if not (ok1 and ok2):
                 return "none"
-            gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-            gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+            gray1 = _downscaled_gray(frame1)
+            gray2 = _downscaled_gray(frame2)
             estimate = estimate_global_motion(gray1, gray2)
             if estimate.confidence < 0.3:
                 return "none"
             return _direction_bucket(estimate.tx, estimate.ty)
 
         gap_sec = gap / fps
-        entry = _direction_at(start_sec)
-        exit_ = _direction_at(max(start_sec, end_sec - gap_sec))
+        entry = _direction_at(shot_start_sec)
+        exit_ = _direction_at(max(shot_start_sec, shot_end_sec - gap_sec))
         return entry, exit_
     except cv2.error:
         return "none", "none"
@@ -209,13 +233,12 @@ def candidates_for_slot(
         media = _media_path(row)
         if media is None:
             continue
-        trimmed = _trim_to_duration(
-            float(row["start_sec"]), float(row["end_sec"]), slot.duration_sec
-        )
+        shot_start, shot_end = float(row["start_sec"]), float(row["end_sec"])
+        trimmed = _trim_to_duration(shot_start, shot_end, slot.duration_sec)
         if trimmed is None:
             continue
         start_sec, end_sec = trimmed
-        entry_motion, exit_motion = _estimate_edge_motion(str(media), start_sec, end_sec)
+        entry_motion, exit_motion = _estimate_edge_motion(str(media), shot_start, shot_end)
         window = ShotWindow(
             id=f"{row['id']}:trim:{start_sec:.3f}-{end_sec:.3f}",
             shot_id=row["id"], asset_id=row["asset_id"],

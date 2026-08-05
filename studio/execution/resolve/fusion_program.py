@@ -55,6 +55,23 @@ def _local_frame(sec: float, clip_in_sec: float, fps: float) -> float:
     return round((sec - clip_in_sec) * fps, 6)
 
 
+def _last_valid_frame(clip: Clip, fps: float) -> float:
+    return max(0.0, round(clip.timeline.duration_sec * fps) - 1)
+
+
+def _clamp_frame(frame: float, last_valid_frame: float) -> float:
+    """A transition's anticipation/release window is sized from the Demo's
+    own measured timing, not from this clip's duration — on a short clip
+    (the Demo has ~0.10s-class shots) that window can extend past this
+    clip's own start/end. Fusion's comp-local timeline starts at frame 0
+    and its end frame is exclusive (AGENTS.md P8), so an out-of-range
+    keyframe here is silently dropped by SetKeyFrames rather than erroring,
+    which then fails the read-back check. Clamp onto the clip's own valid
+    range instead of letting a transition keyframe bleed into a
+    neighbour's territory."""
+    return max(0.0, min(frame, last_valid_frame))
+
+
 def _ensure_owned_comp(item, comp_name: str):
     """Create-or-rebuild only the comp this compiler owns; never delete a foreign one."""
     existing_names = item.GetFusionCompNameList() or []
@@ -93,23 +110,24 @@ def _merge_transform_curve(
     center_x: dict[float, float] = {}
     center_y: dict[float, float] = {}
     size: dict[float, float] = {}
+    last_valid_frame = _last_valid_frame(clip, fps)
 
     for kf in clip.motion.transform_keyframes:
-        frame = round(kf.sec * fps, 6)
+        frame = _clamp_frame(round(kf.sec * fps, 6), last_valid_frame)
         center_x[frame] = kf.center_x
         center_y[frame] = kf.center_y
         size[frame] = kf.scale
 
     if incoming is not None:
         for kf in incoming.incoming_keyframes:
-            frame = _local_frame(kf.sec, clip_in_sec, fps)
+            frame = _clamp_frame(_local_frame(kf.sec, clip_in_sec, fps), last_valid_frame)
             center_x[frame] = kf.center_x
             center_y[frame] = kf.center_y
             size[frame] = kf.scale
 
     if outgoing is not None:
         for kf in outgoing.outgoing_keyframes:
-            frame = _local_frame(kf.sec, clip_in_sec, fps)
+            frame = _clamp_frame(_local_frame(kf.sec, clip_in_sec, fps), last_valid_frame)
             center_x[frame] = kf.center_x
             center_y[frame] = kf.center_y
             size[frame] = kf.scale
@@ -126,13 +144,15 @@ def _merge_blur_curve(
     incoming: TransitionPair | None, outgoing: TransitionPair | None,
 ) -> dict[float, float]:
     strength: dict[float, float] = {}
+    last_valid_frame = _last_valid_frame(clip, fps)
     for kf in clip.motion.native_motion_blur_keyframes:
-        strength[round(kf.sec * fps, 6)] = kf.shutter_angle
+        frame = _clamp_frame(round(kf.sec * fps, 6), last_valid_frame)
+        strength[frame] = kf.shutter_angle
     for pair in (incoming, outgoing):
         if pair is None:
             continue
         for kf in pair.blur_keyframes:
-            frame = _local_frame(kf.sec, clip_in_sec, fps)
+            frame = _clamp_frame(_local_frame(kf.sec, clip_in_sec, fps), last_valid_frame)
             strength[frame] = max(strength.get(frame, 0.0), kf.strength * 180.0)
     return dict(sorted(strength.items()))
 
@@ -157,8 +177,7 @@ def _merge_flash_curve(
         # and keep the baseline point strictly before it so a very short
         # clip still yields a real (if abrupt) spike rather than one
         # collapsed keyframe.
-        duration_frames = round(clip.timeline.duration_sec * fps)
-        last_valid_frame = max(0.0, duration_frames - 1)
+        last_valid_frame = _last_valid_frame(clip, fps)
         cut_frame = min(_local_frame(outgoing.cut_sec, clip_in_sec, fps), last_valid_frame)
         before_frame = max(0.0, min(_local_frame(outgoing.cut_sec - 0.02, clip_in_sec, fps), cut_frame - 1))
         gain[before_frame] = 1.0
@@ -167,8 +186,7 @@ def _merge_flash_curve(
         # Same end-exclusive boundary issue as the outgoing side, mirrored:
         # a short incoming clip (the Demo has ~0.10s-class shots) can put
         # cut_sec + FLASH_DECAY_SEC past this clip's own last valid frame.
-        duration_frames = round(clip.timeline.duration_sec * fps)
-        last_valid_frame = max(0.0, duration_frames - 1)
+        last_valid_frame = _last_valid_frame(clip, fps)
         cut_frame = min(_local_frame(incoming.cut_sec, clip_in_sec, fps), last_valid_frame)
         after_frame = min(_local_frame(incoming.cut_sec + FLASH_DECAY_SEC, clip_in_sec, fps), last_valid_frame)
         if after_frame <= cut_frame:

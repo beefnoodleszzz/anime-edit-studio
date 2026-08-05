@@ -85,14 +85,20 @@ def resolve_shot_ids(shot_ids: list[str], catalog_db: Path | None = None) -> lis
                 ).fetchall()
             ]
             source_path = Path(row["asset_path"]) if row["asset_path"] else None
+            # ``shots.archive_path`` is stored relative to the shot-library's
+            # own media/ root (e.g. "archive/<id>/<shot>.mkv"), not absolute
+            # like assets.path — resolve it against catalog.sqlite's known
+            # location (data/catalog.sqlite -> ../media/) before checking it.
+            archive_candidate = (
+                (db.parent.parent / "media" / row["archive_path"]) if row["archive_path"] else None
+            )
             if source_path is not None and source_path.is_file():
                 media_path, start_sec, end_sec = source_path, row["start_sec"], row["end_sec"]
                 width, height, fps = row["asset_width"], row["asset_height"], row["asset_fps"]
                 asset_duration_sec = row["asset_duration_sec"]
                 sha256 = row["asset_sha256"]
-            elif row["archive_path"] and Path(row["archive_path"]).is_file():
-                archive = Path(row["archive_path"])
-                media_path = archive
+            elif archive_candidate is not None and archive_candidate.is_file():
+                media_path = archive_candidate
                 start_sec, end_sec = 0.0, row["end_sec"] - row["start_sec"]
                 width, height, fps = row["asset_width"], row["asset_height"], row["asset_fps"]
                 asset_duration_sec = end_sec

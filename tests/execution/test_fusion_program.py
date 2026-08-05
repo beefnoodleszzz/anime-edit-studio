@@ -240,6 +240,78 @@ def test_transition_pair_adds_directional_blur_and_drives_both_curves():
     assert set(length_spline.keyframes) == {0.0, round(0.33 * TIMEBASE.fps, 4)}
 
 
+def test_directional_blur_length_is_a_small_fraction_of_image_width_not_the_raw_strength():
+    # Regression: DirectionalBlur.Length is a fraction of image width, not a
+    # 0-1 "how strong" dial. Feeding a blur_keyframe's strength (up to 0.6)
+    # straight into Length produced a blur streak 60% of the frame wide on
+    # nearly every cut — found by summing every transition's blur window
+    # against a real render's total duration (~40% of runtime) after ruling
+    # out native motion blur as the visible cause.
+    item = _Item()
+    clip = _clip(clip_id="c1", in_sec=2.0, duration=2.0)
+    pair = TransitionPair(
+        id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="left", safe_scale=1.15, confidence=0.8,
+        blur_keyframes=[
+            DirectionalBlurKeyframe(sec=2.0, angle=0.0, strength=0.6),
+            DirectionalBlurKeyframe(sec=2.33, angle=0.0, strength=0.0),
+        ],
+    )
+    program = build_fusion_clip_program(
+        item, clip, canvas=CANVAS, timebase=TIMEBASE, incoming_pair=pair,
+    )
+    length_spline = program.comp.spline_named("DirectionalBlurLength")
+    peak_length = max(v[1] for v in length_spline.keyframes.values())
+    assert peak_length < 0.2
+
+
+def test_transition_blur_keyframes_dont_erase_the_clips_own_baseline_shutter():
+    # Regression: a transition's blur_keyframes (spike + decay near the cut)
+    # land at the same frame as the clip's own start/end shutter keyframe
+    # and overwrite it there, leaving nothing to anchor the middle of a
+    # long clip — Fusion then Bezier-interpolates the shutter angle across
+    # the entire remaining gap instead of holding the clip's real baseline.
+    # Found by reading back a real render's connected ShutterAngle spline
+    # tool: only the transition's spike/decay points had survived, and the
+    # angle ramped smoothly across nearly the whole clip between them.
+    item = _Item()
+    duration = 3.0
+    clip = _clip(
+        clip_id="c1", in_sec=2.0, duration=duration,
+        motion=Motion(
+            transform_keyframes=[
+                TransformKeyframe(sec=0.0, center_x=0.5, center_y=0.5, scale=1.0),
+                TransformKeyframe(sec=duration, center_x=0.5, center_y=0.5, scale=1.1),
+            ],
+            native_motion_blur_keyframes=[
+                MotionBlurKeyframe(sec=0.0, shutter_angle=50.0),
+                MotionBlurKeyframe(sec=duration, shutter_angle=50.0),
+            ],
+        ),
+    )
+    pair = TransitionPair(
+        id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="left", safe_scale=1.15, confidence=0.8,
+        blur_keyframes=[
+            DirectionalBlurKeyframe(sec=2.0, angle=0.0, strength=0.6),
+            DirectionalBlurKeyframe(sec=2.33, angle=0.0, strength=0.0),
+        ],
+    )
+    program = build_fusion_clip_program(
+        item, clip, canvas=CANVAS, timebase=TIMEBASE, incoming_pair=pair,
+    )
+    comp = program.comp
+    shutter_spline = comp.spline_named("MotionShutterAngle")
+    frames = sorted(shutter_spline.keyframes)
+    decay_frame = next(f for f in frames if shutter_spline.keyframes[f][1] == pytest.approx(0.0))
+    next_frame = min(f for f in frames if f > decay_frame)
+    # The gap right after the transition's decay must stay local to the
+    # transition (a held baseline point within a couple of frames), not
+    # span most of the clip's remaining duration.
+    assert next_frame - decay_frame <= 2
+    assert shutter_spline.keyframes[next_frame][1] == pytest.approx(50.0)
+
+
 def test_flash_effect_kind_drives_a_gain_spike_on_the_existing_post_color_tool():
     item = _Item()
     clip = _clip(clip_id="c1", in_sec=2.0, duration=2.0)

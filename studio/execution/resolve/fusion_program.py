@@ -39,6 +39,19 @@ POST_COLOR_NAME = "PostColor"
 FLASH_GAIN_PEAK = 1.6
 FLASH_DECAY_SEC = 0.15
 
+# DirectionalBlur.Length is a fraction of image width, not a 0-1 "how
+# strong" dial — feeding a TransitionPair blur_keyframe's ``strength``
+# (0.0-0.6, meant as a qualitative intensity) straight into Length meant a
+# 0.6 strength produced a blur streak 60% of the frame wide. With 18-19
+# transitions across a ~20s fast-cut edit, that put roughly 40% of total
+# runtime under a full-frame diagonal smear — found by summing every
+# transition's anticipation+release window against the render's total
+# duration after a real render's un-transitioned frames turned out to
+# already be pixel-identical to the un-fixed baseline (see
+# _merge_blur_curve), redirecting the investigation from motion blur to
+# this scale mismatch. Scaled down to a tasteful whip-streak range.
+DIRECTIONAL_BLUR_LENGTH_SCALE = 0.08
+
 
 def comp_name_for(clip_id: str) -> str:
     return f"aes:clip:{clip_id}"
@@ -145,6 +158,9 @@ def _merge_blur_curve(
 ) -> dict[float, float]:
     strength: dict[float, float] = {}
     last_valid_frame = _last_valid_frame(clip, fps)
+    baseline = max(
+        (kf.shutter_angle for kf in clip.motion.native_motion_blur_keyframes), default=0.0,
+    )
     for kf in clip.motion.native_motion_blur_keyframes:
         frame = _clamp_frame(round(kf.sec * fps, 6), last_valid_frame)
         strength[frame] = kf.shutter_angle
@@ -154,6 +170,31 @@ def _merge_blur_curve(
         for kf in pair.blur_keyframes:
             frame = _clamp_frame(_local_frame(kf.sec, clip_in_sec, fps), last_valid_frame)
             strength[frame] = max(strength.get(frame, 0.0), kf.strength * 180.0)
+
+    # A transition's spike+decay only defines two points right at the
+    # clip's own edge — and those frames usually collide with (and
+    # overwrite, above) the clip's own start/end baseline keyframe. With
+    # nothing left to anchor the middle of the clip, Fusion's Bezier
+    # interpolation freely ramps across the entire remaining gap to
+    # whatever the *next* defined point is (often the far edge, all the
+    # way across the clip) instead of holding the clip's real baseline —
+    # found by reading back a real render's connected ShutterAngle spline
+    # tool and discovering exactly this: only 3 points survived (incoming
+    # spike, incoming decay, outgoing spike), so the "baseline" shutter
+    # this function computed above never actually reached the spline.
+    # Re-pin the baseline just inside each transition's own edge so its
+    # ramp stays local instead of spanning the clip.
+    if incoming is not None and incoming.blur_keyframes:
+        decay_frame = _clamp_frame(
+            _local_frame(incoming.blur_keyframes[-1].sec, clip_in_sec, fps), last_valid_frame,
+        )
+        strength[min(decay_frame + 1, last_valid_frame)] = baseline
+    if outgoing is not None and outgoing.blur_keyframes:
+        rise_frame = _clamp_frame(
+            _local_frame(outgoing.blur_keyframes[0].sec, clip_in_sec, fps), last_valid_frame,
+        )
+        strength[max(rise_frame - 1, 0.0)] = baseline
+
     return dict(sorted(strength.items()))
 
 
@@ -279,7 +320,7 @@ def build_fusion_clip_program(
                 continue
             for kf in keyframes:
                 frame = _local_frame(kf.sec, clip.timeline.in_sec, fps)
-                length_curve[frame] = kf.strength
+                length_curve[frame] = kf.strength * DIRECTIONAL_BLUR_LENGTH_SCALE
                 angle_curve[frame] = kf.angle
         if length_curve:
             ResolveAdapter._connect_scalar_spline(comp, directional.Length, "DirectionalBlurLength", length_curve)

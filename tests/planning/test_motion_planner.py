@@ -61,6 +61,29 @@ def test_short_clip_gets_a_damped_push_not_the_full_designed_magnitude():
     assert short_dx < long_dx
 
 
+def test_clip_motion_blur_is_constant_not_an_artificial_ramp():
+    # Regression: shutter angle used to escalate 0.3x -> 1x across a clip's
+    # own duration even though the transform curve is one constant-velocity
+    # linear move — found via dense per-frame sharpness measurement on a
+    # real render, where a clip's readability decayed ~60x from its
+    # sharpest to its final frame despite nothing speeding up. Blur must be
+    # driven by the transform's actual velocity, not an independent ramp.
+    slot = TimelineSlot(
+        index=0, start_sec=0, duration_sec=2.9, target_energy=0.8, hold=False, entry_motion="carry",
+    )
+    motion = build_clip_motion(slot, CANVAS, direction=direction_vector_for("left"))
+    shutter_values = {kf.shutter_angle for kf in motion.native_motion_blur_keyframes}
+    assert len(shutter_values) == 1
+
+
+def test_faster_effective_pan_gets_more_shutter_angle_than_a_slower_one():
+    fast_slot = TimelineSlot(index=0, start_sec=0, duration_sec=0.15, target_energy=0.8, entry_motion="carry")
+    slow_slot = TimelineSlot(index=1, start_sec=0, duration_sec=2.9, target_energy=0.8, entry_motion="carry")
+    fast_motion = build_clip_motion(fast_slot, CANVAS, direction=direction_vector_for("left"))
+    slow_motion = build_clip_motion(slow_slot, CANVAS, direction=direction_vector_for("left"))
+    assert fast_motion.native_motion_blur_keyframes[0].shutter_angle > slow_motion.native_motion_blur_keyframes[0].shutter_angle
+
+
 def test_direction_vector_for_rejects_a_relation_label_not_a_direction():
     # "carry"/"reverse"/"reset" are relation labels, not screen directions —
     # feeding one in here must fail loudly, not silently resolve to (0, 0).

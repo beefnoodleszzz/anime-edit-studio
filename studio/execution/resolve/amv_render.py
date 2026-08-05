@@ -48,6 +48,16 @@ def build_amv_timeline(
         reset=reset,
     )
     adapter.ensure_timeline(timeline_name, reset=reset)
+    # Source footage (typically 23.976fps BD rips) conforms onto this
+    # project's timeline fps (see Timebase above) whenever they differ.
+    # Resolve's un-set default for that conform is frameBlend-like ghosting
+    # (measured: interpolated frames land at ~50% of a real frame's
+    # sharpness) — found by isolating a single un-transitioned clip and
+    # discovering its motion-blur keyframes had zero effect on the actual
+    # rendered pixels, then tracing the real cause to unset conform
+    # interpolation. "nearest" duplicates frames instead of blending them,
+    # which is also how the source anime already reads at its native fps.
+    adapter.set_retime_interpolation("nearest")
 
     media_by_clip = {clip.id: _asset_media(conn, clip.asset_id) for clip in spec.clips}
     adapter.import_media(sorted({media for media, _fps in media_by_clip.values()}))

@@ -50,6 +50,17 @@ RELEASE_SEC = 8 / 24
 REFERENCE_DURATION_SEC = 0.6
 MAX_TRANSITION_FRACTION = 0.35
 
+# Motion blur must reflect the transform curve's actual (constant) velocity,
+# not an independent time-based ramp: build_clip_motion's transform is a
+# single linear interpolation from start to end, i.e. one constant speed for
+# the whole clip. A shutter angle that escalates 0.3x -> 1x across the same
+# duration has no mechanical basis and was found (via dense per-frame
+# sharpness measurement on a real render) to decay a clip's readability by
+# ~60x from its sharpest to its final frame even though nothing sped up.
+BASE_SHUTTER_ANGLE = 20.0
+SHUTTER_VELOCITY_GAIN = 800.0
+MAX_SHUTTER_ANGLE = 140.0
+
 
 def _duration_damped(value: float, duration_sec: float) -> float:
     return value * min(1.0, duration_sec / REFERENCE_DURATION_SEC)
@@ -97,9 +108,10 @@ def build_clip_motion(slot: TimelineSlot, canvas: Canvas, *, direction: tuple[fl
             sec=slot.duration_sec, center_x=end_x, center_y=end_y, scale=target_scale,
         ),
     ]
-    shutter = min(180.0, 40.0 + slot.target_energy * 140.0)
+    velocity = translation_unit / max(slot.duration_sec, 1e-6)
+    shutter = min(MAX_SHUTTER_ANGLE, BASE_SHUTTER_ANGLE + velocity * SHUTTER_VELOCITY_GAIN)
     blur = [
-        MotionBlurKeyframe(sec=0.0, shutter_angle=shutter * 0.3),
+        MotionBlurKeyframe(sec=0.0, shutter_angle=shutter),
         MotionBlurKeyframe(sec=slot.duration_sec, shutter_angle=shutter),
     ]
     return Motion(transform_keyframes=keyframes, native_motion_blur_keyframes=blur)

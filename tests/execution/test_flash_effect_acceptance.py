@@ -135,3 +135,52 @@ def test_flash_effect_produces_a_real_gain_spike_on_both_sides_of_the_cut(
         # Read the actual connected input at the cut frame — not just that a
         # spline with the right numbers exists somewhere unconnected.
         assert color.GetInput("Gain", float(peak_frame)) == pytest.approx(keyframes[peak_frame][1])
+
+
+def test_flash_effect_on_a_very_short_incoming_clip_stays_in_range(adapter, conn, asset_id, tmp_path):
+    # Regression: the Demo has ~0.10s-class shots; FLASH_DECAY_SEC (0.15s)
+    # used to be able to land past a clip that short's own last frame,
+    # which a second codex review caught as the same class of bug as the
+    # already-fixed outgoing-side boundary issue.
+    short_duration = 0.1
+    slot0 = TimelineSlot(index=0, start_sec=0.0, duration_sec=CLIP_DURATION, target_energy=0.7, hold=True)
+    slot1 = TimelineSlot(index=1, start_sec=CLIP_DURATION, duration_sec=short_duration, target_energy=0.7, hold=True)
+    clip0 = Clip(
+        id="c0", asset_id=asset_id,
+        source=SourceRange(in_sec=0.0, out_sec=CLIP_DURATION),
+        timeline=TimelinePlacement(in_sec=0.0, duration_sec=CLIP_DURATION),
+        motion=build_clip_motion(slot0, CANVAS),
+    )
+    clip1 = Clip(
+        id="c1", asset_id=asset_id,
+        source=SourceRange(in_sec=2.0, out_sec=2.0 + short_duration),
+        timeline=TimelinePlacement(in_sec=CLIP_DURATION, duration_sec=short_duration),
+        motion=build_clip_motion(slot1, CANVAS),
+    )
+    pair = TransitionPair(
+        id="t0", cut_sec=CLIP_DURATION, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="none", safe_scale=1.0, confidence=0.8, effect_kind="flash",
+    )
+    music_path = tmp_path / "music.wav"
+    sf.write(music_path, np.zeros(48000 * 4, np.float32), 48000)
+    spec = AMVSpec(
+        id=PROJECT_NAME,
+        input_hashes=InputHashes(demo="flash-acceptance-short", materials_index="flash-acceptance-short"),
+        timebase=TIMEBASE, canvas=CANVAS, duration_sec=CLIP_DURATION + short_duration,
+        music=MusicRef(path=str(music_path), timeline_hash="flash-acceptance-short"),
+        clips=[clip0, clip1], transition_pairs=[pair],
+        render=RenderSettings(output_path=str(tmp_path / "preview.mov")),
+    )
+
+    items = build_amv_timeline(adapter, spec, conn, project_name=PROJECT_NAME, reset=True)
+    programs = compile_amv_spec(adapter, spec, items)  # must not raise on keyframe read-back
+
+    comp = programs["c1"].comp
+    tools = comp.GetToolList(False) or {}
+    gain_spline = next(
+        t for t in tools.values() if (t.GetAttrs() or {}).get("TOOLS_Name") == "PostColorGain"
+    )
+    keyframes = gain_spline.GetKeyFrames() or {}
+    duration_frames = round(short_duration * TIMEBASE.fps)
+    last_valid_frame = max(0.0, duration_frames - 1)
+    assert all(frame <= last_valid_frame for frame in keyframes)

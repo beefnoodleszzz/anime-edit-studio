@@ -164,8 +164,15 @@ def _merge_flash_curve(
         gain[before_frame] = 1.0
         gain[cut_frame] = FLASH_GAIN_PEAK
     if incoming is not None and incoming.effect_kind == "flash":
-        cut_frame = _local_frame(incoming.cut_sec, clip_in_sec, fps)
-        after_frame = _local_frame(incoming.cut_sec + FLASH_DECAY_SEC, clip_in_sec, fps)
+        # Same end-exclusive boundary issue as the outgoing side, mirrored:
+        # a short incoming clip (the Demo has ~0.10s-class shots) can put
+        # cut_sec + FLASH_DECAY_SEC past this clip's own last valid frame.
+        duration_frames = round(clip.timeline.duration_sec * fps)
+        last_valid_frame = max(0.0, duration_frames - 1)
+        cut_frame = min(_local_frame(incoming.cut_sec, clip_in_sec, fps), last_valid_frame)
+        after_frame = min(_local_frame(incoming.cut_sec + FLASH_DECAY_SEC, clip_in_sec, fps), last_valid_frame)
+        if after_frame <= cut_frame:
+            after_frame = min(cut_frame + 1, last_valid_frame) if last_valid_frame > cut_frame else cut_frame
         gain[cut_frame] = FLASH_GAIN_PEAK
         gain[after_frame] = 1.0
     return dict(sorted(gain.items()))

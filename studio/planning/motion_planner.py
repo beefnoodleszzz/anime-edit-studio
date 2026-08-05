@@ -57,9 +57,22 @@ MAX_TRANSITION_FRACTION = 0.35
 # duration has no mechanical basis and was found (via dense per-frame
 # sharpness measurement on a real render) to decay a clip's readability by
 # ~60x from its sharpest to its final frame even though nothing sped up.
-BASE_SHUTTER_ANGLE = 20.0
-SHUTTER_VELOCITY_GAIN = 800.0
-MAX_SHUTTER_ANGLE = 140.0
+# translation_unit is itself duration-damped for clips under
+# REFERENCE_DURATION_SEC (see _duration_damped), which cancels out of this
+# velocity ratio: every sub-reference clip lands on the exact same
+# velocity (TRANSLATION_UNIT / REFERENCE_DURATION_SEC), and clips at/above
+# the reference can only approach that same value from below. That single
+# number is therefore the true ceiling this system can ever produce, by
+# construction — and it was calibrated to sit within a few degrees of
+# MAX_SHUTTER_ANGLE, so nearly every clip in a real fast-cut edit (most
+# clips run well under 0.6s) landed pinned at the cap. Found visually
+# inspecting a real render after the transition-blur fix still looked
+# heavily smeared *outside* any transition window — the base per-clip
+# blur itself, not just transitions, was the remaining source. Recalibrated
+# so that ceiling velocity produces a moderate, not maximal, shutter angle.
+BASE_SHUTTER_ANGLE = 8.0
+SHUTTER_VELOCITY_GAIN = 220.0
+MAX_SHUTTER_ANGLE = 90.0
 
 
 def _duration_damped(value: float, duration_sec: float) -> float:

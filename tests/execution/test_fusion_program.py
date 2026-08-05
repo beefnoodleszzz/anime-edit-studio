@@ -265,6 +265,42 @@ def test_directional_blur_length_is_a_small_fraction_of_image_width_not_the_raw_
     assert peak_length < 0.2
 
 
+def test_outgoing_transition_spike_gets_a_zero_baseline_so_it_cant_smear_the_whole_clip():
+    # Regression: a BezierSpline holds its first keyframe's value constant
+    # for every frame *before* it. An outgoing clip's anticipation spike
+    # commonly lands near the clip's own last frame (short clip, most of
+    # its anticipation window folded into the next clip) with no earlier
+    # point defined — with nothing before it, Fusion extrapolated that
+    # peak Length backward across the *entire* clip instead of just the
+    # anticipation window. Found by reading back a real render's connected
+    # DirectionalBlurLength spline on a real 0.9s clip: its only two
+    # keyframes both sat at/after the clip's own last valid frame, so
+    # every actually-rendered frame preceded them and inherited full
+    # blur strength throughout — this, not the native motion-blur shutter,
+    # was the dominant cause of a "half the frame is a mosaic" complaint.
+    item = _Item()
+    duration = 0.9
+    clip = _clip(clip_id="c0", in_sec=0.0, duration=duration)
+    pair = TransitionPair(
+        id="t0", cut_sec=duration, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="left", safe_scale=1.15, confidence=0.8,
+        outgoing_keyframes=[
+            TransformKeyframe(sec=duration - 0.1, center_x=0.5, center_y=0.5, scale=1.0),
+            TransformKeyframe(sec=duration, center_x=0.55, center_y=0.5, scale=1.15),
+        ],
+        blur_keyframes=[
+            DirectionalBlurKeyframe(sec=duration, angle=-90.0, strength=0.6),
+            DirectionalBlurKeyframe(sec=duration + 0.2, angle=0.0, strength=0.0),
+        ],
+    )
+    program = build_fusion_clip_program(
+        item, clip, canvas=CANVAS, timebase=TIMEBASE, outgoing_pair=pair,
+    )
+    length_spline = program.comp.spline_named("DirectionalBlurLength")
+    assert 0.0 in length_spline.keyframes
+    assert length_spline.keyframes[0.0][1] == pytest.approx(0.0)
+
+
 def test_transition_blur_keyframes_dont_erase_the_clips_own_baseline_shutter():
     # Regression: a transition's blur_keyframes (spike + decay near the cut)
     # land at the same frame as the clip's own start/end shutter keyframe

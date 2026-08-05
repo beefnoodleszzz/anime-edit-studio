@@ -312,6 +312,7 @@ def build_fusion_clip_program(
             raise ResolveOperationError(f"{comp_name}: DirectionalBlur connect failed")
         length_curve: dict[float, float] = {}
         angle_curve: dict[float, float] = {}
+        last_valid_frame = _last_valid_frame(clip, fps)
         for pair, keyframes in (
             (incoming_pair, incoming_pair.blur_keyframes if incoming_pair else []),
             (outgoing_pair, outgoing_pair.blur_keyframes if outgoing_pair else []),
@@ -319,9 +320,25 @@ def build_fusion_clip_program(
             if pair is None:
                 continue
             for kf in keyframes:
-                frame = _local_frame(kf.sec, clip.timeline.in_sec, fps)
-                length_curve[frame] = kf.strength * DIRECTIONAL_BLUR_LENGTH_SCALE
-                angle_curve[frame] = kf.angle
+                frame = _clamp_frame(_local_frame(kf.sec, clip.timeline.in_sec, fps), last_valid_frame)
+                scaled = kf.strength * DIRECTIONAL_BLUR_LENGTH_SCALE
+                if scaled >= length_curve.get(frame, 0.0):
+                    length_curve[frame] = scaled
+                    angle_curve[frame] = kf.angle
+        if length_curve and min(length_curve) > 0.0:
+            # A BezierSpline holds its first keyframe's value constant for
+            # every frame *before* it. An outgoing clip's anticipation
+            # spike commonly sits near the clip's own last frame with no
+            # earlier point defined — with nothing before it, Fusion
+            # extrapolates that peak length backward and smears the
+            # *entire* clip at full strength, not just the anticipation
+            # window. Found by reading back a real render's connected
+            # spline: both of a short clip's keyframes landed at/after its
+            # own last valid frame, so every actually-rendered frame
+            # preceded them. Anchor a zero baseline at frame 0 so the
+            # blur ramps in only across the real anticipation window.
+            length_curve[0.0] = 0.0
+            angle_curve[0.0] = 0.0
         if length_curve:
             ResolveAdapter._connect_scalar_spline(comp, directional.Length, "DirectionalBlurLength", length_curve)
         if angle_curve:

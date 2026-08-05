@@ -55,6 +55,7 @@ class _Tool:
         self.Angle = _ConnectableInput()
         self.ShutterAngle = _ConnectableInput()
         self.Length = _ConnectableInput()
+        self.Gain = _ConnectableInput()
 
     def GetAttrs(self):
         return self._attrs
@@ -234,6 +235,40 @@ def test_transition_pair_adds_directional_blur_and_drives_both_curves():
     assert comp.media_out.inputs["__connect_Input"] is comp.tool_named(POST_COLOR_NAME)
     length_spline = comp.spline_named("DirectionalBlurLength")
     assert set(length_spline.keyframes) == {0.0, round(0.33 * TIMEBASE.fps, 6)}
+
+
+def test_flash_effect_kind_drives_a_gain_spike_on_the_existing_post_color_tool():
+    item = _Item()
+    clip = _clip(clip_id="c1", in_sec=2.0, duration=2.0)
+    pair = TransitionPair(
+        id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="none", safe_scale=1.0, confidence=0.8, effect_kind="flash",
+    )
+    program = build_fusion_clip_program(
+        item, clip, canvas=CANVAS, timebase=TIMEBASE, incoming_pair=pair,
+    )
+    # No new node — the spike rides the existing PostColor tool.
+    assert program.node_names.count(POST_COLOR_NAME) == 1
+    comp = program.comp
+    gain_spline = comp.spline_named("PostColorGain")
+    cut_frame = round(0.0 * TIMEBASE.fps, 6)  # cut_sec=2.0 == clip in_sec -> local frame 0
+    assert cut_frame in gain_spline.keyframes
+    assert gain_spline.keyframes[cut_frame][1] > 1.0
+
+
+def test_no_flash_gain_spline_when_effect_kind_is_none():
+    item = _Item()
+    clip = _clip(clip_id="c1", in_sec=2.0, duration=2.0)
+    pair = TransitionPair(
+        id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        direction="none", safe_scale=1.0, confidence=0.8, effect_kind="none",
+    )
+    program = build_fusion_clip_program(
+        item, clip, canvas=CANVAS, timebase=TIMEBASE, incoming_pair=pair,
+    )
+    comp = program.comp
+    with pytest.raises(StopIteration):
+        comp.spline_named("PostColorGain")
 
 
 def test_no_directional_blur_tool_when_no_transition_pairs_supplied():

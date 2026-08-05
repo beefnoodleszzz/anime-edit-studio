@@ -9,6 +9,7 @@ from studio.planning.motion_planner import (
     required_safe_scale,
 )
 from studio.planning.slots import TimelineSlot
+from studio.planning.transition_profile import TransitionProfile
 from studio.spec.amv import Canvas
 
 CANVAS = Canvas(width=1080, height=1350, aspect="4:5")
@@ -39,31 +40,103 @@ def test_moving_slot_ends_at_a_safe_scale_covering_the_translation():
     slot = TimelineSlot(
         index=1, start_sec=0, duration_sec=1.2, target_energy=0.8, hold=False, entry_motion="carry",
     )
-    motion = build_clip_motion(slot, CANVAS, direction=direction_vector_for("carry"))
+    motion = build_clip_motion(slot, CANVAS, direction=direction_vector_for("left"))
     end_scale = motion.transform_keyframes[-1].scale
     assert end_scale > 1.0
     assert motion.native_motion_blur_keyframes
 
 
-@pytest.mark.parametrize("entry_motion", ["carry", "reverse", "reset"])
-def test_transition_pair_links_outgoing_and_incoming_with_a_shared_safe_scale(entry_motion):
+def test_direction_vector_for_rejects_a_relation_label_not_a_direction():
+    # "carry"/"reverse"/"reset" are relation labels, not screen directions —
+    # feeding one in here must fail loudly, not silently resolve to (0, 0).
+    with pytest.raises(KeyError):
+        direction_vector_for("carry")
+
+
+@pytest.mark.parametrize("relation", ["carry", "reverse", "reset"])
+def test_transition_pair_links_outgoing_and_incoming_with_a_shared_safe_scale(relation):
     pair = build_transition_pair(
         pair_id="t0", cut_sec=1.5, outgoing_clip_id="c0", incoming_clip_id="c1",
-        entry_motion=entry_motion, canvas=CANVAS, confidence=0.7,
+        relation=relation, direction="left", canvas=CANVAS, confidence=0.7,
     )
     assert pair.outgoing_clip_id == "c0"
     assert pair.incoming_clip_id == "c1"
     assert pair.safe_scale >= 1.0
     assert pair.outgoing_keyframes[-1].scale == pytest.approx(pair.safe_scale)
-    if entry_motion == "carry":
+    if relation == "carry":
         assert pair.overshoot > 0
     else:
         assert pair.overshoot == 0
 
 
+def test_carry_transition_uses_the_measured_direction_not_a_flat_zero():
+    # This is the bug the codex review caught: relation labels used to be
+    # looked up directly as directions and always resolved to (0, 0),
+    # collapsing every transition into a centered zoom regardless of
+    # direction. A real direction must actually move the geometry.
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=1.5, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7,
+    )
+    assert pair.direction == "left"
+    assert pair.outgoing_keyframes[-1].center_x != pytest.approx(0.5)
+
+
 def test_reset_transition_has_no_direction():
     pair = build_transition_pair(
         pair_id="t0", cut_sec=1.0, outgoing_clip_id="c0", incoming_clip_id="c1",
-        entry_motion="reset", canvas=CANVAS, confidence=0.5,
+        relation="reset", direction="left", canvas=CANVAS, confidence=0.5,
     )
     assert pair.direction == "none"
+    assert pair.outgoing_keyframes[-1].center_x == pytest.approx(0.5)
+
+
+def test_usable_profile_adds_an_attack_keyframe_at_its_measured_position():
+    profile = TransitionProfile(
+        anticipation_sec=0.5, release_sec=0.5, translation_unit=0.2,
+        overshoot=0.05, confidence=0.9, attack_fraction=0.8,
+    )
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7, profile=profile,
+    )
+    # Fixed constants (2 keyframes/side) used to be the only option; a
+    # usable profile inserts a measured attack point on each side.
+    assert len(pair.outgoing_keyframes) == 3
+    assert len(pair.incoming_keyframes) == 3
+    expected_attack_sec = (2.0 - profile.anticipation_sec) + profile.attack_fraction * profile.anticipation_sec
+    assert pair.outgoing_keyframes[1].sec == pytest.approx(expected_attack_sec)
+
+
+def test_usable_profile_with_flash_effect_sets_the_transition_pairs_effect_kind():
+    profile = TransitionProfile(
+        anticipation_sec=0.3, release_sec=0.3, translation_unit=0.1,
+        overshoot=0.02, confidence=0.9, attack_fraction=0.5, effect_kind="flash",
+    )
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7, profile=profile,
+    )
+    assert pair.effect_kind == "flash"
+
+
+def test_no_profile_means_no_effect_kind():
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7,
+    )
+    assert pair.effect_kind == "none"
+
+
+def test_unusable_profile_falls_back_to_a_flat_hard_cut():
+    low_confidence = TransitionProfile(
+        anticipation_sec=0.5, release_sec=0.5, translation_unit=0.2,
+        overshoot=0.05, confidence=0.1, attack_fraction=0.5,
+    )
+    pair = build_transition_pair(
+        pair_id="t0", cut_sec=2.0, outgoing_clip_id="c0", incoming_clip_id="c1",
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.7, profile=low_confidence,
+    )
+    assert pair.direction == "none"
+    assert pair.overshoot == 0
+    assert pair.outgoing_keyframes[-1].center_x == pytest.approx(0.5)

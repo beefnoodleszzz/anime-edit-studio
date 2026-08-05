@@ -18,8 +18,8 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from studio.planning.candidates import ScoredWindow, candidates_for_slot
-from studio.planning.schemas import MotionDirection
-from studio.planning.slots import TimelineSlot
+from studio.planning.schemas import MotionDirection, direction_cosine
+from studio.planning.slots import EntryMotion, TimelineSlot
 
 BEAM_WIDTH = 6
 CANDIDATES_PER_SLOT = 30
@@ -85,11 +85,39 @@ def _is_duplicate(candidate: ScoredWindow, beam: _Beam) -> bool:
     )
 
 
-def _continuity_bonus(candidate: ScoredWindow, beam: _Beam) -> float:
+_RELATION_MOTION_WEIGHT = 0.25
+
+
+def _relation_motion_bonus(entry_motion: MotionDirection, beam: _Beam, *, relation: EntryMotion) -> float:
+    """Score how well a candidate's entry motion satisfies the Demo's
+    carry/reverse/reset relation for this cut — this is the actual
+    mechanism REFACTOR.md's "跨镜头运动连续性" promises, not a flat ±0.05
+    same-direction nudge that both under-rewards a good carry match and
+    under-penalizes a reverse landing on the same side as the outgoing exit.
+
+    - carry: incoming should continue in the *same* direction as the
+      previous clip's exit — reward proportional to cosine similarity.
+    - reverse: incoming should push against the previous exit — reward
+      proportional to the *negative* cosine (i.e. opposite direction).
+    - reset: incoming should settle, not carry momentum — reward a measured
+      "none"/low motion entry regardless of what the previous clip did.
+    - none: the Demo showed no directional relation here; do not fabricate
+      a preference either way.
+    """
+    if relation == "reset":
+        return 0.0 if entry_motion == "none" else -_RELATION_MOTION_WEIGHT * 0.4
+    if relation == "none":
+        return 0.0
+    if beam.previous_exit_motion == "none" or entry_motion == "none":
+        return 0.0
+    cosine = direction_cosine(beam.previous_exit_motion, entry_motion)
+    return _RELATION_MOTION_WEIGHT * (cosine if relation == "carry" else -cosine)
+
+
+def _continuity_bonus(candidate: ScoredWindow, beam: _Beam, *, relation: EntryMotion) -> float:
     """Reward/penalize how well this candidate follows the beam's most
-    recent choice — replaces the old "same asset in last 3 picks" penalty
-    with the identity/color/scale/position/motion signals REFACTOR.md §16
-    actually asks for."""
+    recent choice: identity/series/scale continuity plus a relation-aware
+    motion-direction match (see ``_relation_motion_bonus``)."""
     if not beam.choices:
         return 0.0
     window = candidate.window
@@ -110,8 +138,7 @@ def _continuity_bonus(candidate: ScoredWindow, beam: _Beam) -> float:
     # once ShotWindow carries a per-window dominant color; it isn't wired
     # through yet, so it contributes nothing here rather than a fake bonus.
 
-    if beam.previous_exit_motion != "none" and window.editability.entry_motion != "none":
-        bonus += 0.05 if window.editability.entry_motion == beam.previous_exit_motion else -0.05
+    bonus += _relation_motion_bonus(window.editability.entry_motion, beam, relation=relation)
 
     recent_asset_ids = beam.selected_asset_ids[-3:]
     if window.asset_id in recent_asset_ids:
@@ -154,7 +181,7 @@ def plan_sequence(
             selectable = usable if usable else candidates
             for candidate in selectable[:beam_width]:
                 window = candidate.window
-                total_score = candidate.score + _continuity_bonus(candidate, beam)
+                total_score = candidate.score + _continuity_bonus(candidate, beam, relation=slot.entry_motion)
                 choice = SequenceChoice(
                     slot_index=slot.index,
                     window_id=window.id, shot_id=window.shot_id, asset_id=window.asset_id,

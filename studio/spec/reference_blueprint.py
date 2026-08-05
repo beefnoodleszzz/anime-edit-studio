@@ -93,6 +93,15 @@ class CutObservation(_Base):
     outgoing_motion: Estimate | None = None
     incoming_motion: Estimate | None = None
     relation: CutRelation = "unknown"
+    # Bucketed direction of the *incoming* clip's own measured motion vector
+    # right after the cut — the actual screen direction this cut moves
+    # toward, not just how fast (see CutRelation, which is magnitude/vector
+    # relationship, not geometry). "none" when no vector survives the
+    # confidence gate.
+    direction: TransitionDirection = "none"
+    outgoing_envelope: list[float] = Field(default_factory=list)
+    incoming_envelope: list[float] = Field(default_factory=list)
+    blur_envelope: list[float] = Field(default_factory=list)
     visual_peak_offset_sec: float | None = None
     settle_offset_sec: float | None = None
 
@@ -108,6 +117,9 @@ class MotionSample(_Base):
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
+TransitionEffect = Literal["none", "flash"]
+
+
 class TransitionPairObservation(_Base):
     cut_sec: float = Field(..., ge=0)
     relation: CutRelation
@@ -119,6 +131,12 @@ class TransitionPairObservation(_Base):
     overshoot: float = Field(0.0, ge=0)
     blur_envelope: list[float] = Field(default_factory=list)
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # A deterministic proxy classification from the measured blur envelope
+    # (see reference_analyzer._classify_effect) — a real detector for
+    # RGB-split/defocus/other effect families is future work; "flash" is
+    # the one kind with a real, verified Fusion node graph behind it so far
+    # (studio.execution.resolve.fusion_program).
+    effect_kind: TransitionEffect = "none"
 
 
 class StyleSummary(_Base):
@@ -177,5 +195,6 @@ __all__ = [
     "StyleSummary",
     "TechnicalProfile",
     "TransitionDirection",
+    "TransitionEffect",
     "TransitionPairObservation",
 ]

@@ -65,8 +65,16 @@ def _shot_ids_hash(shot_ids: list[str]) -> str:
     return hashlib.sha256("|".join(sorted(shot_ids)).encode()).hexdigest()
 
 
-def _load_or_analyze_reference(conn: sqlite3.Connection, demo_path: Path) -> ReferenceBlueprint:
+def _load_or_analyze_reference(
+    conn: sqlite3.Connection, demo_path: Path, *, music_timeline: MusicTimeline | None = None,
+) -> ReferenceBlueprint:
+    """``music_timeline`` must be the Demo's *own* extracted-audio timeline
+    (not an independent target track) — passing it lets ``analyze_reference``
+    compute real cut-to-beat offsets and is what makes ``choose_mode()``
+    detect exact-replica mode later (it compares ``blueprint.
+    music_timeline_ref`` against the music's own source hash)."""
     source_hash = file_sha256(demo_path)
+    wanted_ref = music_timeline.source_hash if music_timeline is not None else None
     row = conn.execute(
         "SELECT version,blueprint_json FROM reference_blueprints WHERE source_hash=?",
         (source_hash,),
@@ -74,10 +82,14 @@ def _load_or_analyze_reference(conn: sqlite3.Connection, demo_path: Path) -> Ref
     # A cached row from an older SPEC_VERSION may be missing fields this
     # version's Pydantic model requires (extra="forbid" also rejects fields
     # it no longer has) — re-analyze rather than fail or silently reuse a
-    # stale shape (REFACTOR.md §13).
+    # stale shape. Also re-analyze if the cached blueprint wasn't measured
+    # against the music timeline this call wants (or vice versa): reusing it
+    # would silently drop cut-to-beat offsets the caller now needs.
     if row is not None and row[0] == SPEC_VERSION:
-        return ReferenceBlueprint.model_validate_json(row[1])
-    blueprint = analyze_reference(demo_path)
+        cached = ReferenceBlueprint.model_validate_json(row[1])
+        if cached.music_timeline_ref == wanted_ref:
+            return cached
+    blueprint = analyze_reference(demo_path, music_timeline=music_timeline)
     with conn:
         conn.execute(
             """
@@ -148,16 +160,20 @@ def build_amv_spec_workflow(
                  focus, str(output_dir)),
             )
 
-        blueprint = _load_or_analyze_reference(conn, demo_path)
-
-        # No independent target track: use the Demo's own audio (§7.1 Exact Replica).
+        # No independent target track: use the Demo's own audio (Exact
+        # Replica). Music must be analyzed *before* the reference so its
+        # MusicTimeline can be handed to analyze_reference() and produce
+        # real cut-to-beat offsets — analyzing the reference first left
+        # every music_offset_sec permanently None.
         resolved_music_path = music_path
+        using_demo_audio = resolved_music_path is None
         if resolved_music_path is None:
-            resolved_music_path = prebake_audio(
-                demo_path, output_dir / "demo_audio.wav",
-                duration_sec=blueprint.technical.duration_sec,
-            )
+            resolved_music_path = prebake_audio(demo_path, output_dir / "demo_audio.wav")
         music = _load_or_analyze_music(conn, resolved_music_path, cache_root=output_dir / "cache")
+
+        blueprint = _load_or_analyze_reference(
+            conn, demo_path, music_timeline=music if using_demo_audio else None,
+        )
 
         slots = map_rhythm_to_slots(blueprint, music)
         choices = plan_sequence(conn, slots, project_id=project_id, available_shot_ids=shot_ids)
@@ -180,6 +196,7 @@ def build_amv_spec_workflow(
             demo_hash=blueprint.source_hash,
             materials_index_hash=_shot_ids_hash(shot_ids),
             output_path=output_dir / "preview.mov",
+            blueprint=blueprint,
         )
     finally:
         conn.close()

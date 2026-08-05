@@ -90,7 +90,7 @@ def make_spec(asset_ids: list[str], music_path: Path, output_path: Path) -> AMVS
         hold=False, entry_motion="carry",
     )
     motion0 = build_clip_motion(slot0, CANVAS)
-    motion1 = build_clip_motion(slot1, CANVAS, direction=direction_vector_for("carry"))
+    motion1 = build_clip_motion(slot1, CANVAS, direction=direction_vector_for("left"))
 
     clip0 = Clip(
         id="c0", asset_id=a,
@@ -106,7 +106,7 @@ def make_spec(asset_ids: list[str], music_path: Path, output_path: Path) -> AMVS
     )
     pair = build_transition_pair(
         pair_id="t0", cut_sec=CLIP_DURATION, outgoing_clip_id="c0", incoming_clip_id="c1",
-        entry_motion="carry", canvas=CANVAS, confidence=0.8,
+        relation="carry", direction="left", canvas=CANVAS, confidence=0.8,
     )
     return AMVSpec(
         id=PROJECT_NAME,

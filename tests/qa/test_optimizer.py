@@ -85,6 +85,7 @@ def _report(passed: bool, motion_coverage_actual: float = 0.6) -> RenderedQARepo
         technical=TechnicalQAResult(file="x.mov", passed=True, checks=[]),
         fusion_graph_consistent=True,
         metrics={"motion_coverage": metric},
+        style_passed=metric.passed,
         passed=passed and metric.passed,
     )
 

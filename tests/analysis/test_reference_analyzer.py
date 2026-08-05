@@ -3,7 +3,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from studio.analysis.reference_analyzer import analyze_reference
+from studio.analysis.reference_analyzer import _classify_effect, _classify_relation, analyze_reference
+from studio.spec.reference_blueprint import Estimate
 
 
 def _panning_scene(rng, width=320, height=240, n=48, direction=1):
@@ -45,6 +46,49 @@ def test_reference_blueprint_from_two_panning_shots_with_a_hard_cut(tmp_path):
         assert cut.outgoing_motion is not None
         assert cut.incoming_motion is not None
         assert 0.0 <= cut.sec <= blueprint.technical.duration_sec
+
+
+def test_transition_pairs_carry_nonempty_motion_envelopes(tmp_path):
+    rng = np.random.default_rng(5)
+    shot_a = _panning_scene(rng, n=48, direction=1)
+    shot_b = _panning_scene(np.random.default_rng(9), n=48, direction=1)
+    for frame in shot_b:
+        cv2.circle(frame, (250, 60), 30, (200, 30, 30), -1)
+
+    video = tmp_path / "demo.mp4"
+    _write(video, shot_a + shot_b)
+
+    blueprint = analyze_reference(video)
+
+    assert blueprint.transition_pairs
+    for pair in blueprint.transition_pairs:
+        # These used to be declared on the schema but never populated by the
+        # analyzer, so a downstream consumer (motion_planner) had nothing
+        # real to shape a transition curve from.
+        assert pair.outgoing_envelope
+        assert pair.incoming_envelope
+        assert pair.blur_envelope
+
+
+def test_classify_effect_flags_a_sharp_sustained_sharpness_collapse():
+    assert _classify_effect([0.1, 0.2, 0.6, 0.3]) == "flash"
+    assert _classify_effect([0.1, 0.2, 0.3]) == "none"
+    assert _classify_effect([]) == "none"
+
+
+def test_classify_relation_uses_direction_not_just_speed_ratio():
+    """Regression for the bug the codex review caught: the old
+    ``_classify_relation`` only compared magnitudes, so two windows moving
+    at the same speed in *opposite* directions (ratio == 1.0) were called
+    "carry" — direction must actually be considered."""
+    outgoing = Estimate(value=5.0, confidence=0.9)
+    incoming = Estimate(value=5.0, confidence=0.9)
+    assert _classify_relation(outgoing, incoming, (5.0, 0.0), (5.0, 0.0)) == "carry"
+    assert _classify_relation(outgoing, incoming, (5.0, 0.0), (-5.0, 0.0)) == "reverse"
+    # No reliable vector on either side (e.g. rotation/scale-dominated
+    # motion): fall back to the old ratio heuristic rather than asserting a
+    # direction relationship with nothing behind it.
+    assert _classify_relation(outgoing, incoming, (0.0, 0.0), (0.0, 0.0)) == "carry"
 
 
 def test_reference_blueprint_round_trips_through_json(tmp_path):

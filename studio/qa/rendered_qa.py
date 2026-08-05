@@ -34,6 +34,22 @@ DEFAULT_TOLERANCES: dict[str, float] = {
     "blur_usage": 0.3,
 }
 
+# Which style metrics gate release, not just get reported. Restricted to the
+# ones that are actually measured end to end (cut rhythm + cross-cut motion
+# character) — "blur_usage"/"direction_distribution" etc. are still stubbed
+# to a constant in _style_summary() (studio/analysis/reference_analyzer.py),
+# so gating on them would just compare a hardcoded value to itself and pass
+# release/reject nothing real. "scale_motion_ratio" is excluded for the same
+# reason even though it looks measured: _style_summary() actually derives it
+# from outgoing_motion.confidence > 0.5 (a measurement-confidence proxy, not
+# scale/zoom motion), so gating on it would reject renders over unrelated
+# confidence drift rather than an actual scale-motion mismatch (codex
+# review). Extend this set only once a metric has a real measurement behind
+# it that matches its name.
+STYLE_HARD_GATE_METRICS: frozenset[str] = frozenset(
+    {"cut_density", "motion_coverage", "reversal_ratio"}
+)
+
 
 class MetricComparison(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -93,6 +109,7 @@ class RenderedQAReport(BaseModel):
     technical: TechnicalQAResult
     fusion_graph_consistent: bool
     metrics: dict[str, MetricComparison]
+    style_passed: bool
     passed: bool
 
 
@@ -112,8 +129,15 @@ def run_rendered_qa(
     """Combine the technical hard gate with the Demo-relative comparison.
 
     ``fusion_graph_consistent`` must come from an actual Resolve/Fusion
-    readback (built comp nodes and curves match what the compiler wrote,
-    per REFACTOR.md §10 rule 6-7) — this function never fabricates it.
+    readback (built comp nodes and curves match what the compiler wrote) —
+    this function never fabricates it.
+
+    ``style_passed`` (see ``STYLE_HARD_GATE_METRICS``) is also a hard gate:
+    a render whose cut rhythm and cross-cut motion character drifted past
+    tolerance from the Demo does not represent the Demo's editing language,
+    regardless of whether the file itself is technically clean — codex
+    review flagged that this used to be computed but never actually gated
+    release.
     """
     technical = run_technical_qa(
         path,
@@ -124,16 +148,21 @@ def run_rendered_qa(
         **technical_kwargs,
     )
     metrics = compare_style_summary(reference_style, actual_style, tolerances=tolerances)
+    style_passed = all(
+        metrics[name].passed for name in STYLE_HARD_GATE_METRICS if name in metrics
+    )
     return RenderedQAReport(
         technical=technical,
         fusion_graph_consistent=fusion_graph_consistent,
         metrics=metrics,
-        passed=technical.passed and fusion_graph_consistent,
+        style_passed=style_passed,
+        passed=technical.passed and fusion_graph_consistent and style_passed,
     )
 
 
 __all__ = [
     "DEFAULT_TOLERANCES",
+    "STYLE_HARD_GATE_METRICS",
     "MetricComparison",
     "RenderedQAReport",
     "compare_style_summary",

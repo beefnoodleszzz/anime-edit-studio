@@ -32,6 +32,13 @@ MOTION_TRANSFORM_NAME = "MotionTransform"
 DIRECTIONAL_BLUR_NAME = "DirectionalBlur"
 POST_COLOR_NAME = "PostColor"
 
+# "flash" effect_kind: a short Gain spike on the existing PostColor
+# (BrightnessContrast) tool right at the cut. Real-machine-verified input
+# name/behavior (BrightnessContrast.Gain, scalar, default 1.0) — see
+# tests/execution/test_amv_acceptance.py's flash-effect acceptance test.
+FLASH_GAIN_PEAK = 1.6
+FLASH_DECAY_SEC = 0.15
+
 
 def comp_name_for(clip_id: str) -> str:
     return f"aes:clip:{clip_id}"
@@ -128,6 +135,40 @@ def _merge_blur_curve(
             frame = _local_frame(kf.sec, clip_in_sec, fps)
             strength[frame] = max(strength.get(frame, 0.0), kf.strength * 180.0)
     return dict(sorted(strength.items()))
+
+
+def _merge_flash_curve(
+    clip: Clip, *, clip_in_sec: float, fps: float,
+    incoming: TransitionPair | None, outgoing: TransitionPair | None,
+) -> dict[float, float]:
+    """A cut sits at local frame 0 of the incoming clip's own comp and at
+    local frame ``duration`` of the outgoing clip's own comp — there is no
+    footage (and real-machine Fusion rejects out-of-range keyframes on this
+    spline) before frame 0, so the "baseline" reference point only makes
+    sense on the outgoing side and the "decay back to normal" point only on
+    the incoming side; the spike itself sits at the cut on whichever side(s)
+    actually carry the effect."""
+    gain: dict[float, float] = {}
+    if outgoing is not None and outgoing.effect_kind == "flash":
+        # The comp's end frame is exclusive (AGENTS.md P8): a keyframe at
+        # the local frame equal to the clip's own duration lands one frame
+        # past the last frame Resolve actually renders, so the peak would
+        # never be visible. Clamp it onto the last in-range frame instead,
+        # and keep the baseline point strictly before it so a very short
+        # clip still yields a real (if abrupt) spike rather than one
+        # collapsed keyframe.
+        duration_frames = round(clip.timeline.duration_sec * fps)
+        last_valid_frame = max(0.0, duration_frames - 1)
+        cut_frame = min(_local_frame(outgoing.cut_sec, clip_in_sec, fps), last_valid_frame)
+        before_frame = max(0.0, min(_local_frame(outgoing.cut_sec - 0.02, clip_in_sec, fps), cut_frame - 1))
+        gain[before_frame] = 1.0
+        gain[cut_frame] = FLASH_GAIN_PEAK
+    if incoming is not None and incoming.effect_kind == "flash":
+        cut_frame = _local_frame(incoming.cut_sec, clip_in_sec, fps)
+        after_frame = _local_frame(incoming.cut_sec + FLASH_DECAY_SEC, clip_in_sec, fps)
+        gain[cut_frame] = FLASH_GAIN_PEAK
+        gain[after_frame] = 1.0
+    return dict(sorted(gain.items()))
 
 
 def build_fusion_clip_program(
@@ -229,6 +270,16 @@ def build_fusion_clip_program(
     if not color.ConnectInput("Input", upstream):
         raise ResolveOperationError(f"{comp_name}: PostColor connect failed")
     node_names.append(POST_COLOR_NAME)
+
+    flash_curve = _merge_flash_curve(
+        clip, clip_in_sec=clip.timeline.in_sec, fps=fps,
+        incoming=incoming_pair, outgoing=outgoing_pair,
+    )
+    if flash_curve:
+        gain_input = getattr(color, "Gain", None)
+        if gain_input is None:
+            raise ResolveOperationError(f"{comp_name}: PostColor.Gain unavailable")
+        ResolveAdapter._connect_scalar_spline(comp, gain_input, "PostColorGain", flash_curve)
 
     if not media_out.ConnectInput("Input", color):
         raise ResolveOperationError(f"{comp_name}: MediaOut connect failed")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+
 import cv2
 import numpy as np
 import soundfile as sf
@@ -33,6 +35,18 @@ def _write_audio(path, duration=6, sample_rate=22050):
         length = min(800, len(audio) - start)
         audio[start:start + length] += np.hanning(length).astype(np.float32)
     sf.write(path, audio, sample_rate)
+
+
+def _mux_audio_into_video(video, audio) -> None:
+    """cv2.VideoWriter never writes an audio stream; "use the Demo's own
+    audio" needs one to actually exist to extract."""
+    muxed = video.with_suffix(".muxed.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-i", str(video), "-i", str(audio),
+         "-c:v", "copy", "-c:a", "aac", "-shortest", str(muxed)],
+        check=True,
+    )
+    muxed.replace(video)
 
 
 def _seed_shots(database, asset_id: str, *, count: int = 6, shot_duration: float = 1.0) -> list[str]:
@@ -103,9 +117,9 @@ def test_build_amv_spec_workflow_caches_reference_and_music_analysis_by_hash(tmp
     real_analyze_reference = module.analyze_reference
     real_analyze_music = module.analyze_music_timeline
 
-    def counting_reference(path):
+    def counting_reference(path, *, music_timeline=None):
         calls["reference"] += 1
-        return real_analyze_reference(path)
+        return real_analyze_reference(path, music_timeline=music_timeline)
 
     def counting_music(path, *, cache_root):
         calls["music"] += 1
@@ -125,6 +139,38 @@ def test_build_amv_spec_workflow_caches_reference_and_music_analysis_by_hash(tmp
 
     assert calls["reference"] == 1
     assert calls["music"] == 1
+
+
+def test_using_the_demos_own_audio_enables_exact_replica_mode(tmp_path, monkeypatch):
+    # Regression for the bug the codex review caught: analyze_reference()
+    # used to run before the Demo's own audio was ever analyzed, so
+    # blueprint.music_timeline_ref was always None and choose_mode() could
+    # never detect exact-replica even for the "no --music" default case.
+    demo = tmp_path / "demo.mp4"
+    _write_video(demo, _panning_scene(np.random.default_rng(3)))
+    demo_audio = tmp_path / "demo_audio_source.wav"
+    _write_audio(demo_audio)
+    _mux_audio_into_video(demo, demo_audio)
+    database = tmp_path / "engine.sqlite"
+
+    monkeypatch.setattr(module, "resolve_shot_ids", lambda shot_ids, catalog_db=None: [])
+    monkeypatch.setattr(module, "import_shot_manifest", lambda conn, manifest: [])
+    shot_ids = _seed_shots(database, "mat0", count=8, shot_duration=0.5)
+
+    result = module.build_amv_spec_workflow(
+        project_id="exact-replica-test",
+        demo_path=demo,
+        shot_ids=shot_ids,
+        music_path=None,  # no independent target track -> Demo's own audio
+        database=database,
+        projects_root=tmp_path / "projects",
+    )
+
+    assert result.blueprint.music_timeline_ref == result.music.source_hash
+
+    from studio.planning.rhythm_style_mapper import choose_mode
+
+    assert choose_mode(result.blueprint, result.music) == "exact_replica"
 
 
 def test_release_amv_refuses_without_a_passing_qa_report(tmp_path):

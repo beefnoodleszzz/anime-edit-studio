@@ -19,6 +19,29 @@ MotionDirection = Literal[
 
 WindowKind = Literal["curated", "generic"]
 
+# Single source of truth for turning a bucketed MotionDirection back into a
+# unit-ish 2D vector — every module that reasons about motion continuity
+# (candidate scoring, beam continuity, transition keyframes) must agree on
+# the same geometry, or "same direction" silently means different things in
+# different places.
+DIRECTION_VECTORS: dict[MotionDirection, tuple[float, float]] = {
+    "none": (0.0, 0.0),
+    "left": (-1.0, 0.0), "right": (1.0, 0.0),
+    "up": (0.0, -1.0), "down": (0.0, 1.0),
+    "up-left": (-0.7071, -0.7071), "up-right": (0.7071, -0.7071),
+    "down-left": (-0.7071, 0.7071), "down-right": (0.7071, 0.7071),
+}
+
+
+def direction_cosine(a: MotionDirection, b: MotionDirection) -> float:
+    """Cosine similarity in [-1, 1] between two bucketed directions. Either
+    side being "none" (no measured motion) means no directional claim can be
+    made — returns 0.0 (neutral), not a guess."""
+    if a == "none" or b == "none":
+        return 0.0
+    va, vb = DIRECTION_VECTORS[a], DIRECTION_VECTORS[b]
+    return va[0] * vb[0] + va[1] * vb[1]
+
 
 @dataclass(frozen=True)
 class TechnicalProfile:
@@ -59,10 +82,12 @@ class ShotWindow:
 
 
 __all__ = [
+    "DIRECTION_VECTORS",
     "EditabilityProfile",
     "MotionDirection",
     "ShotWindow",
     "SubjectProfile",
     "TechnicalProfile",
     "WindowKind",
+    "direction_cosine",
 ]

@@ -164,11 +164,19 @@ def _shot_observations(
 
 def _cut_window_motion(
     capture: cv2.VideoCapture, fps: float, frame_index: int, *, before: bool,
-) -> tuple[Estimate, list[float]]:
+) -> tuple[Estimate, list[float], list[float], tuple[float, float]]:
+    """Returns (magnitude estimate, magnitude envelope, blur-proxy envelope,
+    mean motion vector). The vector is the mean of per-frame-pair (tx, ty)
+    across only the confident samples — it is what lets a caller tell *which
+    way* this window is moving, not just how fast; averaging magnitudes
+    alone (as this used to return exclusively) throws that away."""
     step = -1 if before else 1
     envelope: list[float] = []
+    blur_envelope: list[float] = []
     magnitudes = []
     confidences = []
+    txs: list[float] = []
+    tys: list[float] = []
     for offset in range(1, CUT_WINDOW_FRAMES + 1):
         a = frame_index + step * offset - (1 if before else 0)
         b = frame_index + step * offset - (0 if before else -1)
@@ -181,30 +189,58 @@ def _cut_window_motion(
         magnitudes.append(magnitude)
         confidences.append(motion.confidence)
         envelope.append(magnitude)
+        # Sharpness collapsing toward the cut is a cheap, honest proxy for a
+        # blur/impact effect at this frame — not a claim about *what kind*
+        # of effect it is (that classification is a separate, larger piece
+        # of work), just "how blurred is it right here".
+        blur_envelope.append(float(np.clip(1.0 - _sharpness(gray_b) / 2000.0, 0.0, 1.0)))
+        if motion.confidence >= 0.3:
+            txs.append(motion.tx)
+            tys.append(motion.ty)
     if not magnitudes:
-        return Estimate(value=0.0, confidence=0.0, evidence=["no_frames_available"]), []
-    envelope = envelope[::-1] if before else envelope
+        return (
+            Estimate(value=0.0, confidence=0.0, evidence=["no_frames_available"]),
+            [], [], (0.0, 0.0),
+        )
+    if before:
+        envelope.reverse()
+        blur_envelope.reverse()
+    vector = (float(np.mean(txs)), float(np.mean(tys))) if txs else (0.0, 0.0)
     return (
         Estimate(
             value=float(np.mean(magnitudes)),
             confidence=float(np.mean(confidences)),
             evidence=[f"sampled_{len(magnitudes)}_frames"],
         ),
-        envelope,
+        envelope, blur_envelope, vector,
     )
 
 
-def _classify_relation(outgoing: Estimate, incoming: Estimate) -> str:
+def _classify_relation(
+    outgoing: Estimate, incoming: Estimate,
+    outgoing_vector: tuple[float, float], incoming_vector: tuple[float, float],
+) -> str:
+    """Relation must come from the *direction* relationship between the two
+    windows, not only how their speeds compare — two clips that are both
+    "fast" can still be a reverse (whip left into whip right), and the old
+    speed-ratio-only test called that "carry"."""
     if outgoing.confidence < 0.3 or incoming.confidence < 0.3:
         return "unknown"
     if outgoing.value < 0.4 and incoming.value < 0.4:
         return "unknown"
-    ratio = incoming.value / max(outgoing.value, 1e-6)
-    if 0.5 <= ratio <= 2.0 and incoming.value >= 0.4:
-        return "carry"
     if incoming.value < outgoing.value * 0.35:
         return "reset"
-    return "reverse"
+    o_mag = float(np.hypot(*outgoing_vector))
+    i_mag = float(np.hypot(*incoming_vector))
+    if o_mag < 1e-6 or i_mag < 1e-6:
+        # Magnitude estimates cleared the confidence gate but no individual
+        # frame pair kept a confident vector (e.g. rotation/scale-dominated
+        # motion) — fall back to the old ratio heuristic rather than
+        # asserting a direction relationship with no vector behind it.
+        ratio = incoming.value / max(outgoing.value, 1e-6)
+        return "carry" if 0.5 <= ratio <= 2.0 else "reverse"
+    cosine = (outgoing_vector[0] * incoming_vector[0] + outgoing_vector[1] * incoming_vector[1]) / (o_mag * i_mag)
+    return "carry" if cosine >= 0.0 else "reverse"
 
 
 def _cut_observations(
@@ -213,9 +249,14 @@ def _cut_observations(
 ) -> list[CutObservation]:
     observations = []
     for candidate in candidates:
-        outgoing, out_envelope = _cut_window_motion(capture, fps, candidate.frame_index, before=True)
-        incoming, in_envelope = _cut_window_motion(capture, fps, candidate.frame_index, before=False)
-        relation = _classify_relation(outgoing, incoming)
+        outgoing, out_envelope, out_blur, out_vector = _cut_window_motion(
+            capture, fps, candidate.frame_index, before=True,
+        )
+        incoming, in_envelope, in_blur, in_vector = _cut_window_motion(
+            capture, fps, candidate.frame_index, before=False,
+        )
+        relation = _classify_relation(outgoing, incoming, out_vector, in_vector)
+        direction = _direction_bucket(*in_vector) if incoming.confidence >= 0.3 else "none"
 
         nearest_event = None
         offset = None
@@ -239,9 +280,29 @@ def _cut_observations(
                 outgoing_motion=outgoing,
                 incoming_motion=incoming,
                 relation=relation,
+                direction=direction,
+                outgoing_envelope=out_envelope,
+                incoming_envelope=in_envelope,
+                blur_envelope=[*out_blur, *in_blur],
             )
         )
     return observations
+
+
+_EFFECT_BLUR_THRESHOLD = 0.55
+
+
+def _classify_effect(blur_envelope: list[float]) -> str:
+    """Deterministic proxy for an impact/flash-style effect: a sharp,
+    sustained sharpness collapse right at the cut. This is not a real
+    luminance-based flash detector (no brightness envelope is measured) —
+    it is what's actually backed by a real, verified Fusion node graph
+    today (fusion_program's PostColor Gain pulse), so a blur-intensity
+    proxy is what gets exposed rather than a family of effect kinds with
+    nothing behind them."""
+    if not blur_envelope:
+        return "none"
+    return "flash" if max(blur_envelope) >= _EFFECT_BLUR_THRESHOLD else "none"
 
 
 def _transition_pairs(cuts: list[CutObservation]) -> list[TransitionPairObservation]:
@@ -251,16 +312,19 @@ def _transition_pairs(cuts: list[CutObservation]) -> list[TransitionPairObservat
             continue
         if cut.relation == "unknown":
             continue
-        direction = "left" if cut.incoming_motion.value >= cut.outgoing_motion.value else "right"
         overshoot = max(0.0, cut.incoming_motion.value - cut.outgoing_motion.value)
         pairs.append(
             TransitionPairObservation(
                 cut_sec=cut.sec,
                 relation=cut.relation,
-                direction=direction if cut.relation != "reset" else "none",
+                direction=cut.direction if cut.relation != "reset" else "none",
+                effect_kind=_classify_effect(cut.blur_envelope),
                 anticipation_sec=CUT_WINDOW_FRAMES / 24.0,
                 release_sec=CUT_WINDOW_FRAMES / 24.0,
+                outgoing_envelope=cut.outgoing_envelope,
+                incoming_envelope=cut.incoming_envelope,
                 overshoot=overshoot,
+                blur_envelope=cut.blur_envelope,
                 confidence=min(cut.outgoing_motion.confidence, cut.incoming_motion.confidence),
             )
         )

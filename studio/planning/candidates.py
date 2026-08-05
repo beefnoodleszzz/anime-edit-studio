@@ -29,6 +29,7 @@ import cv2
 
 from studio.analysis.global_motion import estimate_global_motion
 from studio.planning.schemas import (
+    DIRECTION_VECTORS,
     EditabilityProfile,
     MotionDirection,
     ShotWindow,
@@ -45,13 +46,6 @@ _MOTION_WEIGHT = 0.15
 _IDENTITY_WEIGHT = 0.075
 _SERIES_WEIGHT = 0.075
 
-_DIRECTION_VECTORS: dict[MotionDirection, tuple[float, float]] = {
-    "none": (0.0, 0.0),
-    "left": (-1.0, 0.0), "right": (1.0, 0.0),
-    "up": (0.0, -1.0), "down": (0.0, 1.0),
-    "up-left": (-0.7071, -0.7071), "up-right": (0.7071, -0.7071),
-    "down-left": (-0.7071, 0.7071), "down-right": (0.7071, 0.7071),
-}
 _DIRECTION_ANGLES: list[tuple[float, MotionDirection]] = [
     (0.0, "right"), (45.0, "down-right"), (90.0, "down"), (135.0, "down-left"),
     (180.0, "left"), (225.0, "up-left"), (270.0, "up"), (315.0, "up-right"),
@@ -80,7 +74,7 @@ def _direction_bucket(tx: float, ty: float) -> MotionDirection:
 def _direction_similarity(a: MotionDirection, b: MotionDirection) -> float:
     if a == "none" or b == "none":
         return 0.75
-    va, vb = _DIRECTION_VECTORS[a], _DIRECTION_VECTORS[b]
+    va, vb = DIRECTION_VECTORS[a], DIRECTION_VECTORS[b]
     cosine = va[0] * vb[0] + va[1] * vb[1]
     return max(0.0, min(1.0, (cosine + 1.0) / 2.0))
 

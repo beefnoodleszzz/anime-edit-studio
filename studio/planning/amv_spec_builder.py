@@ -12,7 +12,9 @@ from pathlib import Path
 
 from studio.planning.global_sequence_planner import SequenceChoice
 from studio.planning.motion_planner import build_clip_motion, build_transition_pair, direction_vector_for
+from studio.planning.schemas import MotionDirection
 from studio.planning.slots import TimelineSlot
+from studio.planning.transition_profile import TransitionProfile, build_transition_profiles
 from studio.spec.amv import (
     AMVSpec,
     Canvas,
@@ -25,9 +27,20 @@ from studio.spec.amv import (
     TimelinePlacement,
 )
 from studio.spec.music_timeline import MusicTimeline
+from studio.spec.reference_blueprint import ReferenceBlueprint
 
 
 _SHOT_BOUNDS_EPS = 1e-3
+
+
+def _transition_direction(previous: SequenceChoice, current: SequenceChoice) -> MotionDirection:
+    """The screen direction actually driving a cut's geometry: prefer the
+    outgoing clip's own measured exit motion (the transition starts from
+    what that clip was already doing), falling back to the incoming clip's
+    entry motion when the outgoing clip has none measured."""
+    if previous.exit_motion != "none":
+        return previous.exit_motion
+    return current.entry_motion
 
 
 def _validate_source_within_shot(conn: sqlite3.Connection, choice: SequenceChoice) -> None:
@@ -64,20 +77,29 @@ def build_amv_spec(
     demo_hash: str,
     materials_index_hash: str,
     output_path: Path,
+    blueprint: ReferenceBlueprint | None = None,
 ) -> AMVSpec:
+    """``blueprint``, when given, drives transition geometry from the Demo's
+    own measured per-relation envelopes (see ``studio.planning.
+    transition_profile``) instead of motion_planner's fixed constants."""
     conn.row_factory = sqlite3.Row
     if len(slots) != len(choices):
         raise ValueError("slots and choices must be the same length and order")
+    transition_profiles: dict[str, TransitionProfile] = (
+        build_transition_profiles(blueprint) if blueprint is not None else {}
+    )
 
     clips: list[Clip] = []
     transition_pairs = []
     cursor_sec = 0.0
     previous_clip_id: str | None = None
+    previous_choice: SequenceChoice | None = None
 
     for slot, choice in zip(slots, choices):
         if not choice.shot_id:
             cursor_sec += slot.duration_sec
             previous_clip_id = None
+            previous_choice = None
             continue
         _validate_source_within_shot(conn, choice)
         clip_id = f"c{slot.index}"
@@ -90,23 +112,30 @@ def build_amv_spec(
             anchor_sec=choice.anchor_sec,
             source=SourceRange(in_sec=choice.source_in_sec, out_sec=choice.source_out_sec),
             timeline=TimelinePlacement(in_sec=cursor_sec, duration_sec=slot.duration_sec),
-            motion=build_clip_motion(slot, canvas, direction=direction_vector_for(slot.entry_motion)),
+            # This clip's own base push uses its own measured entry motion —
+            # the actually-selected footage's real direction, not the Demo's
+            # carry/reverse/reset relation label (which isn't a geometric
+            # direction at all).
+            motion=build_clip_motion(slot, canvas, direction=direction_vector_for(choice.entry_motion)),
         )
         clips.append(clip)
 
-        if previous_clip_id is not None and slot.entry_motion != "none":
+        if previous_clip_id is not None and previous_choice is not None and slot.entry_motion != "none":
             transition_pairs.append(
                 build_transition_pair(
                     pair_id=f"t{slot.index}",
                     cut_sec=cursor_sec,
                     outgoing_clip_id=previous_clip_id,
                     incoming_clip_id=clip_id,
-                    entry_motion=slot.entry_motion,
+                    relation=slot.entry_motion,
+                    direction=_transition_direction(previous_choice, choice),
                     canvas=canvas,
                     confidence=0.6,
+                    profile=transition_profiles.get(slot.entry_motion),
                 )
             )
         previous_clip_id = clip_id
+        previous_choice = choice
         cursor_sec += slot.duration_sec
 
     return AMVSpec(

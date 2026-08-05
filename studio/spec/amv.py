@@ -23,6 +23,10 @@ TransitionDirection = Literal[
 ]
 RetimeMode = Literal["constant", "speed_ramp"]
 RetimeInterpolation = Literal["nearest", "frame_blend", "optical_flow"]
+# Extend only alongside a real, real-machine-verified Fusion node graph for
+# the new kind (see studio.execution.resolve.fusion_program) — do not add a
+# value here that compiles to nothing.
+TransitionEffect = Literal["none", "flash"]
 
 
 class _Base(BaseModel):
@@ -163,6 +167,7 @@ class TransitionPair(_Base):
     safe_scale: float = Field(..., ge=1.0)
     overshoot: float = Field(0.0, ge=0)
     confidence: float = Field(..., ge=0.0, le=1.0)
+    effect_kind: TransitionEffect = "none"
 
 
 class GlobalColor(_Base):
@@ -234,5 +239,6 @@ __all__ = [
     "TimelinePlacement",
     "TransformKeyframe",
     "TransitionDirection",
+    "TransitionEffect",
     "TransitionPair",
 ]

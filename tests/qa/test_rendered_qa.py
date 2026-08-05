@@ -77,6 +77,50 @@ def test_run_rendered_qa_passes_only_when_technical_and_fusion_and_metrics_all_p
     assert all(metric.passed for metric in report.metrics.values())
 
 
+def test_run_rendered_qa_fails_when_a_hard_gated_style_metric_drifts_past_tolerance(tmp_path, monkeypatch):
+    # Regression for the bug the codex review caught: metrics used to be
+    # computed and reported but never actually gated `passed` — a render
+    # whose cut rhythm/motion character had nothing to do with the Demo
+    # could still be reported as passing.
+    media = tmp_path / "preview.mp4"
+    media.write_bytes(b"render")
+    _mock_probe(monkeypatch, duration=4.0)
+
+    report = run_rendered_qa(
+        media,
+        expected_duration=4.0, expected_width=1080, expected_height=1350,
+        expected_fps=Fraction(24000, 1001),
+        reference_style=_style(), actual_style=_style(motion_coverage=0.0),
+        fusion_graph_consistent=True,
+    )
+
+    assert report.technical.passed
+    assert report.fusion_graph_consistent
+    assert not report.metrics["motion_coverage"].passed
+    assert not report.style_passed
+    assert not report.passed
+
+
+def test_run_rendered_qa_ignores_drift_on_stubbed_style_metrics_not_yet_measured(tmp_path, monkeypatch):
+    # blur_usage is still a hardcoded constant in _style_summary(); it must
+    # not gate release until it is a real measurement.
+    media = tmp_path / "preview.mp4"
+    media.write_bytes(b"render")
+    _mock_probe(monkeypatch, duration=4.0)
+
+    report = run_rendered_qa(
+        media,
+        expected_duration=4.0, expected_width=1080, expected_height=1350,
+        expected_fps=Fraction(24000, 1001),
+        reference_style=_style(), actual_style=_style(blur_usage=0.9),
+        fusion_graph_consistent=True,
+    )
+
+    assert not report.metrics["blur_usage"].passed
+    assert report.style_passed
+    assert report.passed
+
+
 def test_run_rendered_qa_fails_on_inconsistent_fusion_graph_even_if_technical_passes(tmp_path, monkeypatch):
     media = tmp_path / "preview.mp4"
     media.write_bytes(b"render")

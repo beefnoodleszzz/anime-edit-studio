@@ -1,18 +1,17 @@
-"""Beam Search beats per-slot greedy (REFACTOR.md §22.6, beam_width=1 vs >1
-on the same candidate pools): a locally-best first pick can force a later
-slot into reusing an overlapping source range; keeping more than one beam
-alive can avoid that reuse and reach a higher total score. Uses a
-monkeypatched candidate provider so the scenario is fully controlled and
-fast — the pipeline that actually produces ScoredWindow objects is
-exercised end-to-end by tests/selection/test_source_window_regression.py
-and tests/planning/test_global_sequence_planner.py."""
+"""Beam Search beats per-slot greedy (beam_width=1 vs >1 on the same
+candidate pools): a locally-best first pick can force a later slot into
+reusing an overlapping source range; keeping more than one beam alive can
+avoid that reuse and reach a higher total score. Uses a monkeypatched
+candidate provider so the scenario is fully controlled and fast — the
+pipeline that actually produces ScoredWindow objects is exercised
+end-to-end by tests/planning/test_global_sequence_planner.py."""
 from __future__ import annotations
 
 import sqlite3
 
 import studio.planning.global_sequence_planner as planner
-from studio.selection.schemas import ShotWindow, TechnicalProfile
-from studio.selection.selector import ScoredWindow
+from studio.planning.candidates import ScoredWindow
+from studio.planning.schemas import ShotWindow, TechnicalProfile
 
 
 def _window(window_id, *, asset_id, start, end):
@@ -26,7 +25,7 @@ def _window(window_id, *, asset_id, start, end):
 def _scored(window_id, *, asset_id, start, end, score):
     return ScoredWindow(
         window=_window(window_id, asset_id=asset_id, start=start, end=end),
-        score=score, components={}, shot_row={},
+        score=score, components={},
     )
 
 
@@ -47,7 +46,6 @@ def test_wider_beam_avoids_forced_source_overlap_and_scores_higher(monkeypatch):
         return _SLOT0_CANDIDATES if slot.index == 0 else _SLOT1_CANDIDATES
 
     monkeypatch.setattr(planner, "candidates_for_slot", fake_candidates_for_slot)
-    monkeypatch.setattr(planner, "shot_pool", lambda *a, **k: ["ignored"])
 
     from studio.planning.slots import TimelineSlot
 
@@ -57,8 +55,9 @@ def test_wider_beam_avoids_forced_source_overlap_and_scores_higher(monkeypatch):
     ]
 
     conn = sqlite3.connect(":memory:")
-    greedy = planner.plan_sequence(conn, slots, project_id="p", beam_width=1)
-    wide = planner.plan_sequence(conn, slots, project_id="p", beam_width=4)
+    ignored_ids = ["ignored"]
+    greedy = planner.plan_sequence(conn, slots, project_id="p", available_shot_ids=ignored_ids, beam_width=1)
+    wide = planner.plan_sequence(conn, slots, project_id="p", available_shot_ids=ignored_ids, beam_width=4)
 
     # Greedy commits to W1 first, then has no non-overlapping option left for
     # slot 1 and is forced to reuse asset A's overlapping range.

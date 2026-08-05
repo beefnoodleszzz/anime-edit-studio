@@ -6,7 +6,7 @@ from pathlib import Path
 
 from studio.core.state import ensure_state_schema
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 19
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_V2_DB = REPO / "library" / "engine.v2.sqlite"
 
@@ -598,6 +598,72 @@ def _migration_017(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_018(conn: sqlite3.Connection) -> None:
+    """Drop the CV candidate-generation/selection stage's storage (ingest,
+    shot detection, embeddings, tracking, ShotWindow scoring caches). Shots
+    now arrive pre-selected by ID from the external anime-shot-library
+    catalog, so none of this is computed or cached locally any more; only
+    the minimal ``assets``/``shots`` shape the planning/execution layer
+    still reads (path/fps lookup, start_sec/end_sec, light tag metadata for
+    continuity scoring) survives, plus a pointer back to the source library
+    shot for traceability."""
+    for table in (
+        "shot_windows",
+        "shot_window_embeddings",
+        "shot_window_tracks",
+        "shot_tracks",
+        "shot_scores",
+        "candidate_scores",
+        "shot_temporal_quality",
+        "subject_layers",
+        "characters",
+        "source_records",
+        "shots_fts",
+        "music_tracks",
+    ):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    conn.executescript(
+        """
+        DROP TABLE shots;
+        CREATE TABLE shots (
+            id TEXT PRIMARY KEY,
+            asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            source_shot_id TEXT,
+            start_sec REAL NOT NULL,
+            end_sec REAL NOT NULL CHECK(end_sec > start_sec),
+            character TEXT,
+            series TEXT,
+            tags_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+        CREATE INDEX idx_shots_asset ON shots(asset_id);
+        CREATE INDEX idx_shots_source ON shots(source_shot_id);
+        """
+    )
+
+
+def _migration_019(conn: sqlite3.Connection) -> None:
+    """amv_projects now records the shot_ids the caller supplied (resolved
+    through anime-shot-library) instead of a materials directory to scan."""
+    conn.executescript(
+        """
+        DROP TABLE amv_projects;
+        CREATE TABLE amv_projects (
+            id TEXT PRIMARY KEY,
+            demo_path TEXT NOT NULL,
+            shot_ids_json TEXT NOT NULL,
+            music_path TEXT,
+            focus TEXT,
+            series_scope TEXT,
+            output_dir TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            updated_at TEXT
+        );
+        """
+    )
+
+
 MIGRATIONS = (
     (1, _migration_001),
     (2, _migration_002),
@@ -616,6 +682,8 @@ MIGRATIONS = (
     (15, _migration_015),
     (16, _migration_016),
     (17, _migration_017),
+    (18, _migration_018),
+    (19, _migration_019),
 )
 
 

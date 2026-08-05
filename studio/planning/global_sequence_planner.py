@@ -1,15 +1,15 @@
-"""GlobalSequencePlanner (REFACTOR.md §16): Beam Search over ShotWindow candidates.
+"""GlobalSequencePlanner: Beam Search over pre-curated shot candidates.
 
-Selection unit is a ShotWindow — a precise time slice inside a Shot
-(REFACTOR.md §4: "选择单位必须从 Shot 变成 ShotWindow") — not the whole Shot.
-``studio.selection.selector`` generates/scores the per-slot candidate pool;
-this module is the only place that judges the *sequence*: identity/color/
-motion-direction continuity across the beam, and rejecting a window that
-reuses another already-chosen window's source range.
+Every shot fed in here already passed selection in anime-shot-library
+(external curation by ID); ``studio.planning.candidates`` just trims/scores
+each one for a single slot. This module is the only place that judges the
+*sequence*: identity/series/motion-direction continuity across the beam,
+and rejecting a window that reuses another already-chosen window's source
+range.
 
 Determinism: the beam is seeded from ``hash(project_id + slot plan)``, and
 ties are broken by window_id, so identical inputs always produce the
-identical sequence (REFACTOR.md §16).
+identical sequence.
 """
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ import hashlib
 import sqlite3
 from dataclasses import dataclass, field
 
+from studio.planning.candidates import ScoredWindow, candidates_for_slot
+from studio.planning.schemas import MotionDirection
 from studio.planning.slots import TimelineSlot
-from studio.selection.schemas import MotionDirection, ShotWindow
-from studio.selection.selector import ScoredWindow, candidates_for_slot, shot_pool
 
 BEAM_WIDTH = 6
 CANDIDATES_PER_SLOT = 30
@@ -125,24 +125,22 @@ def plan_sequence(
     slots: list[TimelineSlot],
     *,
     project_id: str,
-    asset_ids: list[str] | None = None,
-    character: str | None = None,
+    available_shot_ids: list[str],
     beam_width: int = BEAM_WIDTH,
 ) -> list[SequenceChoice]:
-    """Beam-search a globally consistent ShotWindow per TimelineSlot.
+    """Beam-search a globally consistent window per TimelineSlot, choosing
+    only among ``available_shot_ids`` — the exact shots the caller already
+    imported from anime-shot-library for this project. No further pool
+    retrieval happens here; curation already happened upstream.
 
-    Empty result for a slot means no candidate cleared the hard technical
-    gate — callers must not silently drop the slot; REFACTOR.md §8.4:
-    "硬门禁失败镜头不能靠软分数救回。"
+    Empty result for a slot means no candidate was available/usable for
+    it — callers must not silently drop the slot.
     """
     conn.row_factory = sqlite3.Row
     beams = [_Beam()]
 
     for slot in slots:
-        pool = shot_pool(
-            conn, asset_ids=asset_ids, character=character, duration_sec=slot.duration_sec,
-        )
-        candidates = candidates_for_slot(conn, slot, pool, limit=CANDIDATES_PER_SLOT)
+        candidates = candidates_for_slot(conn, slot, available_shot_ids, limit=CANDIDATES_PER_SLOT)
         candidates = [c for c in candidates if c.window.technical.passed]
         if not candidates:
             for beam in beams:

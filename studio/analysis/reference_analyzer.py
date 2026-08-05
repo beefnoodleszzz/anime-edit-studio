@@ -15,10 +15,9 @@ import cv2
 import numpy as np
 
 from studio.analysis.cut_detection import CutCandidate, detect_cuts
+from studio.analysis.frame_features import dominant_palette, estimate_face
 from studio.analysis.global_motion import estimate_global_motion
-from studio.asset_intelligence.visual.analyzer import VisualAnalyzer
 from studio.core.hashing import file_sha256
-from studio.selection.backends.anime_face import create_anime_face_backend
 from studio.spec.music_timeline import MusicTimeline
 from studio.spec.reference_blueprint import (
     CutObservation,
@@ -93,9 +92,7 @@ def _shot_kind_probabilities(
 
 def _shot_observations(
     capture: cv2.VideoCapture, fps: float, boundaries_sec: list[float], duration_sec: float,
-    face_backend=None,
 ) -> list[ShotObservation]:
-    face_backend = face_backend or create_anime_face_backend()
     edges = [0.0, *boundaries_sec, duration_sec]
     shots: list[ShotObservation] = []
     for index, (start, end) in enumerate(zip(edges, edges[1:])):
@@ -116,19 +113,16 @@ def _shot_observations(
         # mid-frame), never fabricated. A single mid-frame face/color read is
         # a coarse per-shot summary, not a gating decision.
         color_mid = _bgr_at(capture, mid_frame)
-        faces = face_backend.detect(color_mid) if color_mid is not None else []
-        best_face = max(faces, key=lambda face: face.confidence, default=None)
-        subject_count = 1 if best_face is not None else 0
-        face_visibility = best_face.confidence if best_face is not None else 0.0
-        eye_visibility = best_face.eyes_visible_ratio if best_face is not None else 0.0
+        face = estimate_face(color_mid) if color_mid is not None else None
+        subject_count = 1 if face is not None and face.confidence > 0.0 else 0
+        face_visibility = face.confidence if face is not None else 0.0
+        eye_visibility = face.eyes_visible_ratio if face is not None else 0.0
         portrait_probability = (
-            best_face.frontal_probability * best_face.confidence if best_face is not None else 0.0
+            face.frontal_probability * face.confidence if face is not None else 0.0
         )
         stable_ratio = float(np.clip(1.0 - translation / 40.0, 0.0, 1.0))
         action_probability = float(np.clip(motion.confidence * translation / 30.0, 0.0, 1.0))
-        dominant_color = (
-            VisualAnalyzer._palette(color_mid)[0] if color_mid is not None else None
-        )
+        dominant_color = dominant_palette(color_mid)[0] if color_mid is not None else None
 
         shots.append(
             ShotObservation(

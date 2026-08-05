@@ -15,8 +15,9 @@ _SIZE = (320, 240)
 
 def _write_asset_video(path, *, total_duration_sec, fps=12.0):
     """A textured, moderately bright synthetic video long enough to back
-    every seeded shot — real media so ShotWindow generation (technical gate,
-    portrait/action analysis) actually runs, not metadata-only columns."""
+    every seeded shot — real media so the on-demand entry/exit motion
+    estimate in studio.planning.candidates actually runs against real
+    frames, not a missing file."""
     rng = np.random.default_rng(3)
     frame_count = int(total_duration_sec * fps) + 2
     writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, _SIZE)
@@ -27,7 +28,7 @@ def _write_asset_video(path, *, total_duration_sec, fps=12.0):
     writer.release()
 
 
-def _seed_shots(conn, *, tmp_path, count=6, duration=2.0):
+def _seed_shots(conn, *, tmp_path, count=6, duration=2.0) -> list[str]:
     video = tmp_path / "a0.mp4"
     _write_asset_video(video, total_duration_sec=count * duration)
     conn.execute(
@@ -35,46 +36,40 @@ def _seed_shots(conn, *, tmp_path, count=6, duration=2.0):
         "VALUES ('a0',?,'sha0',320,240,12,1,?)",
         (str(video), count * duration),
     )
-    for i in range(count):
+    shot_ids = [f"s{i}" for i in range(count)]
+    for i, shot_id in enumerate(shot_ids):
         conn.execute(
-            """
-            INSERT INTO shots(
-              id,asset_id,idx,start_sec,end_sec,image_quality,face_visibility,
-              visual_energy,shot_scale,cutability
-            ) VALUES (?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                f"s{i}", "a0", i, i * duration, (i + 1) * duration,
-                0.8, 0.7, 0.4 + (i % 3) * 0.1, 0.5, 0.7,
-            ),
+            "INSERT INTO shots(id,asset_id,start_sec,end_sec,character) VALUES (?,?,?,?,?)",
+            (shot_id, "a0", i * duration, (i + 1) * duration, "hero"),
         )
     conn.commit()
+    return shot_ids
 
 
 def test_plan_sequence_fills_every_slot_and_avoids_immediate_reuse(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, tmp_path=tmp_path, count=8)
+    shot_ids = _seed_shots(conn, tmp_path=tmp_path, count=8)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5, entry_motion="carry")
         for i in range(5)
     ]
-    choices = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
+    choices = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
     assert len(choices) == len(slots)
     assert all(c.shot_id for c in choices)
-    shot_ids = [c.shot_id for c in choices]
-    for a, b in zip(shot_ids, shot_ids[1:]):
+    chosen_ids = [c.shot_id for c in choices]
+    for a, b in zip(chosen_ids, chosen_ids[1:]):
         assert a != b
 
 
 def test_plan_sequence_is_deterministic(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, tmp_path=tmp_path, count=8)
+    shot_ids = _seed_shots(conn, tmp_path=tmp_path, count=8)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5, entry_motion="carry")
         for i in range(4)
     ]
-    first = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
-    second = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
+    first = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
+    second = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
     assert [c.shot_id for c in first] == [c.shot_id for c in second]
     assert [c.source_in_sec for c in first] == [c.source_in_sec for c in second]
 
@@ -83,19 +78,19 @@ def test_plan_sequence_reports_empty_slot_when_no_candidate_clears_hard_gates(tm
     conn = connect(tmp_path / "engine.v2.sqlite")
     _seed_shots(conn, tmp_path=tmp_path, count=2, duration=2.0)
     slots = [TimelineSlot(index=0, start_sec=0.0, duration_sec=2.0, target_energy=0.5)]
-    choices = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["does-not-exist"])
+    choices = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=["does-not-exist"])
     assert len(choices) == 1
     assert choices[0].shot_id == ""
 
 
 def test_plan_sequence_choices_stay_inside_their_own_shot(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, tmp_path=tmp_path, count=4, duration=2.0)
+    shot_ids = _seed_shots(conn, tmp_path=tmp_path, count=4, duration=2.0)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5)
         for i in range(3)
     ]
-    choices = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
+    choices = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
     rows = {
         row["id"]: (row["start_sec"], row["end_sec"])
         for row in conn.execute("SELECT id,start_sec,end_sec FROM shots")
@@ -108,13 +103,13 @@ def test_plan_sequence_choices_stay_inside_their_own_shot(tmp_path):
 
 def test_build_amv_spec_end_to_end_from_planner_output(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, tmp_path=tmp_path, count=4, duration=2.0)
+    shot_ids = _seed_shots(conn, tmp_path=tmp_path, count=4, duration=2.0)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5,
                       entry_motion="carry" if i > 0 else "none")
         for i in range(3)
     ]
-    choices = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
+    choices = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
 
     music = MusicTimeline(
         source_hash="music-hash", duration_sec=6.0, selected_tempo=120.0, tempo_confidence=0.8,

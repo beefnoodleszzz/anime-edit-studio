@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from studio.selection.schemas import MotionDirection
+from studio.planning.schemas import MotionDirection
 
 EntryMotion = Literal["carry", "reverse", "reset", "none"]
 SlotKind = Literal["portrait", "eye", "action", "impact", "transition", "hold", "generic"]

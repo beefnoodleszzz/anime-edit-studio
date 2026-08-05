@@ -197,15 +197,25 @@ class TestRenderedOutput:
 
 
 class TestSelectionSourceWindows:
-    """REFACTOR.md §22.8: the new ShotWindow selector, not a hand-built
-    SourceRange, drives a real render — verifying the §22.4 regression
-    (source.in_sec must not default to shot.start_sec) against actually
-    indexed footage rather than a synthetic clip."""
+    """The candidate builder, not a hand-built SourceRange, drives a real
+    render — verifying source.in_sec/out_sec reflect the actually-trimmed
+    window against real already-imported shots rather than a synthetic
+    clip."""
 
     def test_planner_uses_precise_windows_and_renders(self, adapter, conn, asset_ids, music_path, tmp_path):
         from studio.planning.amv_spec_builder import build_amv_spec
         from studio.planning.global_sequence_planner import plan_sequence
         from studio.spec.music_timeline import MusicTimeline
+
+        placeholders = ",".join("?" for _ in asset_ids)
+        shot_ids = [
+            row[0]
+            for row in conn.execute(
+                f"SELECT id FROM shots WHERE asset_id IN ({placeholders})", asset_ids
+            ).fetchall()
+        ]
+        if not shot_ids:
+            pytest.skip("材料库中没有已导入的镜头")
 
         slots = [
             TimelineSlot(index=0, start_sec=0.0, duration_sec=CLIP_DURATION, target_energy=0.7),
@@ -214,7 +224,7 @@ class TestSelectionSourceWindows:
                 target_energy=0.7, entry_motion="carry",
             ),
         ]
-        choices = plan_sequence(conn, slots, project_id=PROJECT_NAME, asset_ids=asset_ids)
+        choices = plan_sequence(conn, slots, project_id=PROJECT_NAME, available_shot_ids=shot_ids)
         if not all(choice.shot_id for choice in choices):
             pytest.skip("材料库中没有能通过技术门禁的候选窗口")
 

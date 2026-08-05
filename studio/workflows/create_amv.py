@@ -1,11 +1,13 @@
-"""create_amv: the one supported workflow (REFACTOR.md §3-4, §15).
+"""create_amv: the one supported workflow.
 
-Demo + materials (+ optional target music, optional focus) -> AMVSpec ->
-Resolve preview -> QA. Split into two phases on purpose:
+Demo + a list of pre-selected anime-shot-library shot IDs (+ optional
+target music, optional focus) -> AMVSpec -> Resolve preview -> QA. Split
+into two phases on purpose:
 
-* :func:`build_amv_spec_workflow` never touches Resolve. It indexes
-  materials, analyzes the Demo and the target track, plans the sequence and
-  motion, and writes ``project.json`` / ``reference_blueprint.json`` /
+* :func:`build_amv_spec_workflow` never touches Resolve. It resolves the
+  given shot IDs against anime-shot-library's catalog, imports them,
+  analyzes the Demo and the target track, plans the sequence and motion,
+  and writes ``project.json`` / ``reference_blueprint.json`` /
   ``music_timeline.json`` / ``amv_spec.json`` — fully testable and usable
   even when Resolve is not running.
 * :func:`render_amv_preview` places the resulting AMVSpec on a real Resolve
@@ -14,7 +16,7 @@ Resolve preview -> QA. Split into two phases on purpose:
   surface ``ResolveUnavailable`` rather than claim a preview exists.
 
 Repeated runs overwrite ``amv_spec.json`` / ``preview.mov`` / ``qa.json`` in
-place (REFACTOR.md §3) — no r1/r2/v3/candidate-groups litter.
+place — no r1/r2/v3/candidate-groups litter.
 """
 from __future__ import annotations
 
@@ -25,23 +27,19 @@ from pathlib import Path
 
 from studio.analysis.music_analyzer import analyze_music_timeline
 from studio.analysis.reference_analyzer import analyze_reference
-from studio.asset_intelligence.ingest.service import ingest_asset
-from studio.asset_intelligence.pipeline import analyze_assets
-from studio.asset_intelligence.shot_detection.detector import detect_shots
 from studio.core.database import DEFAULT_V2_DB, connect
 from studio.core.hashing import file_sha256
 from studio.execution.ffmpeg import prebake_audio
 from studio.planning.amv_spec_builder import build_amv_spec
 from studio.planning.global_sequence_planner import plan_sequence
 from studio.planning.rhythm_style_mapper import map_rhythm_to_slots
+from studio.planning.shot_library_import import import_shot_manifest, resolve_shot_ids
 from studio.qa.optimizer import optimize_test_interval, pick_representative_interval
 from studio.qa.rendered_qa import RenderedQAReport, run_rendered_qa
 from studio.spec import SPEC_VERSION
 from studio.spec.amv import AMVSpec, Canvas, Timebase
 from studio.spec.music_timeline import MusicTimeline
 from studio.spec.reference_blueprint import ReferenceBlueprint
-
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".m4v"}
 
 
 @dataclass(frozen=True)
@@ -61,37 +59,10 @@ class AMVSpecResult:
         }
 
 
-def _iter_materials(materials_dir: Path):
-    for path in sorted(materials_dir.rglob("*")):
-        if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS:
-            yield path
-
-
-def index_materials(materials_dir: Path, *, database: Path, profile: str = "full") -> list[str]:
-    """Ingest/shot-detect every material incrementally; both steps are
-    idempotent (content-hash upsert / skip-if-already-detected), so re-running
-    over the same directory never re-analyzes the whole library.
-
-    ``profile="coarse"`` skips the ml-tier analyzers (embeddings/tagger,
-    REFACTOR.md §18) for a fast first pass; ``"full"`` (default) runs them.
-    ShotWindow generation itself always runs at selection time regardless of
-    this profile — it only gates the per-asset embedding/tagger pass.
-    """
-    if profile not in ("coarse", "full"):
-        raise ValueError(f"unknown index profile: {profile!r}")
-    asset_ids = []
-    for path in _iter_materials(materials_dir):
-        info = ingest_asset(path, database=database)
-        detect_shots(info["id"], database=database)
-        asset_ids.append(info["id"])
-    analyze_assets(asset_id=None, include_models=(profile == "full"))
-    return asset_ids
-
-
-def _materials_index_hash(asset_ids: list[str]) -> str:
+def _shot_ids_hash(shot_ids: list[str]) -> str:
     import hashlib
 
-    return hashlib.sha256("|".join(sorted(asset_ids)).encode()).hexdigest()
+    return hashlib.sha256("|".join(sorted(shot_ids)).encode()).hexdigest()
 
 
 def _load_or_analyze_reference(conn: sqlite3.Connection, demo_path: Path) -> ReferenceBlueprint:
@@ -143,45 +114,37 @@ def build_amv_spec_workflow(
     *,
     project_id: str,
     demo_path: Path,
-    materials_dir: Path,
+    shot_ids: list[str],
     music_path: Path | None = None,
     focus: str | None = None,
     aspect: str | None = None,
     fps: tuple[int, int] | None = None,
     projects_root: Path = Path("projects"),
     database: Path = DEFAULT_V2_DB,
-    selector_profile: str = "balanced",
+    catalog_db: Path | None = None,
 ) -> AMVSpecResult:
-    """``selector_profile`` (REFACTOR.md §18): ``"fast"`` skips the ml-tier
-    per-asset analyzers (embeddings/tagger) for a quicker first pass.
-    ``"balanced"`` (default) and ``"quality"`` both run the full analyzer set
-    and the same ShotWindow selection pipeline today — CoTracker/SAM2/DOVER
-    refinement isn't wired into the selector yet (backends/*.py degrade to
-    their fallbacks regardless of profile), so those two profiles are not
-    currently distinguishable; the option exists so callers don't need to
-    change once that wiring lands."""
-    if selector_profile not in ("fast", "balanced", "quality"):
-        raise ValueError(f"unknown selector profile: {selector_profile!r}")
+    """``shot_ids`` are anime-shot-library shot ids the caller already
+    curated there; this workflow does no footage selection of its own."""
+    if not shot_ids:
+        raise ValueError("shot_ids must not be empty")
     output_dir = projects_root / project_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    asset_ids = index_materials(
-        materials_dir, database=database,
-        profile="coarse" if selector_profile == "fast" else "full",
-    )
+    manifest = resolve_shot_ids(shot_ids, catalog_db)
     conn = connect(database)
     try:
+        import_shot_manifest(conn, manifest)
         with conn:
             conn.execute(
                 """
-                INSERT INTO amv_projects(id,demo_path,materials_dir,music_path,focus,output_dir)
+                INSERT INTO amv_projects(id,demo_path,shot_ids_json,music_path,focus,output_dir)
                 VALUES (?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
-                  demo_path=excluded.demo_path, materials_dir=excluded.materials_dir,
+                  demo_path=excluded.demo_path, shot_ids_json=excluded.shot_ids_json,
                   music_path=excluded.music_path, focus=excluded.focus,
                   output_dir=excluded.output_dir, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
                 """,
-                (project_id, str(demo_path), str(materials_dir), str(music_path) if music_path else None,
+                (project_id, str(demo_path), json.dumps(shot_ids), str(music_path) if music_path else None,
                  focus, str(output_dir)),
             )
 
@@ -197,7 +160,7 @@ def build_amv_spec_workflow(
         music = _load_or_analyze_music(conn, resolved_music_path, cache_root=output_dir / "cache")
 
         slots = map_rhythm_to_slots(blueprint, music)
-        choices = plan_sequence(conn, slots, project_id=project_id, asset_ids=asset_ids, character=focus)
+        choices = plan_sequence(conn, slots, project_id=project_id, available_shot_ids=shot_ids)
 
         resolved_aspect = aspect or blueprint.technical.aspect
         width, height = blueprint.technical.width, blueprint.technical.height
@@ -215,7 +178,7 @@ def build_amv_spec_workflow(
             canvas=canvas, timebase=timebase, music=music,
             music_path=resolved_music_path,
             demo_hash=blueprint.source_hash,
-            materials_index_hash=_materials_index_hash(asset_ids),
+            materials_index_hash=_shot_ids_hash(shot_ids),
             output_path=output_dir / "preview.mov",
         )
     finally:
@@ -227,7 +190,7 @@ def build_amv_spec_workflow(
     paths = result.paths()
     paths["project"].write_text(
         json.dumps(
-            {"id": project_id, "demo": str(demo_path), "materials": str(materials_dir),
+            {"id": project_id, "demo": str(demo_path), "shot_ids": shot_ids,
              "music": str(resolved_music_path), "focus": focus},
             ensure_ascii=False, indent=2,
         ),

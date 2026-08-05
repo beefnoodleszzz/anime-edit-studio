@@ -18,16 +18,16 @@ def test_migration_creates_amv_tables(tmp_path):
     conn.close()
 
 
-def test_schema_version_is_17():
-    assert SCHEMA_VERSION == 17
+def test_schema_version_is_19():
+    assert SCHEMA_VERSION == 19
 
 
 def test_amv_project_and_run_round_trip(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
     with conn:
         conn.execute(
-            "INSERT INTO amv_projects(id,demo_path,materials_dir,output_dir) VALUES (?,?,?,?)",
-            ("proj-1", "/tmp/demo.mp4", "/tmp/materials", "projects/proj-1"),
+            "INSERT INTO amv_projects(id,demo_path,shot_ids_json,output_dir) VALUES (?,?,?,?)",
+            ("proj-1", "/tmp/demo.mp4", '["s1","s2"]', "projects/proj-1"),
         )
         conn.execute(
             "INSERT INTO amv_runs(project_id,stage,status,details_json) VALUES (?,?,?,?)",
@@ -41,23 +41,39 @@ def test_amv_project_and_run_round_trip(tmp_path):
     conn.close()
 
 
-def test_migration_17_adds_shot_windows_and_drops_review_decisions(tmp_path):
+def test_migration_18_drops_the_cv_selection_stage_tables(tmp_path):
+    """Footage now arrives pre-selected by ID from anime-shot-library, so
+    the old candidate-generation caches (ShotWindow scoring, embeddings,
+    tracking) have nothing left to write into."""
     conn = connect(tmp_path / "engine.v2.sqlite")
     tables = {
         row[0]
         for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
-    for name in ("shot_windows", "shot_window_embeddings", "shot_window_tracks"):
-        assert name in tables
-    assert "review_decisions" not in tables
+    for name in (
+        "review_decisions", "shot_windows", "shot_window_embeddings", "shot_window_tracks",
+        "shot_tracks", "shot_scores", "candidate_scores", "shot_temporal_quality",
+        "subject_layers", "characters", "source_records", "shots_fts", "music_tracks",
+    ):
+        assert name not in tables
+    conn.close()
+
+
+def test_shots_table_has_the_lean_pre_selected_shot_shape(tmp_path):
+    conn = connect(tmp_path / "engine.v2.sqlite")
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(shots)")}
+    assert columns == {
+        "id", "asset_id", "source_shot_id", "start_sec", "end_sec",
+        "character", "series", "tags_json", "created_at",
+    }
     conn.close()
 
 
 def test_amv_run_rejects_unknown_stage(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
     conn.execute(
-        "INSERT INTO amv_projects(id,demo_path,materials_dir,output_dir) VALUES (?,?,?,?)",
-        ("proj-1", "/tmp/demo.mp4", "/tmp/materials", "projects/proj-1"),
+        "INSERT INTO amv_projects(id,demo_path,shot_ids_json,output_dir) VALUES (?,?,?,?)",
+        ("proj-1", "/tmp/demo.mp4", '["s1"]', "projects/proj-1"),
     )
     try:
         conn.execute(

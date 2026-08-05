@@ -27,7 +27,7 @@ def _write_asset_video(path, *, total_duration_sec, fps=12.0):
     writer.release()
 
 
-def _seed_shots(conn, *, tmp_path, count=4, duration=2.0):
+def _seed_shots(conn, *, tmp_path, count=4, duration=2.0) -> list[str]:
     video = tmp_path / "a0.mp4"
     _write_asset_video(video, total_duration_sec=count * duration)
     conn.execute(
@@ -35,28 +35,25 @@ def _seed_shots(conn, *, tmp_path, count=4, duration=2.0):
         "VALUES ('a0',?,'sha0',320,240,12,1,?)",
         (str(video), count * duration),
     )
-    for i in range(count):
+    shot_ids = [f"s{i}" for i in range(count)]
+    for i, shot_id in enumerate(shot_ids):
         conn.execute(
-            """
-            INSERT INTO shots(
-              id,asset_id,idx,start_sec,end_sec,image_quality,face_visibility,
-              visual_energy,shot_scale,cutability
-            ) VALUES (?,?,?,?,?,?,?,?,?,?)
-            """,
-            (f"s{i}", "a0", i, i * duration, (i + 1) * duration, 0.8, 0.7, 0.5, 0.5, 0.7),
+            "INSERT INTO shots(id,asset_id,start_sec,end_sec) VALUES (?,?,?,?)",
+            (shot_id, "a0", i * duration, (i + 1) * duration),
         )
     conn.commit()
+    return shot_ids
 
 
 def test_compile_amv_spec_builds_one_owned_comp_per_clip_with_transitions(tmp_path):
     conn = connect(tmp_path / "engine.v2.sqlite")
-    _seed_shots(conn, tmp_path=tmp_path, count=3)
+    shot_ids = _seed_shots(conn, tmp_path=tmp_path, count=3)
     slots = [
         TimelineSlot(index=i, start_sec=i * 2.0, duration_sec=2.0, target_energy=0.5,
                       entry_motion="carry" if i > 0 else "none")
         for i in range(3)
     ]
-    choices = plan_sequence(conn, slots, project_id="proj-1", asset_ids=["a0"])
+    choices = plan_sequence(conn, slots, project_id="proj-1", available_shot_ids=shot_ids)
     music = MusicTimeline(source_hash="m0", duration_sec=6.0, selected_tempo=120.0, tempo_confidence=0.8)
     spec = build_amv_spec(
         conn, project_id="proj-1", slots=slots, choices=choices,

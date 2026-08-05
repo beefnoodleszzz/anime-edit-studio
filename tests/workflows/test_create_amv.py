@@ -35,23 +35,22 @@ def _write_audio(path, duration=6, sample_rate=22050):
     sf.write(path, audio, sample_rate)
 
 
-def _seed_shots(database, asset_id: str, *, count: int = 6, shot_duration: float = 1.0) -> None:
+def _seed_shots(database, asset_id: str, *, count: int = 6, shot_duration: float = 1.0) -> list[str]:
     conn = connect(database)
+    shot_ids = [f"{asset_id}-s{index}" for index in range(count)]
     with conn:
         conn.execute(
             "INSERT OR IGNORE INTO assets(id,path,sha256,width,height,fps_num,fps_den,duration_sec,codec,proxy_path) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (asset_id, f"/tmp/{asset_id}.mp4", asset_id, 320, 240, 24, 1, count * shot_duration, "h264", None),
         )
-        for index in range(count):
+        for index, shot_id in enumerate(shot_ids):
             conn.execute(
-                "INSERT OR IGNORE INTO shots(id,asset_id,idx,start_sec,end_sec) VALUES (?,?,?,?,?)",
-                (
-                    f"{asset_id}-s{index}", asset_id, index,
-                    index * shot_duration, (index + 1) * shot_duration,
-                ),
+                "INSERT OR IGNORE INTO shots(id,asset_id,start_sec,end_sec) VALUES (?,?,?,?)",
+                (shot_id, asset_id, index * shot_duration, (index + 1) * shot_duration),
             )
     conn.close()
+    return shot_ids
 
 
 def test_build_amv_spec_workflow_writes_the_exact_output_contract(tmp_path, monkeypatch):
@@ -61,13 +60,14 @@ def test_build_amv_spec_workflow_writes_the_exact_output_contract(tmp_path, monk
     _write_audio(music)
     database = tmp_path / "engine.sqlite"
 
-    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database, profile="full": ["mat0"])
-    _seed_shots(database, "mat0", count=8, shot_duration=0.5)
+    monkeypatch.setattr(module, "resolve_shot_ids", lambda shot_ids, catalog_db=None: [])
+    monkeypatch.setattr(module, "import_shot_manifest", lambda conn, manifest: [])
+    shot_ids = _seed_shots(database, "mat0", count=8, shot_duration=0.5)
 
     result = module.build_amv_spec_workflow(
         project_id="test-amv",
         demo_path=demo,
-        materials_dir=tmp_path,  # unused thanks to the monkeypatch above
+        shot_ids=shot_ids,  # DB seeded directly; resolve/import monkeypatched away above
         music_path=music,
         database=database,
         projects_root=tmp_path / "projects",
@@ -95,8 +95,9 @@ def test_build_amv_spec_workflow_caches_reference_and_music_analysis_by_hash(tmp
     _write_audio(music)
     database = tmp_path / "engine.sqlite"
 
-    monkeypatch.setattr(module, "index_materials", lambda materials_dir, *, database, profile="full": ["mat0"])
-    _seed_shots(database, "mat0", count=8, shot_duration=0.5)
+    monkeypatch.setattr(module, "resolve_shot_ids", lambda shot_ids, catalog_db=None: [])
+    monkeypatch.setattr(module, "import_shot_manifest", lambda conn, manifest: [])
+    shot_ids = _seed_shots(database, "mat0", count=8, shot_duration=0.5)
 
     calls = {"reference": 0, "music": 0}
     real_analyze_reference = module.analyze_reference
@@ -114,11 +115,11 @@ def test_build_amv_spec_workflow_caches_reference_and_music_analysis_by_hash(tmp
     monkeypatch.setattr(module, "analyze_music_timeline", counting_music)
 
     module.build_amv_spec_workflow(
-        project_id="cache-test", demo_path=demo, materials_dir=tmp_path, music_path=music,
+        project_id="cache-test", demo_path=demo, shot_ids=shot_ids, music_path=music,
         database=database, projects_root=tmp_path / "projects",
     )
     module.build_amv_spec_workflow(
-        project_id="cache-test", demo_path=demo, materials_dir=tmp_path, music_path=music,
+        project_id="cache-test", demo_path=demo, shot_ids=shot_ids, music_path=music,
         database=database, projects_root=tmp_path / "projects",
     )
 
